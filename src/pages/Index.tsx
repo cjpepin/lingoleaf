@@ -1,4 +1,3 @@
-
 import Navbar from "@/components/Navbar";
 import LinguaLeafLogo from "@/components/LinguaLeafLogo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -94,7 +93,7 @@ const Index = () => {
                   className="cursor-pointer"
                 >
                   <img
-                    src={book.cover}
+                    src={book.cover || "https://placehold.co/400x520?text=Book+Cover"}
                     alt=""
                     className="w-full h-52 object-cover rounded-t-lg"
                   />

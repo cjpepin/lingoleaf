@@ -54,3 +54,4 @@ const Navbar = ({ authenticated }: { authenticated: boolean }) => {
 };
 
 export default Navbar;
+

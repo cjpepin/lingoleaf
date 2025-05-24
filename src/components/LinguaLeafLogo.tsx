@@ -29,3 +29,4 @@ const LinguaLeafLogo = ({ size = 56 }: { size?: number }) => (
 );
 
 export default LinguaLeafLogo;
+
