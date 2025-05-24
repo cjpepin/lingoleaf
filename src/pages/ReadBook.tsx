@@ -33,10 +33,12 @@ const ReadBook = () => {
         return;
       }
       setBook(bookData);
+      console.log(bookData)
       if (bookData?.file_path) {
         const { data, error: urlError } = await supabase.storage
           .from("books")
           .createSignedUrl(bookData.file_path, 60 * 60);
+        console.log(urlError);
         if (urlError) {
           setError(urlError.message);
         } else {
