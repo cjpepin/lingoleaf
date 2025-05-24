@@ -1,4 +1,4 @@
-**Project Requirements Document – Language Learning Book Reader**
+**Project Requirements Document – LinguaLeaf**
 
 ---
 
