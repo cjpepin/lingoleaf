@@ -38,7 +38,7 @@ const ReadBook = () => {
         const { data, error: urlError } = await supabase.storage
           .from("books")
           .createSignedUrl(bookData.file_path, 60 * 60);
-        console.log(urlError);
+        console.log({data, urlError});
         if (urlError) {
           setError(urlError.message);
         } else {
