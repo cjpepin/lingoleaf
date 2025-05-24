@@ -1,4 +1,4 @@
-**Backend Structure Document – Language Learning Book Reader**
+**Backend Structure Document – LinguaLeaf**
 
 ---
 
