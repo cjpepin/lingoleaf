@@ -2,7 +2,7 @@
 import LinguaLeafLogo from "./LinguaLeafLogo";
 import { Button } from "@/components/ui/button";
 import { useNavigate, NavLink } from "react-router-dom";
-import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 const routes = [
   { name: "Library", path: "/library" },
@@ -11,8 +11,10 @@ const routes = [
 ];
 
 const Navbar = ({ authenticated }: { authenticated: boolean }) => {
+  // Recompute auth in navbar for live update on login/logout
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [active, setActive] = useState(true);
+
   return (
     <header className="w-full px-3 md:px-8 py-3 bg-white shadow z-30">
       <nav className="flex flex-row items-center gap-5 max-w-5xl mx-auto">
@@ -42,10 +44,10 @@ const Navbar = ({ authenticated }: { authenticated: boolean }) => {
         <div>
           <Button
             variant="secondary"
-            onClick={() => navigate(authenticated ? "/account" : "/account")}
+            onClick={() => navigate(user ? "/account" : "/account")}
             className="ml-2"
           >
-            {authenticated ? "Account" : "Sign In"}
+            {user ? "Account" : "Sign In"}
           </Button>
         </div>
       </nav>
@@ -54,4 +56,3 @@ const Navbar = ({ authenticated }: { authenticated: boolean }) => {
 };
 
 export default Navbar;
-
