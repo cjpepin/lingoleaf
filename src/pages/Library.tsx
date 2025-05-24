@@ -2,6 +2,9 @@
 import Navbar from "@/components/Navbar";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { useUserBooks } from "@/hooks/useUserBooks";
+import { useEffect } from "react";
 
 const DUMMY_BOOKS = [
   {
@@ -25,36 +28,71 @@ const DUMMY_BOOKS = [
 ];
 
 const Library = () => {
+  const { user, loading } = useAuth();
+  const { data: userBooks, isLoading, error, refetch } = useUserBooks(user?.id);
   const navigate = useNavigate();
+
+  // Refetch whenever user changes (on login/logout)
+  useEffect(() => {
+    if (user?.id) refetch();
+  }, [user?.id]);
+
+  const booksToShow = user && userBooks && userBooks.length > 0 ? userBooks : DUMMY_BOOKS;
+
   return (
     <div className="bg-[#f8fafc] min-h-screen">
-      <Navbar authenticated={false} />
+      <Navbar authenticated={!!user} />
       <main className="max-w-5xl mx-auto py-8 px-4">
-        <h2 className="text-3xl font-bold text-green-800 mb-6">Library</h2>
-        <div className="grid md:grid-cols-3 gap-7">
-          {DUMMY_BOOKS.map((book) => (
-            <Card key={book.id} className="hover-scale transition">
-              <div
-                onClick={() => navigate(`/read/${book.id}`)}
-                className="cursor-pointer"
-              >
-                <img
-                  src={book.cover || "https://placehold.co/400x520?text=Book+Cover"}
-                  alt=""
-                  className="w-full h-52 object-cover rounded-t-lg"
-                />
-                <CardHeader>
-                  <CardTitle className="text-green-900 text-lg">{book.title}</CardTitle>
-                  <div className="text-sm text-gray-500">{book.author}</div>
-                </CardHeader>
-              </div>
-            </Card>
-          ))}
-        </div>
+        <h2 className="text-3xl font-bold text-green-800 mb-6">
+          {user && userBooks && userBooks.length > 0
+            ? "Your Library"
+            : "Library"}
+        </h2>
+        {user && (
+          <div className="mb-8">
+            <button
+              className="bg-green-600 text-white rounded px-3 py-2 hover:bg-green-700 transition"
+              onClick={() => navigate("/upload")}
+            >
+              + Upload a Book
+            </button>
+          </div>
+        )}
+        {user && isLoading ? (
+          <div className="text-lg text-gray-600 py-16 text-center">Loading your books...</div>
+        ) : error ? (
+          <div className="text-red-600 text-center">{error.message}</div>
+        ) : (
+          <div className="grid md:grid-cols-3 gap-7">
+            {booksToShow.map((book: any) => (
+              <Card key={book.id} className="hover-scale transition">
+                <div
+                  onClick={() => navigate(`/read/${book.id}`)}
+                  className="cursor-pointer"
+                >
+                  <img
+                    src={
+                      book.cover_image_url ||
+                      book.cover ||
+                      "https://placehold.co/400x520?text=Book+Cover"
+                    }
+                    alt={book.title}
+                    className="w-full h-52 object-cover rounded-t-lg"
+                  />
+                  <CardHeader>
+                    <CardTitle className="text-green-900 text-lg">{book.title}</CardTitle>
+                    <div className="text-sm text-gray-500">
+                      {"author" in book ? book.author : ""}
+                    </div>
+                  </CardHeader>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   );
 };
 
 export default Library;
-

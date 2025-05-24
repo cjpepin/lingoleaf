@@ -9,7 +9,42 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      books: {
+        Row: {
+          access_level: Database["public"]["Enums"]["book_access_level"]
+          cover_image_url: string | null
+          created_at: string | null
+          file_path: string
+          id: string
+          notes: string | null
+          owner_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          access_level?: Database["public"]["Enums"]["book_access_level"]
+          cover_image_url?: string | null
+          created_at?: string | null
+          file_path: string
+          id?: string
+          notes?: string | null
+          owner_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          access_level?: Database["public"]["Enums"]["book_access_level"]
+          cover_image_url?: string | null
+          created_at?: string | null
+          file_path?: string
+          id?: string
+          notes?: string | null
+          owner_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +53,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      book_access_level: "free" | "paid" | "personal"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +168,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      book_access_level: ["free", "paid", "personal"],
+    },
   },
 } as const
