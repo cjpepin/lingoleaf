@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Upload = () => {
   const { user, loading: authLoading } = useAuth();
@@ -50,12 +51,11 @@ const Upload = () => {
     );
   }
 
-  // Handle upload form submission
-  const handleSubmit = (e: React.FormEvent) => {
+  // Handle upload form submission with Supabase Storage/database
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploading(true);
 
-    // Simulate a fake upload process (replace with Supabase upload in future)
     if (!form.title || !form.file) {
       toast({
         title: "Upload Failed",
@@ -65,19 +65,94 @@ const Upload = () => {
       setUploading(false);
       return;
     }
-    setTimeout(() => {
-      setUploading(false);
+
+    // Construct unique file path: userId-bookId-ext
+    const fileExt = form.file.name.split(".").pop();
+    const bookId = crypto.randomUUID();
+    const filePath = `${user.id}/${bookId}.${fileExt}`;
+
+    // 1. Upload book file to 'books' bucket
+    const { error: fileError } = await supabase.storage
+      .from("books")
+      .upload(filePath, form.file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (fileError) {
       toast({
-        title: "Upload Successful",
-        description: "Your book was uploaded! (Simulation)",
+        title: "File Upload Failed",
+        description: fileError.message,
+        variant: "destructive",
       });
-      setForm({
-        title: "",
-        file: undefined,
-        image: undefined,
-        notes: "",
+      setUploading(false);
+      return;
+    }
+
+    // 2. Handle (optional) cover image upload
+    let cover_image_url: string | null = null;
+    if (form.image) {
+      const imageExt = form.image.name.split(".").pop();
+      const imagePath = `${user.id}/${bookId}-cover.${imageExt}`;
+      const { data: imgData, error: imgError } = await supabase.storage
+        .from("covers")
+        .upload(imagePath, form.image, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+      if (imgError) {
+        toast({
+          title: "Image Upload Failed",
+          description: imgError.message,
+          variant: "destructive",
+        });
+        setUploading(false);
+        return;
+      }
+      // Get the public URL for the image file
+      const { data } = supabase.storage.from("covers").getPublicUrl(imagePath);
+      cover_image_url = data?.publicUrl || null;
+    }
+
+    // 3. Insert metadata into books table
+    const { error: insertError } = await supabase
+      .from("books")
+      .insert([
+        {
+          id: bookId,
+          owner_id: user.id,
+          title: form.title,
+          file_path: filePath,
+          cover_image_url,
+          notes: form.notes || null,
+          access_level: "personal",
+        },
+      ]);
+
+    if (insertError) {
+      toast({
+        title: "Database Insert Failed",
+        description: insertError.message,
+        variant: "destructive",
       });
-    }, 1100);
+      setUploading(false);
+      return;
+    }
+
+    toast({
+      title: "Upload Successful",
+      description: "Your book was uploaded and saved to your library!",
+    });
+
+    setForm({
+      title: "",
+      file: undefined,
+      image: undefined,
+      notes: "",
+    });
+    setUploading(false);
+    // Optional: Navigate to library or detail page
+    // navigate("/library");
   };
 
   return (
@@ -159,4 +234,3 @@ const Upload = () => {
 };
 
 export default Upload;
-
