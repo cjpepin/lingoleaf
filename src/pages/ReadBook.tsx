@@ -1,15 +1,15 @@
 
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import PdfRenderer from "@/components/reader/PdfRenderer";
+import TextFileViewer from "@/components/reader/TextFileViewer";
+import NavigationBar from "@/components/reader/NavigationBar";
+import HighlightBar from "@/components/reader/HighlightBar";
 
-/**
- * Basic Reader page for /read/:bookId
- * Features: fetch book metadata, render file (pdf/epub/txt), basic page nav, highlight placeholders.
- */
 const ReadBook = () => {
   const { bookId } = useParams();
   const { user } = useAuth();
@@ -17,12 +17,10 @@ const ReadBook = () => {
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // For now, only "page" navigation stub.
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   useEffect(() => {
     if (!bookId) return;
-    // Fetch book metadata
     const fetchBook = async () => {
       setError(null);
       const { data: bookData, error: fetchError } = await supabase
@@ -35,12 +33,10 @@ const ReadBook = () => {
         return;
       }
       setBook(bookData);
-
-      // Generate a signed URL to download the file
       if (bookData?.file_path) {
         const { data, error: urlError } = await supabase.storage
           .from("books")
-          .createSignedUrl(bookData.file_path, 60 * 60); // 1hr
+          .createSignedUrl(bookData.file_path, 60 * 60);
         if (urlError) {
           setError(urlError.message);
         } else {
@@ -51,10 +47,8 @@ const ReadBook = () => {
     fetchBook();
   }, [bookId]);
 
-  // (File type detection for rendering)
   const ext = (book?.file_path || "").split(".").pop()?.toLowerCase();
 
-  // Simple rendering by type - improve with custom readers later!
   let bookContent;
   if (!book) {
     bookContent = error ? (
@@ -66,14 +60,9 @@ const ReadBook = () => {
     bookContent = <div className="text-gray-600">Preparing book file URL...</div>;
   } else if (ext === "pdf") {
     bookContent = (
-      <iframe
-        src={fileUrl}
-        title={book.title}
-        className="w-full min-h-[70vh] bg-white border"
-      />
+      <PdfRenderer fileUrl={fileUrl} title={book.title} />
     );
   } else if (ext === "txt" || ext === "text") {
-    // For demo, fetch and render as text
     bookContent = (
       <TextFileViewer fileUrl={fileUrl} />
     );
@@ -81,7 +70,6 @@ const ReadBook = () => {
     bookContent = <div>Unsupported file type: {ext}</div>;
   }
 
-  // Placeholder: chapter/page nav & highlight bar
   return (
     <div className="bg-[#f9fafb] min-h-screen">
       <Navbar authenticated={!!user} />
@@ -91,54 +79,15 @@ const ReadBook = () => {
         </Button>
         <h2 className="text-2xl font-bold mb-2 text-green-800">{book?.title ?? ""}</h2>
         <div className="mb-4 text-gray-700">{book?.notes}</div>
-        {/* File rendering */}
         <section className="mb-6">{bookContent}</section>
-        {/* Page Navigation (Stub for PDF/EPUB) */}
-        <div className="flex items-center gap-2 mb-8">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-          <span>Page {currentPage}</span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setCurrentPage(p => p + 1)}
-          >
-            Next
-          </Button>
-        </div>
-        {/* Text selection, highlight & popup placeholder */}
-        <div
-          className="relative border rounded p-6 transition shadow bg-white mb-6"
-          style={{ minHeight: 120 }}
-        >
-          <p className="text-gray-500 italic">
-            (Highlight a word or phrase to see translation &amp; vocab features here)
-          </p>
-        </div>
+        <NavigationBar
+          currentPage={currentPage}
+          onPrev={() => setCurrentPage(p => Math.max(1, p - 1))}
+          onNext={() => setCurrentPage(p => p + 1)}
+        />
+        <HighlightBar />
       </main>
     </div>
-  );
-};
-
-// Simple text viewer for txt files (fetches and displays file content)
-const TextFileViewer = ({ fileUrl }: { fileUrl: string }) => {
-  const [content, setContent] = useState<string | null>(null);
-  useEffect(() => {
-    fetch(fileUrl)
-      .then(r => r.text())
-      .then(setContent)
-      .catch(() => setContent("(Failed to load text file)"));
-  }, [fileUrl]);
-  return (
-    <pre className="bg-gray-100 text-sm rounded p-4 max-h-[65vh] overflow-auto whitespace-pre-wrap">
-      {content ?? "Loading..."}
-    </pre>
   );
 };
 
