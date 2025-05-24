@@ -1,4 +1,4 @@
-**Tech Stack Document – Language Learning Book Reader**
+**Tech Stack Document – LinguaLeaf**
 
 ---
 
