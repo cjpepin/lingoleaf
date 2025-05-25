@@ -80,13 +80,13 @@ const TextHighlighter = ({ content }: Props) => {
     setTranslating(false);
   };
 
-  const handleSaveVocab = async () => {
-    console.log("Saving vocab:", popup.selectedText, translation);
+  const handleSaveVocab = async ({folderId}: {folderId?: string | null} = {}) => {
     if (!bookId || !popup.selectedText || !translation) return;
     await save({
       word: popup.selectedText,
       translation,
       bookId,
+      folderId,
     });
   };
 

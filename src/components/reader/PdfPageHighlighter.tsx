@@ -1,4 +1,3 @@
-
 import { useState, useRef } from "react";
 import HighlightPopup from "./HighlightPopup";
 import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
@@ -80,13 +79,14 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
     setTranslating(false);
   };
 
-  const handleSaveVocab = async () => {
+  const handleSaveVocab = async ({folderId}: {folderId?: string | null} = {}) => {
     if (!bookId || !popup.selectedText || !translation) return;
     await save({
       word: popup.selectedText,
       translation,
       bookId,
       pageNumber,
+      folderId,
     });
   };
 

@@ -10,6 +10,7 @@ type SaveVocabParams = {
   bookTitle?: string;
   context?: string;
   pageNumber?: number;
+  folderId?: string | null;
 };
 
 export function useSaveVocabWord() {
@@ -18,17 +19,11 @@ export function useSaveVocabWord() {
   const { user } = useAuth();
 
   const save = async ({
-    word, translation, bookId, bookTitle, context, pageNumber
+    word, translation, bookId, bookTitle, context, pageNumber, folderId
   }: SaveVocabParams) => {
-    console.log("Saving vocab word:", {
-      word, translation, bookId, bookTitle, context, pageNumber
-    });
-    if (!user) return false; // Don't allow saving if not logged in
+    if (!user) return false;
     setSaving(true);
     setSavingDone(false);
-    console.log("Saving vocab word:", {
-      word, translation, bookId, bookTitle, context, pageNumber
-    });
     const { error } = await supabase.from("vocab_words").insert({
       book_id: bookId,
       book_title: bookTitle ?? null,
@@ -37,6 +32,7 @@ export function useSaveVocabWord() {
       context,
       page_number: pageNumber,
       user_id: user.id,
+      folder_id: folderId ?? null,
     });
     setSaving(false);
     setSavingDone(!error);

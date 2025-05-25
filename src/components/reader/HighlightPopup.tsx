@@ -1,6 +1,8 @@
 
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
+import { useAllVocabFolders } from "@/hooks/useVocabFolders";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 type Props = {
   x: number;
@@ -9,7 +11,7 @@ type Props = {
   onHighlight: () => void;
   onTranslate?: (result: string) => void;
   translation?: string | null;
-  onSaveVocab: () => void;
+  onSaveVocab: (opts?: {folderId?: string | null}) => void;
   saving?: boolean;
   savingDone?: boolean;
   onClose: () => void;
@@ -22,11 +24,21 @@ const HighlightPopup = ({
   onClose
 }: Props) => {
   const [translationState, setTranslationState] = useState("Translate");
+  const { data: folders } = useAllVocabFolders();
+  const [folder, setFolder] = useState<string | null>(null);
 
   const handleTranslate = async () => {
-    await onTranslate(selectedText);
-    setTranslationState("Translated");
-  }
+    if (onTranslate) {
+      await onTranslate(selectedText);
+      setTranslationState("Translated");
+    }
+  };
+
+  const handleSave = () => {
+    onSaveVocab({ folderId: folder || null });
+  };
+
+  const canSave = !!translation && !saving && !savingDone;
 
   return (
     <div
@@ -48,21 +60,33 @@ const HighlightPopup = ({
         size="sm"
         variant="outline"
         onClick={() => {
-            setTranslationState("Translating...");
-            onTranslate && handleTranslate();
-          }}
-          disabled={translationState !== "Translate" || !selectedText}
+          setTranslationState("Translating...");
+          handleTranslate();
+        }}
+        disabled={translationState !== "Translate" || !selectedText}
       >
         {translationState}
       </Button>
       {translation && (
         <span className="text-xs px-2 italic text-green-600">{translation}</span>
       )}
+      {/* Folder dropdown */}
+      <Select onValueChange={setFolder} value={folder ?? undefined}>
+        <SelectTrigger className="w-24 h-7 min-w-[70px]" aria-label="Vocabulary folder">
+          <SelectValue placeholder="No folder" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="">No folder</SelectItem>
+          {folders?.map((f: any) => (
+            <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Button 
         size="sm"
         variant="outline"
-        onClick={onSaveVocab}
-        // disabled={!translation || saving || savingDone}
+        onClick={handleSave}
+        disabled={!canSave}
       >
         {saving ? "Saving..." : savingDone ? "Saved!" : "Save to Vocab"}
       </Button>

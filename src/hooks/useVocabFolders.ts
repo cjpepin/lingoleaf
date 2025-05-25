@@ -1,4 +1,3 @@
-
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
@@ -43,4 +42,23 @@ export function useVocabFolders() {
     error,
     createFolder: createFolderMutation.mutateAsync,
   };
+}
+
+export function useAllVocabFolders() {
+  // Mini hook for folder dropdown in popups etc (just loads all user's folders)
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["vocab-folders", user?.id],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("vocab_folders")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return data as Array<{ id: string; name: string }>;
+    },
+    enabled: !!user,
+  });
 }
