@@ -29,10 +29,6 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
         file={fileUrl}
         onLoadSuccess={handleDocumentLoadSuccess}
         className="w-full"
-        options={{
-          cMapUrl: "cmaps/",
-          cMapPacked: true,
-        }}
         loading={<div className="my-6">Loading PDF...</div>}
         renderMode="canvas"
       >
