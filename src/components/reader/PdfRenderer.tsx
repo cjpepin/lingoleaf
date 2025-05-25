@@ -4,7 +4,7 @@ import { Document, Page, pdfjs } from "react-pdf";
 import PdfPageHighlighter from "./PdfPageHighlighter";
 
 // IMPORTANT: pdfjs.GlobalWorkerOptions.workerSrc tells pdfjs where to find its worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
 type PdfRendererProps = {
   fileUrl: string;
