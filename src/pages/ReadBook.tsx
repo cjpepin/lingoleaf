@@ -35,11 +35,8 @@ const ReadBook = () => {
       setBook(bookData);
 console.log("file_path:", JSON.stringify(bookData.file_path));
       if (bookData?.file_path) {
-        const list = await supabase.storage
-  .from('books')
-  .list('f06a9a08-80cb-41c9-9e47-2a597600934b');
-
-console.log("Objects in folder:", list.data);
+const listRoot = await supabase.storage.from("books").list("");
+console.log("Root files/folders:", listRoot.data);
         const { data, error: urlError } = await supabase.storage
           .from("books")
           .createSignedUrl(bookData.file_path, 60 * 60);
