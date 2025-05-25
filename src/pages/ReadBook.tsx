@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
-import HighlightBar from "@/components/reader/HighlightBar";
 import EpubPlaceholder from "@/components/reader/EpubPlaceholder";
 
 const ReadBook = () => {
@@ -71,19 +70,27 @@ const ReadBook = () => {
   }
 
   return (
-    <div className="bg-[#f9fafb] min-h-screen">
+    <div className="bg-[#f9fafb] min-h-screen overflow-hidden">
       <Navbar authenticated={!!user} />
-      <main className="max-w-3xl mx-auto py-8 px-4">
-        <Button variant="ghost" onClick={() =>  navigate("/library")} className="mb-6">
-          &larr; Back to Library
-        </Button>
-        <h2 className="text-2xl font-bold mb-2 text-green-800">{book?.title ?? ""}</h2>
-        <div className="mb-4 text-gray-700">{book?.notes}</div>
-        <section className="mb-6">{bookContent}</section>
-        <HighlightBar />
+      <main className="flex flex-row h-[calc(100vh-4rem)]"> {/* Adjust for Navbar height */}
+        {/* Sidebar */}
+        <aside className="w-1/4 px-6 py-8 border-r border-gray-200 flex flex-col gap-4">
+          <Button variant="ghost" onClick={() => navigate("/library")}>
+            &larr; Back to Library
+          </Button>
+          <h2 className="text-2xl font-bold text-green-800 break-words">{book?.title ?? ""}</h2>
+          <div className="text-gray-700 overflow-y-auto max-h-[40vh]">{book?.notes}</div>
+        </aside>
+        {/* Book content */}
+        <section className="w-3/4 flex items-center justify-center ">
+          <div className="max-h-full max-w-full ">
+            {bookContent}
+          </div>
+        </section>
       </main>
     </div>
   );
+  
 };
 
 export default ReadBook;

@@ -36,6 +36,7 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
   // Selection logic: only operate inside this page
   const handleMouseUp = () => {
     const selection = window.getSelection();
+    console.log("Selection:", selection?.toString());
     if (!selection || selection.isCollapsed) {
       setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
       setTranslation(null);
