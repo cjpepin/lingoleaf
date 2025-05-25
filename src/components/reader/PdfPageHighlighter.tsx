@@ -1,3 +1,4 @@
+
 import { useState, useRef } from "react";
 import HighlightPopup from "./HighlightPopup";
 import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
@@ -72,7 +73,7 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
             top: hl.rect.top - (overlayRef.current?.getBoundingClientRect().top ?? 0),
             width: hl.rect.width,
             height: hl.rect.height,
-            background: "rgba(253, 224, 71, 0.5)",
+            background: "rgba(34, 197, 94, 0.37)", // Green (using #22c55e from Tailwind, 0.37 opacity)
             pointerEvents: "none",
             borderRadius: 3,
           }}
