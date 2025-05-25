@@ -1,5 +1,5 @@
 
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,6 +13,7 @@ import HighlightBar from "@/components/reader/HighlightBar";
 const ReadBook = () => {
   const { bookId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [book, setBook] = useState<any>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,7 +75,7 @@ const ReadBook = () => {
     <div className="bg-[#f9fafb] min-h-screen">
       <Navbar authenticated={!!user} />
       <main className="max-w-3xl mx-auto py-8 px-4">
-        <Button variant="ghost" onClick={() => window.history.back()} className="mb-6">
+        <Button variant="ghost" onClick={() =>  navigate("/library")} className="mb-6">
           &larr; Back to Library
         </Button>
         <h2 className="text-2xl font-bold mb-2 text-green-800">{book?.title ?? ""}</h2>
