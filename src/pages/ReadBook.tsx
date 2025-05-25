@@ -33,7 +33,7 @@ const ReadBook = () => {
         return;
       }
       setBook(bookData);
-      console.log(bookData)
+console.log("file_path:", JSON.stringify(bookData.file_path));
       if (bookData?.file_path) {
         const { data, error: urlError } = await supabase.storage
           .from("books")
