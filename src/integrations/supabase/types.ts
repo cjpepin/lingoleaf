@@ -45,6 +45,42 @@ export type Database = {
         }
         Relationships: []
       }
+      vocab_words: {
+        Row: {
+          book_id: string
+          book_title: string | null
+          context: string | null
+          created_at: string | null
+          id: string
+          page_number: number | null
+          translation: string | null
+          user_id: string
+          word: string
+        }
+        Insert: {
+          book_id: string
+          book_title?: string | null
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          page_number?: number | null
+          translation?: string | null
+          user_id: string
+          word: string
+        }
+        Update: {
+          book_id?: string
+          book_title?: string | null
+          context?: string | null
+          created_at?: string | null
+          id?: string
+          page_number?: number | null
+          translation?: string | null
+          user_id?: string
+          word?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

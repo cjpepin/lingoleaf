@@ -1,6 +1,8 @@
-
-import { useRef, useState } from "react";
+import { useState, useRef } from "react";
 import HighlightPopup from "./HighlightPopup";
+import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
+import { translateText } from "@/utils/translate";
+import { useParams } from "react-router-dom";
 
 // Highlight type definition
 type Highlight = {
@@ -24,13 +26,18 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
     rect: DOMRect | null;
   }>({ show: false, x: 0, y: 0, selectedText: "", rect: null });
 
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const { bookId } = useParams<{ bookId: string }>();
+  const { save, saving, savingDone } = useSaveVocabWord();
+  const [highlights, setHighlights] = useState<any[]>([]);
 
   // Selection logic: only operate inside this page
   const handleMouseUp = () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+      setTranslation(null);
       return;
     }
     const selectedText = selection.toString();
@@ -49,20 +56,7 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
       selectedText,
       rect,
     });
-  };
-
-  const handleHighlight = () => {
-    if (!popup.selectedText || !popup.rect) return;
-    setHighlights((hls) => [
-      ...hls,
-      {
-        page: pageNumber,
-        text: popup.selectedText,
-        rect: popup.rect,
-      },
-    ]);
-    setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
-    window.getSelection()?.removeAllRanges();
+    setTranslation(null);
   };
 
   // Visual highlight overlays
@@ -84,6 +78,23 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
           }}
         />
       ));
+
+  const handleTranslate = async (text: string) => {
+    setTranslating(true);
+    const result = await translateText(text);
+    setTranslation(result);
+    setTranslating(false);
+  };
+
+  const handleSaveVocab = async () => {
+    if (!bookId || !popup.selectedText || !translation) return;
+    await save({
+      word: popup.selectedText,
+      translation,
+      bookId,
+      pageNumber,
+    });
+  };
 
   return (
     <div
@@ -108,8 +119,28 @@ const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
             x={popup.x}
             y={popup.y}
             selectedText={popup.selectedText}
-            onHighlight={handleHighlight}
-            onClose={() => setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null })}
+            onHighlight={() => {
+              setHighlights((hls) => [
+                ...hls,
+                {
+                  page: pageNumber,
+                  text: popup.selectedText,
+                  rect: popup.rect,
+                },
+              ]);
+              setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+              setTranslation(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            onTranslate={handleTranslate}
+            translation={translation}
+            onSaveVocab={handleSaveVocab}
+            saving={saving}
+            savingDone={savingDone}
+            onClose={() => {
+              setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+              setTranslation(null);
+            }}
           />
         )}
       </div>

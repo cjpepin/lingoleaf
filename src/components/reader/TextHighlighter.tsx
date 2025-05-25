@@ -1,6 +1,8 @@
-
 import { useRef, useState } from "react";
 import HighlightPopup from "./HighlightPopup";
+import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
+import { translateText } from "@/utils/translate";
+import { useParams } from "react-router-dom";
 
 type Highlight = {
   start: number;
@@ -14,7 +16,7 @@ type Props = {
 
 const TextHighlighter = ({ content }: Props) => {
   const textRef = useRef<HTMLDivElement>(null);
-  const [highlights, setHighlights] = useState<Highlight[]>([]);
+  const [highlights, setHighlights] = useState<any[]>([]);
   const [popup, setPopup] = useState<{
     show: boolean;
     x: number;
@@ -23,29 +25,26 @@ const TextHighlighter = ({ content }: Props) => {
     range: [number, number] | null;
   }>({ show: false, x: 0, y: 0, selectedText: "", range: null });
 
-  // Handle mouseup for selection
+  const [translation, setTranslation] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const { bookId } = useParams<{ bookId: string }>();
+  const { save, saving, savingDone } = useSaveVocabWord();
+
   const handleMouseUp = () => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       setPopup({ show: false, x: 0, y: 0, selectedText: "", range: null });
+      setTranslation(null);
       return;
     }
     const selectedText = selection.toString();
-    // Only allow short manageable spans
     if (!selectedText || selectedText.length > 1200) return;
-
     const anchorNode = selection.anchorNode;
     const focusNode = selection.focusNode;
     if (!anchorNode || !focusNode) return;
-
-    // Get selection offsets relative to the content string
     let anchorOffset = selection.anchorOffset;
     let focusOffset = selection.focusOffset;
-
-    // To simplify, only handle single-node selections (for now)
     if (anchorNode !== focusNode) return;
-
-    // Compute the real offset in the string
     let offset = 0;
     const walker = document.createTreeWalker(
       textRef.current!,
@@ -58,16 +57,12 @@ const TextHighlighter = ({ content }: Props) => {
       node = walker.nextNode();
     }
     if (!node) return;
-    // Order the offsets
     const start = Math.min(anchorOffset, focusOffset) + offset;
     const end = Math.max(anchorOffset, focusOffset) + offset;
-
-    // Find position for popup (middle of selection, crude but works)
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
     const x = rect.left + rect.width / 2 + window.scrollX;
     const y = rect.top + window.scrollY - 10;
-
     setPopup({
       show: true,
       x,
@@ -75,23 +70,25 @@ const TextHighlighter = ({ content }: Props) => {
       selectedText,
       range: [start, end],
     });
+    setTranslation(null);
   };
 
-  const handleHighlight = () => {
-    if (!popup.range) return;
-    setHighlights((cur) => [
-      ...cur,
-      {
-        start: popup.range[0],
-        end: popup.range[1],
-        text: popup.selectedText,
-      },
-    ]);
-    setPopup({ show: false, x: 0, y: 0, selectedText: "", range: null });
-    window.getSelection()?.removeAllRanges();
+  const handleTranslate = async (text: string) => {
+    setTranslating(true);
+    const result = await translateText(text);
+    setTranslation(result);
+    setTranslating(false);
   };
 
-  // Render content with highlight spans.
+  const handleSaveVocab = async () => {
+    if (!bookId || !popup.selectedText || !translation) return;
+    await save({
+      word: popup.selectedText,
+      translation,
+      bookId,
+    });
+  };
+
   const renderContent = () => {
     if (!highlights.length) return <span>{content}</span>;
 
@@ -133,8 +130,29 @@ const TextHighlighter = ({ content }: Props) => {
           x={popup.x}
           y={popup.y}
           selectedText={popup.selectedText}
-          onHighlight={handleHighlight}
-          onClose={() => setPopup({ show: false, x: 0, y: 0, selectedText: "", range: null })}
+          onHighlight={() => {
+            if (!popup.range) return;
+            setHighlights((cur) => [
+              ...cur,
+              {
+                start: popup.range[0],
+                end: popup.range[1],
+                text: popup.selectedText,
+              },
+            ]);
+            setPopup({ show: false, x: 0, y: 0, selectedText: "", range: null });
+            setTranslation(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+          onTranslate={handleTranslate}
+          translation={translation}
+          onSaveVocab={handleSaveVocab}
+          saving={saving}
+          savingDone={savingDone}
+          onClose={() => {
+            setPopup({ show: false, x: 0, y: 0, selectedText: "", range: null });
+            setTranslation(null);
+          }}
         />
       )}
     </div>
