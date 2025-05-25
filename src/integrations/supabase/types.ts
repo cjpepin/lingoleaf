@@ -45,6 +45,39 @@ export type Database = {
         }
         Relationships: []
       }
+      translations_cache: {
+        Row: {
+          created_at: string
+          from_lang: string
+          id: string
+          original_text: string
+          to_lang: string
+          translated_text: string
+          translation_source: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          from_lang: string
+          id?: string
+          original_text: string
+          to_lang: string
+          translated_text: string
+          translation_source: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          from_lang?: string
+          id?: string
+          original_text?: string
+          to_lang?: string
+          translated_text?: string
+          translation_source?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vocab_words: {
         Row: {
           book_id: string
