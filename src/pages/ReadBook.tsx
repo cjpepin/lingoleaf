@@ -1,4 +1,3 @@
-
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
@@ -9,6 +8,7 @@ import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
 import NavigationBar from "@/components/reader/NavigationBar";
 import HighlightBar from "@/components/reader/HighlightBar";
+import EpubPlaceholder from "@/components/reader/EpubPlaceholder";
 
 const ReadBook = () => {
   const { bookId } = useParams();
@@ -63,6 +63,8 @@ const ReadBook = () => {
     bookContent = (
       <PdfRenderer fileUrl={fileUrl} title={book.title} />
     );
+  } else if (ext === "epub") {
+    bookContent = <EpubPlaceholder />;
   } else if (ext === "txt" || ext === "text") {
     bookContent = (
       <TextFileViewer fileUrl={fileUrl} />
