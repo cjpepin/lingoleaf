@@ -2,10 +2,9 @@
 import { useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import PdfPageHighlighter from "./PdfPageHighlighter";
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
-import workerSrc from "pdfjs-dist/build/pdf.worker.min.js?url";
-
 // IMPORTANT: pdfjs.GlobalWorkerOptions.workerSrc tells pdfjs where to find its worker
 pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 

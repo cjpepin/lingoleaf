@@ -83,11 +83,6 @@ const ReadBook = () => {
         <h2 className="text-2xl font-bold mb-2 text-green-800">{book?.title ?? ""}</h2>
         <div className="mb-4 text-gray-700">{book?.notes}</div>
         <section className="mb-6">{bookContent}</section>
-        <NavigationBar
-          currentPage={currentPage}
-          onPrev={() => setCurrentPage(p => Math.max(1, p - 1))}
-          onNext={() => setCurrentPage(p => p + 1)}
-        />
         <HighlightBar />
       </main>
     </div>
