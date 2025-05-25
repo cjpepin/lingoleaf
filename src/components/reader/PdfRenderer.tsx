@@ -2,15 +2,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import PdfPageHighlighter from "./PdfPageHighlighter";
-import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+// Remove import for workerSrc, and set workerSrc from CDN below.
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import { useParams } from "react-router-dom";
 import { translateText } from "@/utils/translate";
 import HighlightPopup from "./HighlightPopup";
-// IMPORTANT: pdfjs.GlobalWorkerOptions.workerSrc tells pdfjs where to find its worker
-pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+// Set the pdfjs workerSrc to use unpkg CDN (for Vite/react-pdf compatibility)
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
 
 type PdfRendererProps = {
   fileUrl: string;
@@ -78,7 +79,6 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
     };
   }, []);
 
-  
   // Visual highlight overlays
   const renderHighlights = () =>
     highlights
@@ -92,7 +92,7 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
             top: hl.rect.top - (overlayRef.current?.getBoundingClientRect().top ?? 0),
             width: hl.rect.width,
             height: hl.rect.height,
-            background: "rgba(34, 197, 94, 0.37)", // Green (using #22c55e from Tailwind, 0.37 opacity)
+            background: "rgba(34, 197, 94, 0.37)", // Green highlight for your theme
             pointerEvents: "none",
             borderRadius: 3,
           }}
