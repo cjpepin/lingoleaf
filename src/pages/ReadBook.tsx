@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
-import NavigationBar from "@/components/reader/NavigationBar";
 import HighlightBar from "@/components/reader/HighlightBar";
 import EpubPlaceholder from "@/components/reader/EpubPlaceholder";
 
@@ -17,8 +16,6 @@ const ReadBook = () => {
   const [book, setBook] = useState<any>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  const [currentPage, setCurrentPage] = useState<number>(1);
 
   useEffect(() => {
     if (!bookId) return;

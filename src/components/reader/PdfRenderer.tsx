@@ -34,16 +34,20 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
         loading={<div className="my-6">Loading PDF...</div>}
         renderMode="canvas"
       >
-        <Page
-          pageNumber={pageNumber}
-          width={700}
-          renderTextLayer={true}
-          renderAnnotationLayer={false}
-          loading={<div>Loading page...</div>}
-        >
-          {/* Highlights and popups will be managed at per-page level */}
-          <PdfPageHighlighter pageNumber={pageNumber} />
-        </Page>
+        <div style={{ position: 'relative' }}>
+          <Page
+            pageNumber={pageNumber}
+            width={700}
+            renderTextLayer={true}
+            renderAnnotationLayer={false}
+            loading={<div>Loading page...</div>}
+          >
+            {/* Highlights and popups will be managed at per-page level */}
+            <div style={{ position: 'absolute', zIndex: 0, pointerEvents: 'none' }}>
+              <PdfPageHighlighter pageNumber={pageNumber} />
+            </div>
+          </Page>
+        </div>
       </Document>
       <div className="flex items-center gap-4 my-4">
         <button className="px-3 py-1 bg-gray-100 rounded border" onClick={handlePrev} disabled={pageNumber <= 1}>
