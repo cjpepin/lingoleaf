@@ -78,12 +78,37 @@ export type Database = {
         }
         Relationships: []
       }
+      vocab_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          note: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          note?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          note?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       vocab_words: {
         Row: {
           book_id: string
           book_title: string | null
           context: string | null
           created_at: string | null
+          folder_id: string | null
           id: string
           page_number: number | null
           translation: string | null
@@ -95,6 +120,7 @@ export type Database = {
           book_title?: string | null
           context?: string | null
           created_at?: string | null
+          folder_id?: string | null
           id?: string
           page_number?: number | null
           translation?: string | null
@@ -106,13 +132,22 @@ export type Database = {
           book_title?: string | null
           context?: string | null
           created_at?: string | null
+          folder_id?: string | null
           id?: string
           page_number?: number | null
           translation?: string | null
           user_id?: string
           word?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "vocab_words_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "vocab_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
