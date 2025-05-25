@@ -35,9 +35,14 @@ const ReadBook = () => {
       setBook(bookData);
 console.log("file_path:", JSON.stringify(bookData.file_path));
       if (bookData?.file_path) {
+        const list = await supabase.storage
+  .from('books')
+  .list('f06a9a08-80cb-41c9-9e47-2a597600934b');
+
+console.log("Objects in folder:", list.data);
         const { data, error: urlError } = await supabase.storage
           .from("books")
-          .createSignedUrl("f06a9a08-80cb-41c9-9e47-2a597600934b/ef18313d-e1cf-4b18-add9-7ca6ace41851.pdf", 60 * 60);
+          .createSignedUrl(bookData.file_path, 60 * 60);
         console.log({data, urlError});
         if (urlError) {
           setError(urlError.message);
