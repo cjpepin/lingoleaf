@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import PdfPageHighlighter from "./PdfPageHighlighter";
-// Remove import for workerSrc, and set workerSrc from CDN below.
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
 import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
@@ -11,7 +11,7 @@ import { translateText } from "@/utils/translate";
 import HighlightPopup from "./HighlightPopup";
 
 // Set the pdfjs workerSrc to use unpkg CDN (for Vite/react-pdf compatibility)
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 type PdfRendererProps = {
   fileUrl: string;
