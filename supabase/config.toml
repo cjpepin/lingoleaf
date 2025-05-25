@@ -3,3 +3,4 @@ project_id = "txiqsanfzgohobqoqrjr"
 
 [functions.translate_and_cache]
 verify_jwt = true
+
