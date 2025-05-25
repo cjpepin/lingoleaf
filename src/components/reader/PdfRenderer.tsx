@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import PdfPageHighlighter from "./PdfPageHighlighter";
 
 // IMPORTANT: pdfjs.GlobalWorkerOptions.workerSrc tells pdfjs where to find its worker
