@@ -6,8 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export async function translateText(
   text: string,
-  fromLang = "en",
-  toLang = "es"
+  fromLang = "es",
+  toLang = "en"
 ): Promise<string> {
   if (!text) return "";
 
@@ -36,6 +36,7 @@ export async function translateText(
       }
     );
     const data = await res.json();
+    console.log(data)
     if (!res.ok || data?.error) {
       return `(Translation failed: ${data.error || res.status})`;
     }

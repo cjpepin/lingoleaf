@@ -5,19 +5,11 @@ import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import { translateText } from "@/utils/translate";
 import { useParams } from "react-router-dom";
 
-// Highlight type definition
-type Highlight = {
-  page: number;
-  text: string;
-  rect: DOMRect;
-};
-
 type PdfPageHighlighterProps = {
   pageNumber: number;
 };
 
 const PdfPageHighlighter = ({ pageNumber }: PdfPageHighlighterProps) => {
-  // Overlay to capture selection/UI
   const overlayRef = useRef<HTMLDivElement>(null);
   const [popup, setPopup] = useState<{
     show: boolean;

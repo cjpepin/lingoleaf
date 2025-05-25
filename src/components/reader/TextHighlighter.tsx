@@ -81,6 +81,7 @@ const TextHighlighter = ({ content }: Props) => {
   };
 
   const handleSaveVocab = async () => {
+    console.log("Saving vocab:", popup.selectedText, translation);
     if (!bookId || !popup.selectedText || !translation) return;
     await save({
       word: popup.selectedText,

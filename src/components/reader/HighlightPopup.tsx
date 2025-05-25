@@ -9,7 +9,7 @@ type Props = {
   onHighlight: () => void;
   onTranslate?: (result: string) => void;
   translation?: string | null;
-  onSaveVocab?: () => void;
+  onSaveVocab: () => void;
   saving?: boolean;
   savingDone?: boolean;
   onClose: () => void;
@@ -21,7 +21,12 @@ const HighlightPopup = ({
   onSaveVocab, saving, savingDone,
   onClose
 }: Props) => {
-  const [translating, setTranslating] = useState(false);
+  const [translationState, setTranslationState] = useState("Translate");
+
+  const handleTranslate = async () => {
+    await onTranslate(selectedText);
+    setTranslationState("Translated");
+  }
 
   return (
     <div
@@ -43,12 +48,12 @@ const HighlightPopup = ({
         size="sm"
         variant="outline"
         onClick={() => {
-          setTranslating(true);
-          onTranslate && onTranslate(selectedText);
-        }}
-        disabled={!!translation || translating}
+            setTranslationState("Translating...");
+            onTranslate && handleTranslate();
+          }}
+          disabled={translationState !== "Translate" || !selectedText}
       >
-        {translating && !translation ? "Translating..." : "Translate"}
+        {translationState}
       </Button>
       {translation && (
         <span className="text-xs px-2 italic text-green-600">{translation}</span>
@@ -57,7 +62,7 @@ const HighlightPopup = ({
         size="sm"
         variant="outline"
         onClick={onSaveVocab}
-        disabled={!translation || saving || savingDone}
+        // disabled={!translation || saving || savingDone}
       >
         {saving ? "Saving..." : savingDone ? "Saved!" : "Save to Vocab"}
       </Button>

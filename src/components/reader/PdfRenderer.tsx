@@ -1,7 +1,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import PdfPageHighlighter from "./PdfPageHighlighter";
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
@@ -46,23 +45,20 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
   useEffect(() => {
     const handleMouseUp = () => {
       const selection = window.getSelection();
-      console.log("Selection:", selection?.toString());
       if (!selection || selection.isCollapsed) {
         setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
         setTranslation(null);
         return;
       }
       const selectedText = selection.toString();
-      if (!selectedText || selectedText.length > 1200) return;
+      if (!selectedText || selectedText.length > 120) return;
   
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
   
       if (!overlayRef.current) return;
-      const overlayBox = overlayRef.current.getBoundingClientRect();
-      const x = rect.left + rect.width / 2 - overlayBox.left;
-      const y = rect.top - overlayBox.top - 10;
-  
+      const x = rect.left + rect.width / 2;
+      const y = rect.top - rect.height /2; // Adjusted for better visibility
       setPopup({
         show: true,
         x,
@@ -74,10 +70,21 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
     };
   
     document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("keyup", handleKeyUp);
     return () => {
       document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("keyup", handleKeyUp);
     };
   }, []);
+
+  const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.key === "ArrowLeft") {
+      handlePrev();
+    }
+    if (event.key === "ArrowRight") {
+      handleNext();
+    }
+  };
 
   // Visual highlight overlays
   const renderHighlights = () =>
@@ -102,6 +109,7 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
   const handleTranslate = async (text: string) => {
     setTranslating(true);
     const result = await translateText(text);
+    console.log("Translation result:", result);
     setTranslation(result);
     setTranslating(false);
   };
@@ -116,7 +124,6 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
     });
   };
   
-
   // For scalability: highlights could be managed here, per file, per user, etc.
   return (
     <div className="w-full h-screen flex flex-col items-center justify-between overflow-hidden">
@@ -135,9 +142,6 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
             renderAnnotationLayer={false}
             loading={<div>Loading page...</div>}
           >
-            <div style={{ position: 'absolute', zIndex: 0, pointerEvents: 'none' }}>
-              <PdfPageHighlighter pageNumber={pageNumber} />
-            </div>
           </Page>
         </div>
         <div className="h-[60px] flex items-center gap-4 ">
@@ -160,6 +164,52 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
           </button>
         </div>
       </Document>
+      <div
+        ref={overlayRef}
+        // className="absolute inset-0 z-30"
+        // style={{ pointerEvents: "none", userSelect: "none" }}
+      >
+        <div
+          // className="absolute inset-0"
+          // style={{
+          //   cursor: "text",
+          //   background: "transparent",
+          //   userSelect: "text",
+          //   pointerEvents: "auto",
+          // }}
+        >
+          {renderHighlights()}
+          {popup.show && popup.selectedText && (
+            <HighlightPopup
+              x={popup.x}
+              y={popup.y}
+              selectedText={popup.selectedText}
+              onHighlight={() => {
+                setHighlights((hls) => [
+                  ...hls,
+                  {
+                    page: pageNumber,
+                    text: popup.selectedText,
+                    rect: popup.rect,
+                  },
+                ]);
+                setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+                setTranslation(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+              onTranslate={handleTranslate}
+              translation={translation}
+              onSaveVocab={handleSaveVocab}
+              saving={saving}
+              savingDone={savingDone}
+              onClose={() => {
+                setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+                setTranslation(null);
+              }}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 };

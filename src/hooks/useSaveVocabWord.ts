@@ -20,9 +20,15 @@ export function useSaveVocabWord() {
   const save = async ({
     word, translation, bookId, bookTitle, context, pageNumber
   }: SaveVocabParams) => {
+    console.log("Saving vocab word:", {
+      word, translation, bookId, bookTitle, context, pageNumber
+    });
     if (!user) return false; // Don't allow saving if not logged in
     setSaving(true);
     setSavingDone(false);
+    console.log("Saving vocab word:", {
+      word, translation, bookId, bookTitle, context, pageNumber
+    });
     const { error } = await supabase.from("vocab_words").insert({
       book_id: bookId,
       book_title: bookTitle ?? null,
