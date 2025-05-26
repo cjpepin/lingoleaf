@@ -7,10 +7,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
-function isPaidUser(user: { tier?: string } | null) {
-  // TODO: Replace with real check (check tier field after you add it!)
-  // For demo, always free
-  return user?.tier === "paid";
+// Always free for now; if user.tier is ever added, adjust accordingly
+function isPaidUser(_user: unknown) {
+  // TODO: Replace with real check if/when user.tier exists
+  return false;
 }
 
 const VocabFolders = () => {
@@ -55,3 +55,4 @@ const VocabFolders = () => {
 };
 
 export default VocabFolders;
+

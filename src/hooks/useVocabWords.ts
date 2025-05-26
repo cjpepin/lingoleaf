@@ -35,14 +35,18 @@ export function useVocabWords(folderId: string | null) {
     enabled: !!user,
   });
 
-  // Add new word
+  // Add new word 
+  // For manual vocab entries, pass book_id="manual", book_title=null, and page_number=null
   async function addWord(word: string, translation: string, context: string | null) {
     if (!user) return;
     await supabase.from("vocab_words").insert({
       user_id: user.id,
+      book_id: "manual",
+      book_title: null,
       word,
       translation,
       context,
+      page_number: null,
       folder_id: folderId || null,
     });
     queryClient.invalidateQueries({ queryKey: ["vocab-words", user?.id, folderId ?? "all"] });
@@ -78,3 +82,4 @@ export function useVocabWords(folderId: string | null) {
     updateNote,
   };
 }
+
