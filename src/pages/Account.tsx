@@ -1,4 +1,3 @@
-
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -6,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/components/ui/use-toast";
+import UpgradeCTA from "@/components/UpgradeCTA";
+import UpgradeModal from "@/components/UpgradeModal";
 
 /**
  * Sign in and sign up forms using Supabase auth.
@@ -22,6 +23,7 @@ const Account = () => {
       <div className="bg-[#f8fafc] min-h-screen">
         <Navbar authenticated={false} />
         <main className="max-w-md mx-auto py-20 px-4 text-center">
+          <UpgradeModal />
           <h2 className="text-2xl font-bold mb-4 text-green-800">Loading...</h2>
         </main>
       </div>
@@ -49,6 +51,8 @@ const Account = () => {
       <div className="bg-[#f8fafc] min-h-screen">
         <Navbar authenticated={true} />
         <main className="max-w-md mx-auto py-20 px-4 text-center">
+          <UpgradeCTA className="mb-7" />
+          <UpgradeModal />
           <h2 className="text-2xl font-bold mb-4 text-green-800">Your Account</h2>
           <div className="mb-4 text-lg text-gray-700">Signed in as <span className="font-medium">{user.email}</span></div>
           <Button variant="secondary" onClick={handleLogout}>Log Out</Button>
@@ -108,6 +112,8 @@ const Account = () => {
     <div className="bg-[#f8fafc] min-h-screen">
       <Navbar authenticated={false} />
       <main className="max-w-md mx-auto py-16 px-4 text-center">
+        <UpgradeCTA className="mb-7" />
+        <UpgradeModal />
         <h2 className="text-2xl font-bold mb-4 text-green-800">
           {mode === "login" ? "Sign In" : "Sign Up"}
         </h2>

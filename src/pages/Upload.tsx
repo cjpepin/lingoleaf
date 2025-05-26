@@ -1,4 +1,3 @@
-
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,10 +6,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/components/ui/use-toast";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import UpgradeModal from "@/components/UpgradeModal";
+import { useUpgradeModal } from "@/hooks/useUpgradeModal";
 
 const Upload = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const openUpgrade = useUpgradeModal((s) => s.openModal);
   const [form, setForm] = useState({
     title: "",
     file: undefined as File | undefined,
@@ -24,6 +26,7 @@ const Upload = () => {
     return (
       <div className="bg-[#f8fafc] min-h-screen">
         <Navbar authenticated={false} />
+        <UpgradeModal />
         <main className="max-w-2xl mx-auto py-20 px-4 text-center">
           <h2 className="text-2xl font-bold mb-6 text-green-800">Loading...</h2>
         </main>
@@ -31,11 +34,13 @@ const Upload = () => {
     );
   }
 
-  // Block upload for unauthenticated users
+  // Replace block with quota check
+  // For demonstration, prevent upload and show upgrade modal if user has >3 books, etc.
   if (!user) {
     return (
       <div className="bg-[#f8fafc] min-h-screen">
         <Navbar authenticated={false} />
+        <UpgradeModal />
         <main className="max-w-2xl mx-auto py-20 px-4 text-center">
           <h2 className="text-2xl font-bold mb-6 text-green-800">
             Upload a Book
@@ -43,7 +48,9 @@ const Upload = () => {
           <p className="mb-6 text-lg text-gray-700">
             Sign in or create an account to upload your own books.
           </p>
-          <Button size="lg" onClick={() => navigate("/account")}>
+          <Button size="lg" onClick={() => {
+            openUpgrade();
+          }}>
             Sign In / Create Account
           </Button>
         </main>
@@ -158,6 +165,7 @@ const Upload = () => {
   return (
     <div className="bg-[#f8fafc] min-h-screen">
       <Navbar authenticated={true} />
+      <UpgradeModal />
       <main className="max-w-2xl mx-auto py-20 px-4">
         <h2 className="text-2xl font-bold mb-6 text-green-800">Upload a Book</h2>
         <form className="space-y-6" onSubmit={handleSubmit}>

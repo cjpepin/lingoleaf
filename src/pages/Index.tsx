@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import UpgradeCTA from "@/components/UpgradeCTA";
+import UpgradeModal from "@/components/UpgradeModal";
 
 // Dummy books and user uploads for this phase
 const DUMMY_BOOKS = [
@@ -39,6 +41,8 @@ const Index = () => {
   return (
     <div className="bg-[#F3F6F4] min-h-screen">
       <Navbar authenticated={isAuthenticated} />
+      <UpgradeCTA className="max-w-2xl mx-auto mt-5 mb-7" />
+      <UpgradeModal />
       <main className="max-w-5xl mx-auto py-8 px-4">
         <div className="flex flex-col md:flex-row items-center md:gap-12 gap-8 pb-8">
           <div className="flex-1 text-center md:text-left">
@@ -110,5 +114,4 @@ const Index = () => {
     </div>
   );
 };
-
 export default Index;
