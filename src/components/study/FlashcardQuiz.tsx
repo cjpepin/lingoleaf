@@ -1,11 +1,12 @@
 
+import React, { useState, useEffect } from "react";
 import { useVocabWords } from "@/hooks/useVocabWords";
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type FlashcardQuizProps = {
   folderId: string | null;
-  mode: "word" | "translation"; // "word" = native on front, "translation" = learning on front
+  mode: "word" | "translation";
 };
 
 const shuffle = <T,>(a: T[]): T[] => {
@@ -22,10 +23,10 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   const [order, setOrder] = useState<number[]>([]);
   const [idx, setIdx] = useState(0);
   const [showBack, setShowBack] = useState(false);
+  const [flipping, setFlipping] = useState(false); // NEW: for flip animation
   const [correct, setCorrect] = useState<number[]>([]);
   const [missed, setMissed] = useState<number[]>([]);
 
-  // When words load or folder changes, shuffle order
   useEffect(() => {
     if (words && words.length > 0) {
       setOrder(shuffle(words.map((_, i) => i)));
@@ -42,7 +43,6 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   if (!words || words.length === 0) {
     return <div className="text-gray-400">No vocab found in this folder.</div>;
   }
-  // finished
   if (idx >= order.length) {
     return (
       <div className="p-6 text-center">
@@ -59,22 +59,61 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
 
   const w = words[order[idx]];
 
+  // Animating flip
+  const handleFlip = () => {
+    setFlipping(true);
+    setTimeout(() => {
+      setShowBack((v) => !v);
+      setFlipping(false);
+    }, 180);
+  };
+
   return (
     <div className="flex flex-col items-center mt-8">
       <div className="mb-6">
         <div
-          className="relative bg-white rounded-lg shadow-xl px-10 py-8 min-w-[220px] min-h-[100px] text-center select-none cursor-pointer border border-gray-200 hover:bg-green-50 transition-all"
-          onClick={() => setShowBack(v => !v)}
-        >
-          {!showBack ? (
-            <span className="text-xl font-semibold text-green-900">
-              {mode === "word" ? w.word : w.translation}
-            </span>
-          ) : (
-            <span className="text-xl font-semibold text-gray-700">
-              {mode === "word" ? w.translation : w.word}
-            </span>
+          className={cn(
+            "relative bg-white rounded-lg shadow-xl px-10 py-8 min-w-[220px] min-h-[100px] text-center select-none cursor-pointer border border-gray-200 hover:bg-green-50 transition-all transform-style-3d animate-fade-in",
+            "flip-card",
+            flipping ? "animate-[flip_0.36s]" : "",
+            showBack ? "rotate-y-180" : ""
           )}
+          style={{
+            perspective: "1000px",
+            transition: "transform 0.36s cubic-bezier(0.4,0,0.2,1)",
+            transform: flipping
+              ? "rotateY(180deg)"
+              : showBack
+              ? "rotateY(180deg)"
+              : "rotateY(0deg)",
+          }}
+          onClick={handleFlip}
+        >
+          <span
+            className={cn(
+              "text-xl font-semibold absolute inset-0 flex justify-center items-center",
+              "transition-opacity duration-150",
+              showBack ? "opacity-0" : "opacity-100"
+            )}
+            style={{
+              backfaceVisibility: "hidden",
+            }}
+          >
+            {mode === "word" ? w.word : w.translation}
+          </span>
+          <span
+            className={cn(
+              "text-xl font-semibold absolute inset-0 flex justify-center items-center",
+              "transition-opacity duration-150",
+              showBack ? "opacity-100" : "opacity-0"
+            )}
+            style={{
+              transform: "rotateY(180deg)",
+              backfaceVisibility: "hidden",
+            }}
+          >
+            {mode === "word" ? w.translation : w.word}
+          </span>
         </div>
         <div className="mt-2 text-xs text-gray-400 italic">
           Click card to flip
@@ -84,11 +123,14 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
         )}
       </div>
       {!showBack ? (
-        <Button variant="secondary" onClick={() => setShowBack(true)}>Show Answer</Button>
+        <Button variant="secondary" onClick={() => setShowBack(true)}>
+          Show Answer
+        </Button>
       ) : (
         <div className="flex gap-3">
           <Button
-            variant="success"
+            // Can't use variant="success", fallback to "default" as shadcn/ui only allows default set
+            className="bg-green-600 hover:bg-green-700 text-white"
             onClick={() => {
               setCorrect(c => [...c, idx]);
               setShowBack(false);

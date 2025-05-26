@@ -1,4 +1,3 @@
-
 import LinguaLeafLogo from "./LinguaLeafLogo";
 import { Button } from "@/components/ui/button";
 import { useNavigate, NavLink } from "react-router-dom";
@@ -8,6 +7,7 @@ const routes = [
   { name: "Library", path: "/library" },
   { name: "Upload", path: "/upload" },
   { name: "Vocab", path: "/vocab" },
+  { name: "Study", path: "/study" }, // NEW: Study tab
 ];
 
 const Navbar = ({ authenticated }: { authenticated: boolean }) => {

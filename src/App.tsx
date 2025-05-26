@@ -11,7 +11,8 @@ import Upload from "./pages/Upload";
 import Vocab from "./pages/Vocab";
 import Account from "./pages/Account";
 import ReadBook from "./pages/ReadBook";
-import Study from "./pages/Study"; // ADD
+import Study from "./pages/Study";
+import Upgrade from "./pages/Upgrade"; // add
 
 const queryClient = new QueryClient();
 
@@ -26,7 +27,8 @@ const App = () => (
           <Route path="/library" element={<Library />} />
           <Route path="/upload" element={<Upload />} />
           <Route path="/vocab" element={<Vocab />} />
-          <Route path="/study" element={<Study />} /> {/* NEW STUDY ROUTE */}
+          <Route path="/study" element={<Study />} />
+          <Route path="/upgrade" element={<Upgrade />} /> {/* NEW: Upgrade */}
           <Route path="/account" element={<Account />} />
           <Route path="/read/:bookId" element={<ReadBook />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
