@@ -1,6 +1,6 @@
 
 import { useVocabWords } from "@/hooks/useVocabWords";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 
 type FlashcardQuizProps = {
@@ -26,7 +26,7 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   const [missed, setMissed] = useState<number[]>([]);
 
   // When words load or folder changes, shuffle order
-  React.useEffect(() => {
+  useEffect(() => {
     if (words && words.length > 0) {
       setOrder(shuffle(words.map((_, i) => i)));
       setIdx(0);

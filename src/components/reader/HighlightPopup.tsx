@@ -78,7 +78,7 @@ const HighlightPopup = ({
           <SelectValue placeholder="No folder" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">No folder</SelectItem>
+          <SelectItem value="no-folder">No folder</SelectItem>
           {folders?.map((f: any) => (
             <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
           ))}

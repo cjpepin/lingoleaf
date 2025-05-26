@@ -52,7 +52,7 @@ const Study = () => {
                   <SelectValue placeholder="All Words" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Words</SelectItem>
+                  <SelectItem value="all-words">All Words</SelectItem>
                   {folders?.map((f: any) => (
                     <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
