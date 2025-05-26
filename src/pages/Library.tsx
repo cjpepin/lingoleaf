@@ -4,6 +4,7 @@ import { useLibraryBooks } from "@/hooks/useLibraryBooks";
 import { useNavigate } from "react-router-dom";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
+import { Button } from "@/components/ui/button";
 
 const Library = () => {
   const { user, booksToShow, isLoading, error, refetch } = useLibraryBooks();

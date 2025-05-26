@@ -51,11 +51,11 @@ const Account = () => {
       <div className="bg-[#f8fafc] min-h-screen">
         <Navbar authenticated={true} />
         <main className="max-w-md mx-auto py-20 px-4 text-center">
-          <UpgradeCTA className="mb-7" />
           <UpgradeModal />
           <h2 className="text-2xl font-bold mb-4 text-green-800">Your Account</h2>
           <div className="mb-4 text-lg text-gray-700">Signed in as <span className="font-medium">{user.email}</span></div>
           <Button variant="secondary" onClick={handleLogout}>Log Out</Button>
+          <UpgradeCTA className="mt-7" />
         </main>
       </div>
     );

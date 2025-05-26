@@ -41,7 +41,6 @@ const Index = () => {
   return (
     <div className="bg-[#F3F6F4] min-h-screen">
       <Navbar authenticated={isAuthenticated} />
-      <UpgradeCTA className="max-w-2xl mx-auto mt-5 mb-7" />
       <UpgradeModal />
       <main className="max-w-5xl mx-auto py-8 px-4">
         <div className="flex flex-col md:flex-row items-center md:gap-12 gap-8 pb-8">
@@ -75,6 +74,7 @@ const Index = () => {
             />
           </div>
         </div>
+        <UpgradeCTA className="max-w-2xl mx-auto mt-5" />
 
         <section className="pt-10">
           <div className="flex items-center justify-between mb-4">
