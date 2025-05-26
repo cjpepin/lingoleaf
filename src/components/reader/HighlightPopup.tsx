@@ -39,7 +39,7 @@ const HighlightPopup = ({
   };
 
   const canSave = !!translation && !saving && !savingDone;
-
+  console.log("folders", folders);
   return (
     <div
       className="absolute z-50 bg-white border border-gray-300 rounded shadow-lg flex gap-2 px-3 py-2 animate-fade-in"
@@ -76,7 +76,7 @@ const HighlightPopup = ({
           <SelectValue placeholder="No folder" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">No folder</SelectItem>
+          <SelectItem value="Select a folder">Select a folder</SelectItem>
           {folders?.map((f: any) => (
             <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
           ))}
