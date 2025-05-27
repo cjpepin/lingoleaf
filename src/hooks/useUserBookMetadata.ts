@@ -17,7 +17,6 @@ export function useUserBookMetadata(bookId: string | undefined) {
   useEffect(() => {
     if (!user?.id || !bookId) return;
     setLoading(true);
-    // Try to fetch existing
     supabase
       .from("user_book_metadata")
       .select("*")
@@ -28,7 +27,16 @@ export function useUserBookMetadata(bookId: string | undefined) {
         if (data) {
           setMetadataId(data.id);
           setCurrentPage(data.current_page ?? 1);
-          setHighlights(data.highlights ?? []);
+          // Safely parse highlights if string, else use as array
+          let incomingHighlights = data.highlights;
+          if (typeof incomingHighlights === "string") {
+            try {
+              incomingHighlights = JSON.parse(incomingHighlights);
+            } catch (e) {
+              incomingHighlights = [];
+            }
+          }
+          setHighlights(Array.isArray(incomingHighlights) ? incomingHighlights : []);
         } else {
           // Create if missing
           const { data: insertData } = await supabase

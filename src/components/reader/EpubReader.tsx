@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { translateText } from "@/utils/translate";
@@ -47,14 +46,14 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   // Go to a given spine location in the epub
   const goToPage = async (page: number) => {
     if (!renditionRef.current || !bookRef.current || !totalPages) return;
-    const pageCount = totalPages || 1;
+    const spineItems = bookRef.current.spine.items;
+    const pageCount = spineItems.length || 1;
     let targetPage = page;
     if (targetPage < 1) targetPage = 1;
     if (targetPage > pageCount) targetPage = pageCount;
     // Use book's spine to display correct location
-    const spine = bookRef.current.spine;
-    if (spine && spine.length) {
-      const loc = spine.get(targetPage - 1)?.href ?? spine.get(0).href;
+    if (spineItems && spineItems.length) {
+      const loc = spineItems[targetPage - 1]?.href ?? spineItems[0].href;
       await renditionRef.current.display(loc);
       updatePage(targetPage);
     }
@@ -72,11 +71,12 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         bookRef.current = book;
 
         book.ready.then(() => {
-          setTotalPages(book.spine.length || 1);
+          const spineItems = book.spine.items;
+          setTotalPages(spineItems.length || 1);
           // Navigate to the last saved page (restore)
-          if (currentPage && book.spine.length) {
-            const safePage = Math.min(currentPage, book.spine.length);
-            const spineLoc = book.spine.get(safePage - 1)?.href ?? book.spine.get(0).href;
+          if (currentPage && spineItems.length) {
+            const safePage = Math.min(currentPage, spineItems.length);
+            const spineLoc = spineItems[safePage - 1]?.href ?? spineItems[0].href;
             renditionRef.current?.display(spineLoc);
           }
         });
@@ -91,7 +91,8 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         rendition.on("relocated", (location: any) => {
           // Update current page when location changes
           if (book.spine) {
-            const idx = book.spine.indexOf(location.start.container) + 1;
+            const spineItems = book.spine.items;
+            const idx = spineItems.findIndex((item: any) => item.href === location.start.href) + 1;
             if (idx > 0) updatePage(idx);
           }
         });
