@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
 import UpgradeModal from "@/components/UpgradeModal";
+import { useVocabWords } from "@/hooks/useVocabWords";
 
 // Always free for now; if user.tier is ever added, adjust accordingly
 function isPaidUser(_user: unknown) {
@@ -21,6 +22,20 @@ const VocabFolders = () => {
   const openUpgrade = useUpgradeModal((s) => s.openModal);
   const canCreateFolder = isPaidUser(user) || (folders?.length ?? 0) < 3;
 
+  // For studying
+  const [studyFolder, setStudyFolder] = useState<string | null>(null);
+  const { words: currentFolderWords } = useVocabWords(selectedFolder);
+
+  function handleStudy(folderId: string | null) {
+    const { words } = useVocabWords(folderId);
+    if (!words || words.length < 1) {
+      toast({ title: "No words to study in this folder" });
+      return;
+    }
+    window.location.href = `/study?folderId=${folderId ?? "all-words"}`;
+    // Or if using react-router: navigate("/study", { state: { folderId } });
+  }
+
   return (
     <div className="flex gap-7 flex-wrap md:flex-nowrap">
       <UpgradeModal />
@@ -30,6 +45,7 @@ const VocabFolders = () => {
           folders={folders}
           selected={selectedFolder}
           onSelect={setSelectedFolder}
+          onStudy={handleStudy}
         />
         <Button
           variant="secondary"

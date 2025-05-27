@@ -23,7 +23,7 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   const [order, setOrder] = useState<number[]>([]);
   const [idx, setIdx] = useState(0);
   const [showBack, setShowBack] = useState(false);
-  const [flipping, setFlipping] = useState(false); // NEW: for flip animation
+  const [flipping, setFlipping] = useState(false); // for flip animation
   const [correct, setCorrect] = useState<number[]>([]);
   const [missed, setMissed] = useState<number[]>([]);
 
@@ -58,6 +58,10 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   }
 
   const w = words[order[idx]];
+
+  // Bug fix: flip logic for displaying correct content
+  const showFrontText = mode === "word" ? w.word : w.translation;
+  const showBackText = mode === "word" ? w.translation : w.word;
 
   // Animating flip
   const handleFlip = () => {
@@ -99,7 +103,7 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
               backfaceVisibility: "hidden",
             }}
           >
-            {mode === "word" ? w.word : w.translation}
+            {showFrontText}
           </span>
           <span
             className={cn(
@@ -112,7 +116,7 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
               backfaceVisibility: "hidden",
             }}
           >
-            {mode === "word" ? w.translation : w.word}
+            {showBackText}
           </span>
         </div>
         <div className="mt-2 text-xs text-gray-400 italic">
@@ -129,7 +133,6 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
       ) : (
         <div className="flex gap-3">
           <Button
-            // Can't use variant="success", fallback to "default" as shadcn/ui only allows default set
             className="bg-green-600 hover:bg-green-700 text-white"
             onClick={() => {
               setCorrect(c => [...c, idx]);

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
-import EpubPlaceholder from "@/components/reader/EpubPlaceholder";
+import EpubReader from "@/components/reader/EpubReader";
 
 const ReadBook = () => {
   const { bookId } = useParams();
@@ -60,7 +60,9 @@ const ReadBook = () => {
       <PdfRenderer fileUrl={fileUrl} title={book.title} />
     );
   } else if (ext === "epub") {
-    bookContent = <EpubPlaceholder />;
+    bookContent = (
+      <EpubReader fileUrl={fileUrl} title={book.title} />
+    );
   } else if (ext === "txt" || ext === "text") {
     bookContent = (
       <TextFileViewer fileUrl={fileUrl} />
