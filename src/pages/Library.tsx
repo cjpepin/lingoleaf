@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import BookCard from "@/components/library/BookCard";
+import { supabase } from "@/integrations/supabase/client";
 
 const Library = () => {
   const { user } = useAuth();
