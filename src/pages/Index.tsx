@@ -3,9 +3,10 @@ import LinguaLeafLogo from "@/components/LinguaLeafLogo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UpgradeCTA from "@/components/UpgradeCTA";
 import UpgradeModal from "@/components/UpgradeModal";
+import { useAuth } from "@/hooks/useAuth";
 
 // Dummy books and user uploads for this phase
 const DUMMY_BOOKS = [
@@ -33,7 +34,9 @@ const DUMMY_USER_BOOKS: any[] = []; // Empty for non-auth
 
 const Index = () => {
   // Replace with real auth state when hooked up!
-  const isAuthenticated = false;
+    const { user, loading: authLoading } = useAuth();
+  
+  const isAuthenticated = user !== null && !authLoading;
   const userBooks = isAuthenticated ? DUMMY_USER_BOOKS : [];
   const booksToShow = userBooks.length > 0 ? userBooks : DUMMY_BOOKS;
   const navigate = useNavigate();
@@ -45,7 +48,6 @@ const Index = () => {
       <main className="max-w-5xl mx-auto py-8 px-4">
         <div className="flex flex-col md:flex-row items-center md:gap-12 gap-8 pb-8">
           <div className="flex-1 text-center md:text-left">
-            <LinguaLeafLogo size={64} />
             <h2 className="mt-7 text-4xl font-semibold text-green-700 mb-2">Grow your language skills with real books</h2>
             <p className="text-lg text-gray-700 max-w-xl mb-5">
               Upload your own books or explore our library. Highlight unfamiliar words, get translations, and save vocabulary—right as you read.

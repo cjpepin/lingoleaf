@@ -2,7 +2,6 @@
 import { Button } from "@/components/ui/button";
 import { BadgeDollarSign } from "lucide-react";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
-import React from "react";
 
 export const UpgradeCTA = ({
   message = "Unlock all features with LinguaLeaf Premium!",
