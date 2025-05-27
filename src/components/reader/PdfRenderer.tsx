@@ -164,20 +164,8 @@ const PdfRenderer = ({ fileUrl, title }: PdfRendererProps) => {
           </button>
         </div>
       </Document>
-      <div
-        ref={overlayRef}
-        // className="absolute inset-0 z-30"
-        // style={{ pointerEvents: "none", userSelect: "none" }}
-      >
-        <div
-          // className="absolute inset-0"
-          // style={{
-          //   cursor: "text",
-          //   background: "transparent",
-          //   userSelect: "text",
-          //   pointerEvents: "auto",
-          // }}
-        >
+      <div ref={overlayRef}>
+        <div>
           {renderHighlights()}
           {popup.show && popup.selectedText && (
             <HighlightPopup

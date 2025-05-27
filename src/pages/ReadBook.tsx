@@ -30,6 +30,7 @@ const ReadBook = () => {
         return;
       }
       setBook(bookData);
+      console.log("File path:", bookData.file_path);
       if (bookData?.file_path) {
         const { data, error: urlError } = await supabase.storage
           .from("books")
@@ -45,7 +46,6 @@ const ReadBook = () => {
   }, [bookId]);
 
   const ext = (book?.file_path || "").split(".").pop()?.toLowerCase();
-
   let bookContent;
   if (!book) {
     bookContent = error ? (
