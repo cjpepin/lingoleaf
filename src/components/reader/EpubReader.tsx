@@ -5,6 +5,14 @@ import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import HighlightPopup from "./HighlightPopup";
 import { useUserBookMetadata } from "@/hooks/useUserBookMetadata";
 
+interface SpineItem {
+  href: string;
+}
+
+interface ExtendedSpine {
+  items: SpineItem[];
+}
+
 type Props = {
   fileUrl: string;
   title?: string;
@@ -71,7 +79,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         bookRef.current = book;
 
         book.ready.then(() => {
-          const spineItems = book.spine.items;
+          const spineItems = (book.spine as unknown as ExtendedSpine).items;
           setTotalPages(spineItems.length || 1);
           // Navigate to the last saved page (restore)
           if (currentPage && spineItems.length) {
@@ -91,7 +99,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         rendition.on("relocated", (location: any) => {
           // Update current page when location changes
           if (book.spine) {
-            const spineItems = book.spine.items;
+            const spineItems = (book.spine as unknown as ExtendedSpine).items;
             const idx = spineItems.findIndex((item: any) => item.href === location.start.href) + 1;
             if (idx > 0) updatePage(idx);
           }
