@@ -1,8 +1,10 @@
+
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { translateText } from "@/utils/translate";
 import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import HighlightPopup from "./HighlightPopup";
+import { useUserBookMetadata } from "@/hooks/useUserBookMetadata";
 
 type Props = {
   fileUrl: string;
@@ -17,6 +19,17 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const { bookId } = useParams<{ bookId: string }>();
   const { save, saving, savingDone } = useSaveVocabWord();
 
+  // Metadata usage
+  const {
+    currentPage,
+    highlights,
+    updatePage,
+    updateHighlights,
+    loading: metaLoading,
+    setCurrentPage,
+    setHighlights
+  } = useUserBookMetadata(bookId);
+
   const [popup, setPopup] = useState({
     show: false,
     x: 0,
@@ -26,8 +39,26 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   });
 
   const [translation, setTranslation] = useState<string | null>(null);
-  const [highlights, setHighlights] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const [totalPages, setTotalPages] = useState<number>(0);
+  const [pageReady, setPageReady] = useState(false);
+
+  // Go to a given spine location in the epub
+  const goToPage = async (page: number) => {
+    if (!renditionRef.current || !bookRef.current || !totalPages) return;
+    const pageCount = totalPages || 1;
+    let targetPage = page;
+    if (targetPage < 1) targetPage = 1;
+    if (targetPage > pageCount) targetPage = pageCount;
+    // Use book's spine to display correct location
+    const spine = bookRef.current.spine;
+    if (spine && spine.length) {
+      const loc = spine.get(targetPage - 1)?.href ?? spine.get(0).href;
+      await renditionRef.current.display(loc);
+      updatePage(targetPage);
+    }
+  };
 
   useEffect(() => {
     const loadEpub = async () => {
@@ -40,6 +71,16 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         const book = epubjs.default(buffer);
         bookRef.current = book;
 
+        book.ready.then(() => {
+          setTotalPages(book.spine.length || 1);
+          // Navigate to the last saved page (restore)
+          if (currentPage && book.spine.length) {
+            const safePage = Math.min(currentPage, book.spine.length);
+            const spineLoc = book.spine.get(safePage - 1)?.href ?? book.spine.get(0).href;
+            renditionRef.current?.display(spineLoc);
+          }
+        });
+
         const rendition = book.renderTo(viewerRef.current!, {
           width: "50vw",
           height: "calc(100vh - 120px)",
@@ -47,7 +88,16 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         });
         renditionRef.current = rendition;
 
-        rendition.display();
+        rendition.on("relocated", (location: any) => {
+          // Update current page when location changes
+          if (book.spine) {
+            const idx = book.spine.indexOf(location.start.container) + 1;
+            if (idx > 0) updatePage(idx);
+          }
+        });
+
+        setPageReady(true);
+
       } catch (err: any) {
         setError("Failed to load EPUB: " + (err.message || err));
       }
@@ -59,7 +109,8 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
     };
-  }, [fileUrl]);
+    // eslint-disable-next-line
+  }, [fileUrl, currentPage]);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -102,12 +153,59 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       word: popup.selectedText,
       translation,
       bookId,
-      pageNumber: 1, // You could improve this by tracking EPUB location
+      pageNumber: currentPage,
     });
   };
 
+  const handleHighlight = () => {
+    updateHighlights([
+      ...highlights,
+      { text: popup.selectedText, rect: popup.rect, page: currentPage },
+    ]);
+    setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+    setTranslation(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  // Page navigation handlers
+  const handlePrev = () => {
+    if (currentPage > 1) {
+      goToPage(currentPage - 1);
+    }
+  };
+  const handleNext = () => {
+    if (totalPages && currentPage < totalPages) {
+      goToPage(currentPage + 1);
+    }
+  };
+
+  // Render highlights (visual, for improvement)
+  useEffect(() => {
+    // In a real app, we'd visually overlay the highlights based on rect (TODO)
+  }, [highlights, currentPage]);
+
   return (
     <div className="h-screen flex flex-col items-center justify-between overflow-hidden relative">
+      {/* Page navigation (like in PDF) */}
+      <div className="flex items-center gap-4 my-2">
+        <button
+          className="px-3 py-1 bg-gray-100 rounded border"
+          onClick={handlePrev}
+          disabled={currentPage <= 1}
+        >
+          Previous
+        </button>
+        <span>
+          Page {currentPage} {totalPages ? `of ${totalPages}` : ""}
+        </span>
+        <button
+          className="px-3 py-1 bg-gray-100 rounded border"
+          onClick={handleNext}
+          disabled={!!totalPages && currentPage >= totalPages}
+        >
+          Next
+        </button>
+      </div>
       <div
         ref={viewerRef}
         className="border shadow bg-white rounded p-2  h-full mx-auto overflow-hidden"
@@ -117,18 +215,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           x={popup.x}
           y={popup.y}
           selectedText={popup.selectedText}
-          onHighlight={() => {
-            setHighlights((hls) => [
-              ...hls,
-              {
-                text: popup.selectedText,
-                rect: popup.rect,
-              },
-            ]);
-            setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
-            setTranslation(null);
-            window.getSelection()?.removeAllRanges();
-          }}
+          onHighlight={handleHighlight}
           onTranslate={handleTranslate}
           translation={translation}
           onSaveVocab={handleSaveVocab}

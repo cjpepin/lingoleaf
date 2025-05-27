@@ -78,6 +78,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_book_metadata: {
+        Row: {
+          book_id: string
+          created_at: string
+          current_page: number | null
+          highlights: Json | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          book_id: string
+          created_at?: string
+          current_page?: number | null
+          highlights?: Json | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          book_id?: string
+          created_at?: string
+          current_page?: number | null
+          highlights?: Json | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       vocab_folders: {
         Row: {
           created_at: string

@@ -1,3 +1,4 @@
+
 import Navbar from "@/components/Navbar";
 import BookGrid from "@/components/library/BookGrid";
 import { useLibraryBooks } from "@/hooks/useLibraryBooks";
@@ -8,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import BookCard from "@/components/library/BookCard";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client"; // FIXED: add missing import
 
 const Library = () => {
   const { user } = useAuth();
@@ -105,4 +106,5 @@ const Library = () => {
     </div>
   );
 };
+
 export default Library;
