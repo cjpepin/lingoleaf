@@ -57,7 +57,8 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const goToPage = async (page: number) => {
     if (!renditionRef.current || !bookRef.current || !totalPages) return;
     
-    const spineItems = (bookRef.current.spine as ExtendedSpine).items;
+    // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
+    const spineItems = (bookRef.current.spine as unknown as ExtendedSpine).items;
     const pageCount = spineItems.length || 1;
     
     // Ensure page is within valid range
@@ -89,7 +90,8 @@ const EpubReader = ({ fileUrl, title }: Props) => {
 
         // Initialize book and set up spine navigation
         book.ready.then(() => {
-          const spineItems = (book.spine as ExtendedSpine).items;
+          // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
+          const spineItems = (book.spine as unknown as ExtendedSpine).items;
           setTotalPages(spineItems.length || 1);
           
           // Restore user's last reading position
@@ -111,7 +113,8 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         // Track when user navigates to update current page
         rendition.on("relocated", (location: any) => {
           if (book.spine) {
-            const spineItems = (book.spine as ExtendedSpine).items;
+            // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
+            const spineItems = (book.spine as unknown as ExtendedSpine).items;
             const idx = spineItems.findIndex((item: SpineItem) => item.href === location.start.href) + 1;
             if (idx > 0) updatePage(idx);
           }
