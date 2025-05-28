@@ -1,14 +1,13 @@
+
 import Navbar from "@/components/Navbar";
-import LinguaLeafLogo from "@/components/LinguaLeafLogo";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
 import UpgradeCTA from "@/components/UpgradeCTA";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useAuth } from "@/hooks/useAuth";
 
-// Dummy books and user uploads for this phase
+// Sample books to display when user has no uploads
 const DUMMY_BOOKS = [
   {
     id: "1",
@@ -30,27 +29,30 @@ const DUMMY_BOOKS = [
   }
 ];
 
-const DUMMY_USER_BOOKS: any[] = []; // Empty for non-auth
-
 const Index = () => {
-  // Replace with real auth state when hooked up!
-    const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   
   const isAuthenticated = user !== null && !authLoading;
-  const userBooks = isAuthenticated ? DUMMY_USER_BOOKS : [];
+  // TODO: Replace with actual user books when implemented
+  const userBooks: any[] = [];
   const booksToShow = userBooks.length > 0 ? userBooks : DUMMY_BOOKS;
-  const navigate = useNavigate();
 
   return (
     <div className="bg-[#F3F6F4] min-h-screen">
       <Navbar authenticated={isAuthenticated} />
       <UpgradeModal />
       <main className="max-w-5xl mx-auto py-8 px-4">
+        
+        {/* Hero section */}
         <div className="flex flex-col md:flex-row items-center md:gap-12 gap-8 pb-8">
           <div className="flex-1 text-center md:text-left">
-            <h2 className="mt-7 text-4xl font-semibold text-green-700 mb-2">Grow your language skills with real books</h2>
+            <h2 className="mt-7 text-4xl font-semibold text-green-700 mb-2">
+              Grow your language skills with real books
+            </h2>
             <p className="text-lg text-gray-700 max-w-xl mb-5">
-              Upload your own books or explore our library. Highlight unfamiliar words, get translations, and save vocabulary—right as you read.
+              Upload your own books or explore our library. Highlight unfamiliar words, 
+              get translations, and save vocabulary—right as you read.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 mt-6">
               <Button
@@ -76,8 +78,10 @@ const Index = () => {
             />
           </div>
         </div>
+
         <UpgradeCTA className="max-w-2xl mx-auto mt-5" />
 
+        {/* Featured books section */}
         <section className="pt-10">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-2xl font-bold text-green-800">
@@ -93,14 +97,11 @@ const Index = () => {
           </div>
           <div className="grid md:grid-cols-3 gap-7">
             {booksToShow.map((book) => (
-              <Card key={book.id} className="hover-scale transition">
-                <div
-                  onClick={() => navigate(`/read/${book.id}`)}
-                  className="cursor-pointer"
-                >
+              <Card key={book.id} className="hover-scale transition cursor-pointer">
+                <div onClick={() => navigate(`/read/${book.id}`)}>
                   <img
                     src={book.cover || "https://placehold.co/400x520?text=Book+Cover"}
-                    alt=""
+                    alt={book.title}
                     className="w-full h-52 object-cover rounded-t-lg"
                   />
                   <CardHeader>
@@ -116,4 +117,5 @@ const Index = () => {
     </div>
   );
 };
+
 export default Index;

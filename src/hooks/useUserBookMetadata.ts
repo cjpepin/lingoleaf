@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 /**
  * Hook to manage per-user-per-book metadata (current page & highlights).
+ * Automatically creates metadata record if it doesn't exist.
  */
 export function useUserBookMetadata(bookId: string | undefined) {
   const { user } = useAuth();
@@ -13,9 +14,10 @@ export function useUserBookMetadata(bookId: string | undefined) {
   const [highlights, setHighlights] = useState<any[]>([]);
   const [metadataId, setMetadataId] = useState<string | null>(null);
 
-  // Fetch (or create if doesn't exist) metadata for this book/user.
+  // Fetch (or create if doesn't exist) metadata for this book/user combination
   useEffect(() => {
     if (!user?.id || !bookId) return;
+    
     setLoading(true);
     supabase
       .from("user_book_metadata")
@@ -25,25 +27,34 @@ export function useUserBookMetadata(bookId: string | undefined) {
       .maybeSingle()
       .then(async ({ data, error }) => {
         if (data) {
+          // Load existing metadata
           setMetadataId(data.id);
           setCurrentPage(data.current_page ?? 1);
-          // Safely parse highlights if string, else use as array
+          
+          // Parse highlights safely - handle both string and array formats
           let incomingHighlights = data.highlights;
           if (typeof incomingHighlights === "string") {
             try {
               incomingHighlights = JSON.parse(incomingHighlights);
             } catch (e) {
+              console.warn("Failed to parse highlights JSON:", e);
               incomingHighlights = [];
             }
           }
           setHighlights(Array.isArray(incomingHighlights) ? incomingHighlights : []);
         } else {
-          // Create if missing
+          // Create new metadata record for this user/book combination
           const { data: insertData } = await supabase
             .from("user_book_metadata")
-            .insert([{ user_id: user.id, book_id: bookId, current_page: 1, highlights: [] }])
+            .insert([{ 
+              user_id: user.id, 
+              book_id: bookId, 
+              current_page: 1, 
+              highlights: [] 
+            }])
             .select()
             .maybeSingle();
+            
           setMetadataId(insertData?.id || null);
           setCurrentPage(1);
           setHighlights([]);
@@ -52,12 +63,18 @@ export function useUserBookMetadata(bookId: string | undefined) {
       });
   }, [bookId, user?.id]);
 
-  // Save current page/highlights when they change
+  /**
+   * Save metadata to database when page or highlights change
+   */
   const saveMetadata = useCallback(
     async (newPage: number, newHighlights: any[]) => {
       if (!metadataId) return;
+      
+      // Update local state immediately for responsive UI
       setCurrentPage(newPage);
       setHighlights(newHighlights);
+      
+      // Persist to database
       await supabase.from("user_book_metadata").update({
         current_page: newPage,
         highlights: newHighlights,
@@ -67,13 +84,12 @@ export function useUserBookMetadata(bookId: string | undefined) {
     [metadataId]
   );
 
+  // Helper functions to update specific metadata
   const updatePage = (page: number) => {
-    setCurrentPage(page);
     saveMetadata(page, highlights);
-  }
+  };
 
   const updateHighlights = (hl: any[]) => {
-    setHighlights(hl);
     saveMetadata(currentPage, hl);
   };
 
@@ -83,7 +99,8 @@ export function useUserBookMetadata(bookId: string | undefined) {
     updatePage,
     updateHighlights,
     loading,
+    // Internal setters for initial data loading
     setCurrentPage,
-    setHighlights // for internal use (e.g. initial restore)
+    setHighlights
   };
 }
