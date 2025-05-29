@@ -49,7 +49,11 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [translation, setTranslation] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState<number>(0);
-
+  const [loadingBook, setLoadingBook] = useState(true);
+  const [hoverPage, setHoverPage] = useState<number | null>(null);
+  const [hoverX, setHoverX] = useState<number | null>(null);
+  const [dragPage, setDragPage] = useState<number>(currentPage);
+  
   /**
    * Navigate to a specific page/chapter in the EPUB
    * Uses spine items to determine valid page range
@@ -112,14 +116,18 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           if (currentPage && spineItems.length) {
             const safePage = Math.min(currentPage, spineItems.length);
             const spineLoc = spineItems[safePage - 1]?.href ?? spineItems[0].href;
-            renditionRef.current?.display(spineLoc);
+            renditionRef.current?.display(spineLoc).then(() => {
+              setLoadingBook(false); // ✅ hide loader once displayed
+            });
+          } else {
+            setLoadingBook(false); // fallback
           }
         });
 
         // Create rendition (visual display) of the book
         const rendition = book.renderTo(viewerRef.current!, {
-          width: "50vw",
-          height: "calc(100vh - 120px)",
+          width: "70vw",
+          height: "calc(100vh - 160px)",
           allowScriptedContent: true,
         });
         renditionRef.current = rendition;
@@ -223,9 +231,64 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   };
 
   return (
-    <div className="h-screen flex flex-col items-center justify-between overflow-hidden relative">
+    <div className="h-screen flex flex-col items-center relative">
+      {loadingBook && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50">
+          <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600" />
+        </div>
+      )}
+      {/* EPUB viewer container */}
+      <div
+        ref={viewerRef}
+        className="border shadow bg-white rounded h-full mx-auto overflow-hidden mt-1 w-[72vw] max-h-[calc(100vh-150px)] relative"
+      />
+      <div className="relative w-full px-6 mt-2 max-w-xl">
+        <input
+          type="range"
+          min={1}
+          max={totalPages}
+          value={dragPage}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            setDragPage(val);
+          }}
+          onMouseMove={(e) => {
+            const rect = (e.target as HTMLInputElement).getBoundingClientRect();
+            const offsetX = e.nativeEvent.offsetX;
+            const percent = offsetX / rect.width;
+            const val = Math.round(percent * (totalPages - 1)) + 1;
+
+            setHoverPage(val);
+            setHoverX(offsetX);
+          }}
+          onMouseLeave={() => {
+            setHoverPage(null);
+            setHoverX(null);
+          }}
+          onMouseUp={() => {
+            goToPage(dragPage);
+          }}
+          onTouchEnd={() => {
+            goToPage(dragPage);
+          }}
+          className="w-full accent-green-600 cursor-pointer"
+        />
+
+        {hoverPage !== null && hoverX !== null && (
+          <div
+            className="absolute -top-8 text-sm bg-green-600 text-white rounded px-2 py-0.5 ml-6 shadow z-50 whitespace-nowrap"
+            style={{
+              left: `${hoverX}px`,
+              transform: "translateX(-50%)",
+            }}
+          >
+            Page {hoverPage}
+          </div>
+        )}
+      </div>
+
       {/* Page navigation controls */}
-      <div className="flex items-center gap-4 my-2">
+      <div className="flex items-center gap-4 mt-1">
         <button
           className="px-3 py-1 bg-gray-100 rounded border disabled:opacity-50"
           onClick={handlePrev}
@@ -244,13 +307,6 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           Next
         </button>
       </div>
-
-      {/* EPUB viewer container */}
-      <div
-        ref={viewerRef}
-        className="border shadow bg-white rounded p-2 h-full mx-auto overflow-hidden min-w-[52vw]"
-      />
-
       {/* Text selection popup for translation/highlighting */}
       {popup.show && popup.selectedText && (
         <HighlightPopup
