@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,6 +23,7 @@ type EditBookModalProps = {
 
 const EditBookModal = ({ book, isOpen, onClose, onSuccess }: EditBookModalProps) => {
   const [title, setTitle] = useState(book?.title || "");
+  const [notes, setNotes] = useState(book?.notes || "");
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,6 +31,7 @@ const EditBookModal = ({ book, isOpen, onClose, onSuccess }: EditBookModalProps)
   React.useEffect(() => {
     if (book) {
       setTitle(book.title || "");
+      setNotes(book.notes || "");
       setCoverFile(null);
     }
   }, [book]);
@@ -74,6 +77,7 @@ const EditBookModal = ({ book, isOpen, onClose, onSuccess }: EditBookModalProps)
         .from("books")
         .update({ 
           title: title.trim(),
+          notes: notes.trim() || null,
           cover_image_url 
         })
         .eq("id", book.id);
@@ -103,7 +107,7 @@ const EditBookModal = ({ book, isOpen, onClose, onSuccess }: EditBookModalProps)
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Edit Book</DialogTitle>
         </DialogHeader>
@@ -116,6 +120,18 @@ const EditBookModal = ({ book, isOpen, onClose, onSuccess }: EditBookModalProps)
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter book title"
               required
+              disabled={isSubmitting}
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="notes">Notes</Label>
+            <Textarea
+              id="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Add your notes about this book..."
+              rows={4}
               disabled={isSubmitting}
             />
           </div>

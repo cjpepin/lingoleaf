@@ -195,14 +195,16 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     setTranslation(result);
   };
 
-  // Save selected word and translation to vocabulary
-  const handleSaveVocab = async () => {
+  // Save selected word and translation to vocabulary with folder support
+  const handleSaveVocab = async (opts?: { folderId?: string | null }) => {
     if (!bookId || !popup.selectedText || !translation) return;
     await save({
       word: popup.selectedText,
       translation,
       bookId,
+      bookTitle: title,
       pageNumber: currentPage,
+      folderId: opts?.folderId || null,
     });
   };
 
