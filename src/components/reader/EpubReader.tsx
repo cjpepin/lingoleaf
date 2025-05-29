@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { translateText } from "@/utils/translate";
@@ -158,23 +157,40 @@ const EpubReader = ({ fileUrl, title }: Props) => {
 
   // Handle text selection for translation and highlighting
   useEffect(() => {
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      console.log("Mouse up event detected");
+      
       const selection = window.getSelection();
+      console.log("Selection object:", selection);
+      console.log("Selection is collapsed:", selection?.isCollapsed);
+      console.log("Selection toString:", selection?.toString());
+      
       if (!selection || selection.isCollapsed) {
+        console.log("No selection or collapsed, hiding popup");
         setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
         setTranslation(null);
         return;
       }
 
-      const selectedText = selection.toString();
+      const selectedText = selection.toString().trim();
+      console.log("Selected text:", selectedText);
+      console.log("Selected text length:", selectedText.length);
+      
       // Limit selection length to prevent UI issues
-      if (!selectedText || selectedText.length > 120) return;
+      if (!selectedText || selectedText.length > 120) {
+        console.log("Text too long or empty, returning");
+        return;
+      }
 
       // Position popup near the selected text
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      console.log("Selection rect:", rect);
+      
       const x = rect.left + rect.width / 2;
       const y = rect.top - rect.height / 2;
+      
+      console.log("Popup position:", { x, y });
 
       setPopup({
         show: true,
@@ -183,10 +199,25 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         selectedText,
         rect,
       });
+      
+      console.log("Popup state set to show");
     };
 
+    // Attach to document to catch selections from iframe content
     document.addEventListener("mouseup", handleMouseUp);
-    return () => document.removeEventListener("mouseup", handleMouseUp);
+    
+    // Also try to attach to the viewer container
+    const viewerElement = viewerRef.current;
+    if (viewerElement) {
+      viewerElement.addEventListener("mouseup", handleMouseUp);
+    }
+    
+    return () => {
+      document.removeEventListener("mouseup", handleMouseUp);
+      if (viewerElement) {
+        viewerElement.removeEventListener("mouseup", handleMouseUp);
+      }
+    };
   }, []);
 
   // Translate selected text using translation service
