@@ -1,3 +1,4 @@
+
 import Navbar from "@/components/Navbar";
 import BookGrid from "@/components/library/BookGrid";
 import EditBookModal from "@/components/library/EditBookModal";
@@ -9,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useState } from "react";
+import HeaderBannerAd from "@/components/ads/HeaderBannerAd";
+import LibraryAd from "@/components/ads/LibraryAd";
 
 const Library = () => {
   const { user } = useAuth();
@@ -73,6 +76,9 @@ const Library = () => {
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
+      {/* Header Banner Ad */}
+      <HeaderBannerAd />
+      
       <Navbar authenticated={!!user} />
       <UpgradeModal />
       
@@ -84,54 +90,88 @@ const Library = () => {
         onSuccess={handleEditSuccess}
       />
       
-      <main className="max-w-5xl mx-auto py-8 px-4">
-        <h2 className="text-3xl font-bold text-green-800 mb-6">
-          {user && ownBooks.length > 0 ? "Your Library" : "Library"}
-        </h2>
-        
-        {/* Upload button for authenticated users */}
-        {user && (
-          <div className="mb-8">
-            <Button
-              className="bg-green-600 text-white rounded px-3 py-2 hover:bg-green-700 transition"
-              onClick={() => navigate("/upload")}
-            >
-              + Upload a Book
-            </Button>
-          </div>
-        )}
+      <main className="max-w-7xl mx-auto py-8 px-4 flex gap-8">
+        {/* Main content area */}
+        <div className="flex-1">
+          <h2 className="text-3xl font-bold text-green-800 mb-6">
+            {user && ownBooks.length > 0 ? "Your Library" : "Library"}
+          </h2>
+          
+          {/* Upload button for authenticated users */}
+          {user && (
+            <div className="mb-8">
+              <Button
+                className="bg-green-600 text-white rounded px-3 py-2 hover:bg-green-700 transition"
+                onClick={() => navigate("/upload")}
+              >
+                + Upload a Book
+              </Button>
+            </div>
+          )}
 
-        {/* Loading and error states */}
-        {user && isLoading ? (
-          <div className="text-lg text-gray-600 py-16 text-center">
-            Loading your books...
-          </div>
-        ) : error ? (
-          <div className="text-red-600 text-center">{error.message}</div>
-        ) : (
-          <>
-            {/* User's personal books section */}
-            {user && ownBooks.length > 0 && (
-              <section className="mb-12">
-                <h3 className="text-xl font-bold mb-2">Your Books</h3>
-                <BookGrid
-                  books={ownBooks}
-                  ownedBooksOnly
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
+          {/* Loading and error states */}
+          {user && isLoading ? (
+            <div className="text-lg text-gray-600 py-16 text-center">
+              Loading your books...
+            </div>
+          ) : error ? (
+            <div className="text-red-600 text-center">{error.message}</div>
+          ) : (
+            <>
+              {/* User's personal books section */}
+              {user && ownBooks.length > 0 && (
+                <section className="mb-12">
+                  <h3 className="text-xl font-bold mb-4">Your Books</h3>
+                  <div className="grid md:grid-cols-3 gap-7">
+                    {ownBooks.map((book, index) => (
+                      <div key={book.id} className="contents">
+                        <BookGrid
+                          books={[book]}
+                          ownedBooksOnly
+                          onEdit={handleEdit}
+                          onDelete={handleDelete}
+                        />
+                        {/* Ad after every 6 books */}
+                        {(index + 1) % 6 === 0 && index < ownBooks.length - 1 && (
+                          <LibraryAd placement="between-books" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+              
+              {/* General library section */}
+              <section>
+                <h3 className="text-xl font-bold mb-4">
+                  {generalBooks.length > 0 ? "Library Highlights" : ""}
+                </h3>
+                <div className="grid md:grid-cols-3 gap-7">
+                  {generalBooks.map((book, index) => (
+                    <div key={book.id} className="contents">
+                      <BookGrid books={[book]} />
+                      {/* Ad after every 6 books */}
+                      {(index + 1) % 6 === 0 && index < generalBooks.length - 1 && (
+                        <LibraryAd placement="between-books" />
+                      )}
+                    </div>
+                  ))}
+                </div>
               </section>
-            )}
-            
-            {/* General library section */}
-            <section>
-              <h3 className="text-xl font-bold mb-2">
-                {generalBooks.length > 0 ? "Library Highlights" : ""}
-              </h3>
-              <BookGrid books={generalBooks} />
-            </section>
-          </>
-        )}
+            </>
+          )}
+        </div>
+
+        {/* Sidebar with ads */}
+        <div className="hidden lg:block w-80">
+          <LibraryAd placement="sidebar" />
+          <div className="p-4 bg-white rounded-lg shadow-sm">
+            <h4 className="font-semibold text-gray-800 mb-2">Quick Stats</h4>
+            <p className="text-sm text-gray-600">
+              {user ? `You have ${ownBooks.length} books` : "Sign in to track your books"}
+            </p>
+          </div>
+        </div>
       </main>
     </div>
   );

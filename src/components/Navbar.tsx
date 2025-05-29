@@ -1,3 +1,4 @@
+
 import LinguaLeafLogo from "./LinguaLeafLogo";
 import { Button } from "@/components/ui/button";
 import { useNavigate, NavLink } from "react-router-dom";
@@ -7,11 +8,10 @@ const routes = [
   { name: "Library", path: "/library" },
   { name: "Upload", path: "/upload" },
   { name: "Vocab", path: "/vocab" },
-  { name: "Study", path: "/study" }, // NEW: Study tab
+  { name: "Study", path: "/study" },
 ];
 
 const Navbar = ({ authenticated }: { authenticated: boolean }) => {
-  // Recompute auth in navbar for live update on login/logout
   const { user } = useAuth();
   const navigate = useNavigate();
 
