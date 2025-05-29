@@ -70,8 +70,22 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     if (spineItems && spineItems.length) {
       const loc = spineItems[targetPage - 1]?.href ?? spineItems[0].href;
       await renditionRef.current.display(loc);
+      await preloadContext();
       updatePage(targetPage);
     }
+  };
+
+  const preloadContext = async () => {
+    const spineItems = (bookRef.current.spine as unknown as ExtendedSpine).items;
+    if (!spineItems?.length) return;
+  
+    // Preload next chapter
+    const next = spineItems[currentPage];
+    if (next) await bookRef.current.load(next.href);
+  
+    // Optionally preload previous chapter too
+    const prev = spineItems[currentPage - 2];
+    if (prev) await bookRef.current.load(prev.href);
   };
 
   // Load and initialize EPUB reader
@@ -132,7 +146,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
     };
-  }, [fileUrl, currentPage]);
+  }, [fileUrl]);
 
   // Handle text selection for translation and highlighting
   useEffect(() => {
@@ -234,7 +248,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       {/* EPUB viewer container */}
       <div
         ref={viewerRef}
-        className="border shadow bg-white rounded p-2 h-full mx-auto overflow-hidden"
+        className="border shadow bg-white rounded p-2 h-full mx-auto overflow-hidden min-w-[52vw]"
       />
 
       {/* Text selection popup for translation/highlighting */}
