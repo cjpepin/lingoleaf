@@ -141,6 +141,12 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           }
         });
 
+        // Set up text selection handling after rendition is ready
+        rendition.on("rendered", () => {
+          console.log("EPUB rendition rendered, setting up selection handlers");
+          setupSelectionHandlers(rendition);
+        });
+
       } catch (err: any) {
         setError("Failed to load EPUB: " + (err.message || err));
       }
@@ -155,70 +161,70 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     };
   }, [fileUrl]);
 
-  // Handle text selection for translation and highlighting
-  useEffect(() => {
-    const handleMouseUp = (e: MouseEvent) => {
-      console.log("Mouse up event detected");
+  // Setup text selection handlers for EPUB content
+  const setupSelectionHandlers = (rendition: any) => {
+    console.log("Setting up selection handlers for EPUB");
+    
+    // Hook into the rendition's selection events
+    rendition.on("selected", (cfiRange: string, contents: any) => {
+      console.log("EPUB text selected:", cfiRange);
       
-      const selection = window.getSelection();
-      console.log("Selection object:", selection);
-      console.log("Selection is collapsed:", selection?.isCollapsed);
-      console.log("Selection toString:", selection?.toString());
-      
+      const selection = contents.window.getSelection();
       if (!selection || selection.isCollapsed) {
-        console.log("No selection or collapsed, hiding popup");
-        setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
-        setTranslation(null);
+        console.log("No valid selection in EPUB");
         return;
       }
 
       const selectedText = selection.toString().trim();
-      console.log("Selected text:", selectedText);
-      console.log("Selected text length:", selectedText.length);
+      console.log("EPUB selected text:", selectedText);
       
-      // Limit selection length to prevent UI issues
       if (!selectedText || selectedText.length > 120) {
-        console.log("Text too long or empty, returning");
+        console.log("Text too long or empty in EPUB");
         return;
       }
 
-      // Position popup near the selected text
+      // Get the position of the selection relative to the viewport
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      console.log("Selection rect:", rect);
       
-      const x = rect.left + rect.width / 2;
-      const y = rect.top - rect.height / 2;
+      // Get the iframe's position to adjust coordinates
+      const iframe = contents.document.defaultView.frameElement;
+      const iframeRect = iframe?.getBoundingClientRect() || { left: 0, top: 0 };
       
-      console.log("Popup position:", { x, y });
+      const x = iframeRect.left + rect.left + rect.width / 2;
+      const y = iframeRect.top + rect.top - 10; // Position above the selection
+      
+      console.log("EPUB popup position:", { x, y });
 
       setPopup({
         show: true,
         x,
         y,
         selectedText,
-        rect,
+        rect: new DOMRect(x, y, rect.width, rect.height),
       });
-      
-      console.log("Popup state set to show");
-    };
+    });
 
-    // Attach to document to catch selections from iframe content
-    document.addEventListener("mouseup", handleMouseUp);
-    
-    // Also try to attach to the viewer container
-    const viewerElement = viewerRef.current;
-    if (viewerElement) {
-      viewerElement.addEventListener("mouseup", handleMouseUp);
-    }
-    
-    return () => {
-      document.removeEventListener("mouseup", handleMouseUp);
-      if (viewerElement) {
-        viewerElement.removeEventListener("mouseup", handleMouseUp);
+    // Also listen for deselection
+    rendition.on("unselected", () => {
+      console.log("EPUB text unselected");
+      setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+      setTranslation(null);
+    });
+  };
+
+  // Handle clicks outside to close popup
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (popup.show) {
+        setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+        setTranslation(null);
       }
     };
-  }, []);
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  }, [popup.show]);
 
   // Translate selected text using translation service
   const handleTranslate = async (text: string) => {
@@ -247,7 +253,11 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     ]);
     setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
     setTranslation(null);
-    window.getSelection()?.removeAllRanges();
+    
+    // Clear the selection in the EPUB
+    if (renditionRef.current) {
+      renditionRef.current.annotations.remove("highlight");
+    }
   };
 
   // Navigation handlers for previous/next page
@@ -275,6 +285,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         ref={viewerRef}
         className="border shadow bg-white rounded h-full mx-auto overflow-hidden mt-1 w-[72vw] max-h-[calc(100vh-150px)] relative"
       />
+      
       <div className="relative w-full px-6 mt-2 max-w-xl">
         <input
           type="range"
@@ -340,6 +351,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           Next
         </button>
       </div>
+      
       {/* Text selection popup for translation/highlighting */}
       {popup.show && popup.selectedText && (
         <HighlightPopup
