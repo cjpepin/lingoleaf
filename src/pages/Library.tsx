@@ -1,6 +1,6 @@
-
 import Navbar from "@/components/Navbar";
 import BookGrid from "@/components/library/BookGrid";
+import EditBookModal from "@/components/library/EditBookModal";
 import { useLibraryBooks } from "@/hooks/useLibraryBooks";
 import { useNavigate } from "react-router-dom";
 import UpgradeModal from "@/components/UpgradeModal";
@@ -8,11 +8,16 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
 
 const Library = () => {
   const { user } = useAuth();
   const { booksToShow, isLoading, error, refetch } = useLibraryBooks();
   const navigate = useNavigate();
+  
+  // State for edit modal
+  const [editingBook, setEditingBook] = useState<any>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // Separate user's own books from general library books
   const ownBooks = user
@@ -23,34 +28,28 @@ const Library = () => {
   );
 
   /**
-   * Handle book title editing with simple prompt
-   * TODO: Replace with proper modal in future
+   * Handle book title/cover editing with custom modal
    */
   const handleEdit = (book: any) => {
-    const newTitle = prompt("Edit book title:", book.title);
-    if (!newTitle) return;
-    
-    supabase
-      .from("books")
-      .update({ title: newTitle })
-      .eq("id", book.id)
-      .then(({ error }) => {
-        if (error) {
-          toast({ 
-            title: "Failed to update book", 
-            description: error.message, 
-            variant: "destructive" 
-          });
-        } else {
-          toast({ title: "Book updated!" });
-          refetch();
-        }
-      });
+    setEditingBook(book);
+    setIsEditModalOpen(true);
   };
 
   /**
-   * Handle book deletion with confirmation
+   * Handle successful book update
    */
+  const handleEditSuccess = () => {
+    refetch();
+  };
+
+  /**
+   * Close edit modal and reset state
+   */
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false);
+    setEditingBook(null);
+  };
+
   const handleDelete = (book: any) => {
     if (!window.confirm("Delete this book? This cannot be undone.")) return;
     
@@ -76,6 +75,15 @@ const Library = () => {
     <div className="bg-[#f8fafc] min-h-screen">
       <Navbar authenticated={!!user} />
       <UpgradeModal />
+      
+      {/* Edit Book Modal */}
+      <EditBookModal
+        book={editingBook}
+        isOpen={isEditModalOpen}
+        onClose={handleCloseEditModal}
+        onSuccess={handleEditSuccess}
+      />
+      
       <main className="max-w-5xl mx-auto py-8 px-4">
         <h2 className="text-3xl font-bold text-green-800 mb-6">
           {user && ownBooks.length > 0 ? "Your Library" : "Library"}
