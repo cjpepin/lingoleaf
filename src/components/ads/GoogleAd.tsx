@@ -1,5 +1,5 @@
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 interface GoogleAdProps {
   adSlot: string;
@@ -15,8 +15,6 @@ declare global {
 }
 
 const GoogleAd = ({ adSlot, adFormat = 'auto', style, className }: GoogleAdProps) => {
-  const adRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     try {
       if (typeof window !== 'undefined' && window.adsbygoogle) {
@@ -30,7 +28,6 @@ const GoogleAd = ({ adSlot, adFormat = 'auto', style, className }: GoogleAdProps
   return (
     <div className={`ad-container ${className || ''}`} style={style}>
       <ins
-        ref={adRef}
         className="adsbygoogle"
         style={{ display: 'block' }}
         data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" // Replace with your AdSense publisher ID
