@@ -27,7 +27,7 @@ const AdminUserManagement = () => {
 
   // Update user role
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ userId, newRole }: { userId: string; newRole: string }) => {
+    mutationFn: async ({ userId, newRole }: { userId: string; newRole: "admin" | "customer" }) => {
       const { error } = await supabase
         .from("user_roles")
         .update({ role: newRole })
@@ -48,7 +48,7 @@ const AdminUserManagement = () => {
     },
   });
 
-  const handleRoleChange = (userId: string, newRole: string) => {
+  const handleRoleChange = (userId: string, newRole: "admin" | "customer") => {
     updateRoleMutation.mutate({ userId, newRole });
   };
 
@@ -93,7 +93,7 @@ const AdminUserManagement = () => {
               <div className="flex items-center gap-2">
                 <Select
                   value={userRole.role}
-                  onValueChange={(value) => handleRoleChange(userRole.user_id, value)}
+                  onValueChange={(value: "admin" | "customer") => handleRoleChange(userRole.user_id, value)}
                 >
                   <SelectTrigger className="w-32">
                     <SelectValue />

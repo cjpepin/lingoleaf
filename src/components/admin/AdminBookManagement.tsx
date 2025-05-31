@@ -2,17 +2,14 @@
 import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { Trash2, Edit, Plus } from "lucide-react";
+import { Trash2, Edit } from "lucide-react";
+import AdminBookUploadModal from "./AdminBookUploadModal";
 
 const AdminBookManagement = () => {
-  const [isAddingBook, setIsAddingBook] = useState(false);
-  const [editingBook, setEditingBook] = useState<any>(null);
   const queryClient = useQueryClient();
 
   // Fetch all books (admin can see all)
@@ -42,7 +39,6 @@ const AdminBookManagement = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["adminBooks"] });
       toast({ title: "Book updated successfully" });
-      setEditingBook(null);
     },
     onError: (error: any) => {
       toast({ 
@@ -89,6 +85,10 @@ const AdminBookManagement = () => {
     }
   };
 
+  const handleUploadSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ["adminBooks"] });
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -104,10 +104,7 @@ const AdminBookManagement = () => {
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle>Book Management</CardTitle>
-          <Button onClick={() => setIsAddingBook(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Admin Book
-          </Button>
+          <AdminBookUploadModal onSuccess={handleUploadSuccess} />
         </div>
       </CardHeader>
       <CardContent>
@@ -138,14 +135,6 @@ const AdminBookManagement = () => {
                     <SelectItem value="personal">Personal</SelectItem>
                   </SelectContent>
                 </Select>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingBook(book)}
-                >
-                  <Edit className="w-4 h-4" />
-                </Button>
                 
                 <Button
                   variant="destructive"
