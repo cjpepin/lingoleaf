@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { useVocabWords } from "@/hooks/useVocabWords";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 type FlashcardQuizProps = {
   folderId: string | null;
@@ -26,6 +27,7 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
   const [flipping, setFlipping] = useState(false); // for flip animation
   const [correct, setCorrect] = useState<number[]>([]);
   const [missed, setMissed] = useState<number[]>([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (words && words.length > 0) {
@@ -34,6 +36,9 @@ const FlashcardQuiz = ({ folderId, mode }: FlashcardQuizProps) => {
       setShowBack(false);
       setCorrect([]);
       setMissed([]);
+    }
+    if (!folderId) {
+      navigate("/vocab");
     }
   }, [words]);
 

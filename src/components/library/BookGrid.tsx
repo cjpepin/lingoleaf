@@ -11,7 +11,7 @@ type BookGridProps = {
 const BookGrid = ({ books, onEdit, onDelete, ownedBooksOnly }: BookGridProps) => {
   const { user } = useAuth();
   return (
-    <div className="grid md:grid-cols-3 gap-7">
+    <div className="grid gap-7">
       {books.map(book => (
         <BookCard
           key={book.id}

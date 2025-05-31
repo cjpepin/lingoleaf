@@ -77,12 +77,10 @@ const Library = () => {
   return (
     <div className="bg-[#f8fafc] min-h-screen">
       {/* Header Banner Ad */}
-      <HeaderBannerAd />
       
       <Navbar authenticated={!!user} />
+      <HeaderBannerAd />
       <UpgradeModal />
-      
-      {/* Edit Book Modal */}
       <EditBookModal
         book={editingBook}
         isOpen={isEditModalOpen}

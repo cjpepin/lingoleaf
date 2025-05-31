@@ -20,7 +20,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        {/* <AdSenseScript /> */}
+        <AdSenseScript />
         <div className="min-h-screen bg-gray-50">
           <Routes>
             <Route path="/" element={<Index />} />

@@ -8,7 +8,6 @@ const routes = [
   { name: "Library", path: "/library" },
   { name: "Upload", path: "/upload" },
   { name: "Vocab", path: "/vocab" },
-  { name: "Study", path: "/study" },
 ];
 
 const Navbar = ({ authenticated }: { authenticated: boolean }) => {

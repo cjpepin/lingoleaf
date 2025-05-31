@@ -5,7 +5,6 @@ import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import HighlightPopup from "./HighlightPopup";
 import { useUserBookMetadata } from "@/hooks/useUserBookMetadata";
 
-// Type definitions for EPUB.js objects
 interface SpineItem {
   href: string;
 }
@@ -26,17 +25,13 @@ const EpubReader = ({ fileUrl, title }: Props) => {
 
   const { bookId } = useParams<{ bookId: string }>();
   const { save, saving, savingDone } = useSaveVocabWord();
-
-  // Hook to manage user's reading progress and highlights for this book
   const {
     currentPage,
     highlights,
     updatePage,
     updateHighlights,
-    loading: metaLoading,
   } = useUserBookMetadata(bookId);
 
-  // State for text selection and translation popup
   const [popup, setPopup] = useState({
     show: false,
     x: 0,
@@ -52,101 +47,56 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [hoverPage, setHoverPage] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragPage, setDragPage] = useState<number>(currentPage);
-  
-  /**
-   * Navigate to a specific page/chapter in the EPUB
-   * Uses spine items to determine valid page range
-   */
+
   const goToPage = async (page: number) => {
     if (!renditionRef.current || !bookRef.current || !totalPages) return;
-    
-    // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
     const spineItems = (bookRef.current.spine as unknown as ExtendedSpine).items;
     const pageCount = spineItems.length || 1;
-    
-    // Ensure page is within valid range
-    let targetPage = page;
-    if (targetPage < 1) targetPage = 1;
-    if (targetPage > pageCount) targetPage = pageCount;
-    
-    // Navigate to the specific spine location
-    if (spineItems && spineItems.length) {
-      const loc = spineItems[targetPage - 1]?.href ?? spineItems[0].href;
-      await renditionRef.current.display(loc);
-      await preloadContext();
-      updatePage(targetPage);
-    }
+    const targetPage = Math.max(1, Math.min(page, pageCount));
+    const loc = spineItems[targetPage - 1]?.href ?? spineItems[0].href;
+    await renditionRef.current.display(loc);
+    setDragPage(targetPage);
+    updatePage(targetPage);
   };
 
-  const preloadContext = async () => {
-    const spineItems = (bookRef.current.spine as unknown as ExtendedSpine).items;
-    if (!spineItems?.length) return;
-  
-    // Preload next chapter
-    const next = spineItems[currentPage];
-    if (next) await bookRef.current.load(next.href);
-  
-    // Optionally preload previous chapter too
-    const prev = spineItems[currentPage - 2];
-    if (prev) await bookRef.current.load(prev.href);
-  };
-
-  // Load and initialize EPUB reader
   useEffect(() => {
+    let rendition: any;
+
     const loadEpub = async () => {
       try {
-        // Fetch the EPUB file and convert to ArrayBuffer
         const res = await fetch(fileUrl);
-        const blob = await res.blob();
-        const buffer = await blob.arrayBuffer();
-
-        // Dynamically import EPUB.js library
+        const buffer = await (await res.blob()).arrayBuffer();
         const epubjs = await import("epubjs");
         const book = epubjs.default(buffer);
         bookRef.current = book;
 
-        // Initialize book and set up spine navigation
-        book.ready.then(() => {
-          // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
-          const spineItems = (book.spine as unknown as ExtendedSpine).items;
-          setTotalPages(spineItems.length || 1);
-          
-          // Restore user's last reading position
-          if (currentPage && spineItems.length) {
-            const safePage = Math.min(currentPage, spineItems.length);
-            const spineLoc = spineItems[safePage - 1]?.href ?? spineItems[0].href;
-            renditionRef.current?.display(spineLoc).then(() => {
-              setLoadingBook(false); // ✅ hide loader once displayed
-            });
-          } else {
-            setLoadingBook(false); // fallback
-          }
-        });
+        const setupRendition = () => {
+          const container = viewerRef.current!;
+          const { width } = container.getBoundingClientRect();
+          rendition = book.renderTo(container, {
+            width,
+            height: window.innerHeight - 160,
+            allowScriptedContent: true,
+          });
+          renditionRef.current = rendition;
 
-        // Create rendition (visual display) of the book
-        const rendition = book.renderTo(viewerRef.current!, {
-          width: "70vw",
-          height: "calc(100vh - 160px)",
-          allowScriptedContent: true,
-        });
-        renditionRef.current = rendition;
-
-        // Track when user navigates to update current page
-        rendition.on("relocated", (location: any) => {
-          if (book.spine) {
-            // Cast spine to ExtendedSpine through unknown to satisfy TypeScript
+          rendition.on("relocated", (location: any) => {
             const spineItems = (book.spine as unknown as ExtendedSpine).items;
             const idx = spineItems.findIndex((item: SpineItem) => item.href === location.start.href) + 1;
             if (idx > 0) updatePage(idx);
-          }
-        });
+          });
 
-        // Set up text selection handling after rendition is ready
-        rendition.on("rendered", () => {
-          console.log("EPUB rendition rendered, setting up selection handlers");
-          setupSelectionHandlers(rendition);
-        });
+          rendition.on("rendered", () => setupSelectionHandlers(rendition));
+        };
 
+        book.ready.then(() => {
+          const spineItems = (book.spine as unknown as ExtendedSpine).items;
+          setTotalPages(spineItems.length || 1);
+          const safePage = Math.min(currentPage, spineItems.length);
+          const spineLoc = spineItems[safePage - 1]?.href ?? spineItems[0].href;
+          setupRendition();
+          rendition.display(spineLoc).then(() => setLoadingBook(false));
+        });
       } catch (err: any) {
         setError("Failed to load EPUB: " + (err.message || err));
       }
@@ -154,85 +104,46 @@ const EpubReader = ({ fileUrl, title }: Props) => {
 
     loadEpub();
 
-    // Cleanup when component unmounts
+    const handleResize = () => {
+      const container = viewerRef.current;
+      if (container && renditionRef.current) {
+        const width = container.getBoundingClientRect().width;
+        const height = window.innerHeight - 160;
+        renditionRef.current.resize(width, height);
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
     return () => {
+      window.removeEventListener("resize", handleResize);
       renditionRef.current?.destroy?.();
       bookRef.current?.destroy?.();
     };
   }, [fileUrl]);
 
-  // Setup text selection handlers for EPUB content
   const setupSelectionHandlers = (rendition: any) => {
-    console.log("Setting up selection handlers for EPUB");
-    
-    // Hook into the rendition's selection events
     rendition.on("selected", (cfiRange: string, contents: any) => {
-      console.log("EPUB text selected:", cfiRange);
-      
       const selection = contents.window.getSelection();
-      if (!selection || selection.isCollapsed) {
-        console.log("No valid selection in EPUB");
-        return;
-      }
-
+      if (!selection || selection.isCollapsed) return;
       const selectedText = selection.toString().trim();
-      console.log("EPUB selected text:", selectedText);
-      
-      if (!selectedText || selectedText.length > 120) {
-        console.log("Text too long or empty in EPUB");
-        return;
-      }
-
-      // Get the position of the selection relative to the viewport
+      if (!selectedText || selectedText.length > 120) return;
       const range = selection.getRangeAt(0);
       const rect = range.getBoundingClientRect();
-      
-      // Get the iframe's position to adjust coordinates
       const iframe = contents.document.defaultView.frameElement;
       const iframeRect = iframe?.getBoundingClientRect() || { left: 0, top: 0 };
-      
       const x = iframeRect.left + rect.left + rect.width / 2;
-      const y = iframeRect.top + rect.top - 10; // Position above the selection
-      
-      console.log("EPUB popup position:", { x, y });
-
-      setPopup({
-        show: true,
-        x,
-        y,
-        selectedText,
-        rect: new DOMRect(x, y, rect.width, rect.height),
-      });
+      const y = iframeRect.top + rect.top - 10;
+      setPopup({ show: true, x, y, selectedText, rect: new DOMRect(x, y, rect.width, rect.height) });
     });
 
-    // Also listen for deselection
     rendition.on("unselected", () => {
-      console.log("EPUB text unselected");
       setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
       setTranslation(null);
     });
   };
 
-  // Handle clicks outside to close popup
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (popup.show) {
-        setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
-        setTranslation(null);
-      }
-    };
+  const handleTranslate = async (text: string) => setTranslation(await translateText(text));
 
-    document.addEventListener("click", handleClickOutside);
-    return () => document.removeEventListener("click", handleClickOutside);
-  }, [popup.show]);
-
-  // Translate selected text using translation service
-  const handleTranslate = async (text: string) => {
-    const result = await translateText(text);
-    setTranslation(result);
-  };
-
-  // Save selected word and translation to vocabulary with folder support
   const handleSaveVocab = async (opts?: { folderId?: string | null }) => {
     if (!bookId || !popup.selectedText || !translation) return;
     await save({
@@ -245,33 +156,15 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     });
   };
 
-  // Save highlight and close popup
   const handleHighlight = () => {
-    updateHighlights([
-      ...highlights,
-      { text: popup.selectedText, rect: popup.rect, page: currentPage },
-    ]);
+    updateHighlights([...highlights, { text: popup.selectedText, rect: popup.rect, page: currentPage }]);
     setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
     setTranslation(null);
-    
-    // Clear the selection in the EPUB
-    if (renditionRef.current) {
-      renditionRef.current.annotations.remove("highlight");
-    }
+    renditionRef.current?.annotations.remove("highlight");
   };
 
-  // Navigation handlers for previous/next page
-  const handlePrev = () => {
-    if (currentPage > 1) {
-      goToPage(currentPage - 1);
-    }
-  };
-
-  const handleNext = () => {
-    if (totalPages && currentPage < totalPages) {
-      goToPage(currentPage + 1);
-    }
-  };
+  const handlePrev = () => currentPage > 1 && goToPage(currentPage - 1);
+  const handleNext = () => totalPages && currentPage < totalPages && goToPage(currentPage + 1);
 
   return (
     <div className="h-screen flex flex-col items-center relative">
@@ -280,13 +173,13 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-green-600" />
         </div>
       )}
-      {/* EPUB viewer container */}
+
       <div
         ref={viewerRef}
-        className="border shadow bg-white rounded h-full mx-auto overflow-hidden mt-1 w-[72vw] max-h-[calc(100vh-150px)] relative"
+        className="border shadow bg-white rounded h-full mx-auto overflow-hidden mt-1 w-[72vw] max-w-[950px] max-h-[calc(100vh-150px)] relative"
       />
-      
-      <div className="relative w-full px-6 mt-2 max-w-xl">
+
+<div className="relative w-full px-6 mt-2 max-w-xl">
         <input
           type="range"
           min={1}
@@ -352,7 +245,6 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         </button>
       </div>
       
-      {/* Text selection popup for translation/highlighting */}
       {popup.show && popup.selectedText && (
         <HighlightPopup
           x={popup.x}
@@ -371,7 +263,6 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         />
       )}
 
-      {/* Error display */}
       {error && <div className="text-red-600 absolute top-4">{error}</div>}
     </div>
   );
