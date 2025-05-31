@@ -10,6 +10,7 @@ import Study from "@/pages/Study";
 import ReadBook from "@/pages/ReadBook";
 import Account from "@/pages/Account";
 import Upgrade from "@/pages/Upgrade";
+import Admin from "@/pages/Admin";
 import NotFound from "@/pages/NotFound";
 import AdSenseScript from "@/components/ads/AdSenseScript";
 import "./App.css";
@@ -31,6 +32,7 @@ function App() {
             <Route path="/read/:bookId" element={<ReadBook />} />
             <Route path="/account" element={<Account />} />
             <Route path="/upgrade" element={<Upgrade />} />
+            <Route path="/admin" element={<Admin />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </div>

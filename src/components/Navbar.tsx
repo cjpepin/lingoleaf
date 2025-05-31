@@ -3,16 +3,19 @@ import LinguaLeafLogo from "./LinguaLeafLogo";
 import { Button } from "@/components/ui/button";
 import { useNavigate, NavLink } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-
-const routes = [
-  { name: "Library", path: "/library" },
-  { name: "Upload", path: "/upload" },
-  { name: "Vocab", path: "/vocab" },
-];
+import { useIsAdmin } from "@/hooks/useUserRole";
 
 const Navbar = ({ authenticated }: { authenticated: boolean }) => {
   const { user } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
+
+  const routes = [
+    { name: "Library", path: "/library" },
+    { name: "Upload", path: "/upload" },
+    { name: "Vocab", path: "/vocab" },
+    ...(isAdmin ? [{ name: "Admin", path: "/admin" }] : []),
+  ];
 
   return (
     <header className="w-full px-3 md:px-8 py-3 bg-white shadow z-30">
