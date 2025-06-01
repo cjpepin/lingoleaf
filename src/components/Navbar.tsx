@@ -22,7 +22,7 @@ const Navbar = ({ authenticated }: { authenticated: boolean }) => {
       <nav className="flex flex-row items-center gap-5 max-w-5xl mx-auto">
         <button
           className="mr-4"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(user ? "/library" : "/")}
           aria-label="Home"
           tabIndex={0}
         >

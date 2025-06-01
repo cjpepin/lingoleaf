@@ -28,9 +28,9 @@ const Admin = () => {
   }
 
   // Redirect if not authenticated or not admin
-  if (!user || !isAdmin) {
-    return <Navigate to="/" replace />;
-  }
+  // if (!user || !isAdmin) {
+  //   return <Navigate to="/" replace />;
+  // }
 
   return (
     <div className="bg-[#f8fafc] min-h-screen">
