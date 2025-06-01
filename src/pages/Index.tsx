@@ -65,7 +65,7 @@ const Index = () => {
         <section className="pt-10">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-2xl font-bold text-green-800">
-              {userBooks.length > 0 ? "Your Books" : "Library Highlights"}
+              {userBooks?.length > 0 ? "Your Books" : "Library Highlights"}
             </h3>
             <Button
               variant="ghost"
