@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { translateText } from "@/utils/translate";
@@ -30,6 +31,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     y: 0,
     selectedText: "",
     rect: null as DOMRect | null,
+    cfiRange: "",
   });
 
   const [translation, setTranslation] = useState<string | null>(null);
@@ -40,17 +42,86 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragPage, setDragPage] = useState<number>(currentPage);
 
+  // Generate unique ID for highlights
+  const generateHighlightId = () => {
+    return `highlight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  // Handle navigation to highlight from sidebar
+  useEffect(() => {
+    const handleNavigateToHighlight = (event: CustomEvent) => {
+      const highlight = event.detail;
+      if (renditionRef.current && highlight.cfi) {
+        renditionRef.current.display(highlight.cfi);
+      }
+    };
+
+    const handleDeleteHighlight = (event: CustomEvent) => {
+      const { id } = event.detail;
+      if (renditionRef.current) {
+        // Remove from EPUB.js annotations
+        const existingHighlight = highlights.find((h: any) => h.id === id);
+        if (existingHighlight && existingHighlight.cfi) {
+          renditionRef.current.annotations.remove(existingHighlight.cfi, "highlight");
+        }
+      }
+    };
+
+    window.addEventListener('navigateToHighlight', handleNavigateToHighlight as EventListener);
+    window.addEventListener('deleteHighlight', handleDeleteHighlight as EventListener);
+
+    return () => {
+      window.removeEventListener('navigateToHighlight', handleNavigateToHighlight as EventListener);
+      window.removeEventListener('deleteHighlight', handleDeleteHighlight as EventListener);
+    };
+  }, [highlights]);
+
+  // Restore highlights when component loads or highlights change
+  useEffect(() => {
+    if (renditionRef.current && highlights && highlights.length > 0) {
+      // Clear existing annotations first
+      renditionRef.current.annotations.remove(null, "highlight");
+      
+      // Add all highlights as annotations
+      highlights.forEach((highlight: any) => {
+        if (highlight.cfi) {
+          renditionRef.current.annotations.add("highlight", highlight.cfi, {}, null, "hl", {
+            fill: "yellow",
+            "fill-opacity": "0.3",
+            "mix-blend-mode": "multiply"
+          });
+        }
+      });
+
+      // Handle clicks on highlighted text for removal
+      renditionRef.current.on("markClicked", (cfiRange: string, data: any) => {
+        const highlightToRemove = highlights.find((h: any) => h.cfi === cfiRange);
+        if (highlightToRemove) {
+          const updatedHighlights = highlights.filter((h: any) => h.id !== highlightToRemove.id);
+          updateHighlights(updatedHighlights);
+          renditionRef.current.annotations.remove(cfiRange, "highlight");
+        }
+      });
+    }
+  }, [highlights, renditionRef.current]);
+
   const goToPage = async (prev: boolean) => {
-    const newLocation = prev 
-      ? await renditionRef.current.prev() 
-      : await renditionRef.current.next();
+    if (!renditionRef.current) return;
+    
+    try {
+      const newLocation = prev 
+        ? await renditionRef.current.prev() 
+        : await renditionRef.current.next();
 
-    if (!newLocation || !newLocation.start || !newLocation.start.cfi) return;
-
-    const current = bookRef.current.locations.percentageFromCfi(newLocation.start.cfi);
-    const newPage = Math.round(current * (totalPages - 1)) + 1;
-    setDragPage(newPage);
-    updatePage(newPage);
+      if (newLocation && newLocation.start && newLocation.start.cfi && bookRef.current) {
+        const current = bookRef.current.locations.percentageFromCfi(newLocation.start.cfi);
+        const newPage = Math.round(current * (totalPages - 1)) + 1;
+        setDragPage(newPage);
+        updatePage(newPage);
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+    }
   };
 
   const dragToPage = () => {
@@ -140,11 +211,18 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       const iframeRect = iframe?.getBoundingClientRect() || { left: 0, top: 0 };
       const x = iframeRect.left + rect.left + rect.width / 2;
       const y = iframeRect.top + rect.top - 10;
-      setPopup({ show: true, x, y, selectedText, rect: new DOMRect(x, y, rect.width, rect.height) });
+      setPopup({ 
+        show: true, 
+        x, 
+        y, 
+        selectedText, 
+        rect: new DOMRect(x, y, rect.width, rect.height),
+        cfiRange 
+      });
     });
 
     rendition.on("unselected", () => {
-      setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+      setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null, cfiRange: "" });
       setTranslation(null);
     });
   };
@@ -164,10 +242,30 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   };
 
   const handleHighlight = () => {
-    updateHighlights([...highlights, { text: popup.selectedText, rect: popup.rect, page: currentPage }]);
-    setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+    if (!popup.cfiRange || !popup.selectedText) return;
+
+    const highlightId = generateHighlightId();
+    const newHighlight = {
+      id: highlightId,
+      text: popup.selectedText,
+      cfi: popup.cfiRange,
+      page: currentPage,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Add to highlights array
+    updateHighlights([...highlights, newHighlight]);
+
+    // Add annotation to EPUB.js
+    renditionRef.current?.annotations.add("highlight", popup.cfiRange, {}, null, "hl", {
+      fill: "yellow",
+      "fill-opacity": "0.3",
+      "mix-blend-mode": "multiply"
+    });
+
+    // Close popup
+    setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null, cfiRange: "" });
     setTranslation(null);
-    renditionRef.current?.annotations.remove("highlight");
   };
 
   return (
@@ -261,13 +359,11 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           saving={saving}
           savingDone={savingDone}
           onClose={() => {
-            setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null });
+            setPopup({ show: false, x: 0, y: 0, selectedText: "", rect: null, cfiRange: "" });
             setTranslation(null);
           }}
         />
       )}
-
-      {/* {error && <div className="text-red-600 absolute top-4">{error}</div>} */}
     </div>
   );
 };

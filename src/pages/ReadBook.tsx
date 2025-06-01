@@ -1,4 +1,3 @@
-
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
@@ -9,6 +8,8 @@ import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
 import EpubReader from "@/components/reader/EpubReader";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
+import { useUserBookMetadata } from "@/hooks/useUserBookMetadata";
+import { Trash2, MapPin } from "lucide-react";
 
 const ReadBook = () => {
   const { bookId } = useParams();
@@ -18,6 +19,8 @@ const ReadBook = () => {
   const [book, setBook] = useState<any>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  const { highlights, updateHighlights } = useUserBookMetadata(bookId);
 
   useEffect(() => {
     if (!bookId) return;
@@ -69,6 +72,21 @@ const ReadBook = () => {
     fetchBook();
   }, [bookId, user]);
 
+  const handleNavigateToHighlight = (highlight: any) => {
+    // This will be handled by the EpubReader component
+    const event = new CustomEvent('navigateToHighlight', { detail: highlight });
+    window.dispatchEvent(event);
+  };
+
+  const handleDeleteHighlight = (highlightId: string) => {
+    const updatedHighlights = highlights.filter((h: any) => h.id !== highlightId);
+    updateHighlights(updatedHighlights);
+    
+    // Notify EpubReader to remove the annotation
+    const event = new CustomEvent('deleteHighlight', { detail: { id: highlightId } });
+    window.dispatchEvent(event);
+  };
+
   const ext = (book?.file_path || "").split(".").pop()?.toLowerCase();
   let bookContent;
   
@@ -94,7 +112,6 @@ const ReadBook = () => {
   } else if (ext === "epub") {
     bookContent = (
       <EpubReader fileUrl={fileUrl} title={book.title} />
-      // <BackupEpubReader fileUrl={fileUrl} />
     );
   } else if (ext === "txt" || ext === "text") {
     bookContent = (
@@ -114,7 +131,46 @@ const ReadBook = () => {
             &larr; Back to Library
           </Button>
           <h2 className="text-2xl font-bold text-green-800 break-words">{book?.title ?? ""}</h2>
-          <div className="text-gray-700 overflow-y-auto max-h-[40vh]">{book?.notes}</div>
+          <div className="text-gray-700 overflow-y-auto max-h-[20vh]">{book?.notes}</div>
+          
+          {/* Highlights Section */}
+          {highlights && highlights.length > 0 && (
+            <div className="border-t pt-4">
+              <h3 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                Highlights ({highlights.length})
+              </h3>
+              <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                {highlights.map((highlight: any) => (
+                  <div
+                    key={highlight.id}
+                    className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 cursor-pointer hover:bg-yellow-100 transition-colors"
+                  >
+                    <div 
+                      className="text-sm text-gray-800 mb-2"
+                      onClick={() => handleNavigateToHighlight(highlight)}
+                    >
+                      "{highlight.text.length > 60 ? highlight.text.substring(0, 60) + '...' : highlight.text}"
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-gray-500">
+                      <span>Page {highlight.page}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteHighlight(highlight.id);
+                        }}
+                        className="h-6 w-6 p-0 hover:bg-red-100 hover:text-red-600"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </aside>
         {/* Book content */}
         <section className="w-3/4 flex items-center justify-center ">
