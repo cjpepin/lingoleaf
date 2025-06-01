@@ -12,9 +12,8 @@ const Study = () => {
   const location = useLocation();
   // Parse folderId from query
   const query = new URLSearchParams(location.search);
-  const folderIdRaw = query.get("folderId");
-  const folderId = folderIdRaw === "all-words" ? null : folderIdRaw;
-
+  const folderId = query.get("folderId");
+  // const folderId = folderIdRaw;
   const [mode, setMode] = useState<"word" | "translation">("word");
 
   if (loading) {

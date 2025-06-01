@@ -6,6 +6,7 @@ import { useAuth } from "./useAuth";
 export function useVocabWords(folderId: string | null) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const folder = folderId === "all-words" ? null : folderId;
 
   // Fetch words for current folder or "All"
   const { data: words, isLoading } = useQuery({
@@ -15,13 +16,13 @@ export function useVocabWords(folderId: string | null) {
       let q = supabase
         .from("vocab_words")
         .select("*")
-        .eq("user_id", user.id);
-      if (folderId) {
-        q = q.eq("folder_id", folderId);
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (folder) {
+        q = q.eq("folder_id", folder);
       } else {
         q = q.is("folder_id", null);
       }
-      q = q.order("created_at", { ascending: false });
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return data as Array<{

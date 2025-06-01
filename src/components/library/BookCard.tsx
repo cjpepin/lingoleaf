@@ -13,7 +13,7 @@ const BookCard = ({ book, onEdit, onDelete, isOwn }: BookCardProps) => {
   const navigate = useNavigate();
   // Uniform card aspect ratio
   return (
-    <Card className="hover-scale transition h-[320px] flex flex-col shadow-md">
+    <Card className="hover-scale transition h-[320px] max-w-[18rem] flex flex-col shadow-md">
       <div className="relative flex-1 min-h-0">
         <img
           src={

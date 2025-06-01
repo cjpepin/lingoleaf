@@ -11,6 +11,7 @@ import { toast } from "@/hooks/use-toast";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useVocabWords } from "@/hooks/useVocabWords";
+import { useNavigate } from "react-router-dom";
 
 // Always free for now; if user.tier is ever added, adjust accordingly
 function isPaidUser(_user: unknown) {
@@ -26,6 +27,7 @@ type Folder = {
 };
 
 const VocabFolders = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { folders, createFolder, updateFolder, deleteFolder, loading: foldersLoading, error: foldersError } = useVocabFolders();
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
@@ -45,13 +47,12 @@ const VocabFolders = () => {
   const { words: currentFolderWords } = useVocabWords(selectedFolder);
 
   function handleStudy(folderId: string | null) {
-    const { words } = useVocabWords(folderId);
-    if (!words || words.length < 1) {
+    if (!currentFolderWords || currentFolderWords.length < 1) {
       toast({ title: "No words to study in this folder" });
       return;
     }
-    window.location.href = `/study?folderId=${folderId ?? "all-words"}`;
-    // Or if using react-router: navigate("/study", { state: { folderId } });
+    // window.location.href = `/study?folderId=${folderId ?? "all-words"}`;
+    navigate(`/study?folderId=${folderId ? folderId : "all-words"}`, { replace: true });
   }
 
   const handleEditFolder = (folder: Folder) => {
