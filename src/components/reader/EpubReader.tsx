@@ -39,17 +39,37 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [hoverPage, setHoverPage] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragPage, setDragPage] = useState<number>(currentPage);
-  const [cfiList, setCfiList] = useState<string[]>([]);
 
   const goToPage = async (page: number) => {
-    if (!renditionRef.current || !bookRef.current || !cfiList.length) return;
+    if (!renditionRef.current || !bookRef.current || totalPages === 0) return;
   
-    const targetPage = Math.max(1, Math.min(page, cfiList.length));
-    const cfi = cfiList[targetPage - 1]; // Use the actual CFI
+    const targetPage = Math.max(1, Math.min(page, totalPages));
+    const percentage = (targetPage - 1) / (totalPages - 1);
+    const cfi = bookRef.current.locations.cfiFromPercentage(percentage);
+    
     await renditionRef.current.display(cfi);
-  
     setDragPage(targetPage);
     updatePage(targetPage);
+  };
+
+  const handlePrev = async () => {
+    if (!renditionRef.current) return;
+    
+    try {
+      await renditionRef.current.prev();
+    } catch (error) {
+      console.log("Already at beginning of book");
+    }
+  };
+  
+  const handleNext = async () => {
+    if (!renditionRef.current) return;
+    
+    try {
+      await renditionRef.current.next();
+    } catch (error) {
+      console.log("Already at end of book");
+    }
   };
   
   useEffect(() => {
@@ -159,19 +179,6 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     setTranslation(null);
     renditionRef.current?.annotations.remove("highlight");
   };
-
-  const handlePrev = () => {
-    if (dragPage > 1) {
-      goToPage(dragPage - 1);
-    }
-  };
-  
-  const handleNext = () => {
-    if (dragPage < totalPages) {
-      goToPage(dragPage + 1);
-    }
-  };
-  
 
   return (
     <div className="h-screen flex flex-col items-center relative">
