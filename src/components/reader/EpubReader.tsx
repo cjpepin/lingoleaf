@@ -5,14 +5,6 @@ import { useSaveVocabWord } from "@/hooks/useSaveVocabWord";
 import HighlightPopup from "./HighlightPopup";
 import { useUserBookMetadata } from "@/hooks/useUserBookMetadata";
 
-interface SpineItem {
-  href: string;
-}
-
-interface ExtendedSpine {
-  items: SpineItem[];
-}
-
 type Props = {
   fileUrl: string;
   title?: string;
@@ -47,18 +39,19 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [hoverPage, setHoverPage] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragPage, setDragPage] = useState<number>(currentPage);
+  const [cfiList, setCfiList] = useState<string[]>([]);
 
   const goToPage = async (page: number) => {
-    if (!renditionRef.current || !bookRef.current || !totalPages) return;
-    const spineItems = (bookRef.current.spine as unknown as ExtendedSpine).items;
-    const pageCount = spineItems.length || 1;
-    const targetPage = Math.max(1, Math.min(page, pageCount));
-    const loc = spineItems[targetPage - 1]?.href ?? spineItems[0].href;
-    await renditionRef.current.display(loc);
+    if (!renditionRef.current || !bookRef.current || !cfiList.length) return;
+  
+    const targetPage = Math.max(1, Math.min(page, cfiList.length));
+    const cfi = cfiList[targetPage - 1]; // Use the actual CFI
+    await renditionRef.current.display(cfi);
+  
     setDragPage(targetPage);
     updatePage(targetPage);
   };
-
+  
   useEffect(() => {
     let rendition: any;
 
@@ -76,26 +69,30 @@ const EpubReader = ({ fileUrl, title }: Props) => {
           rendition = book.renderTo(container, {
             width,
             height: window.innerHeight - 160,
+            flow: "paginated",
             allowScriptedContent: true,
           });
           renditionRef.current = rendition;
 
           rendition.on("relocated", (location: any) => {
-            const spineItems = (book.spine as unknown as ExtendedSpine).items;
-            const idx = spineItems.findIndex((item: SpineItem) => item.href === location.start.href) + 1;
-            if (idx > 0) updatePage(idx);
+            const current = book.locations.percentageFromCfi(location.start.cfi);
+            const currentPage = Math.round(current * (totalPages - 1)) + 1;
+            setDragPage(currentPage);
+            updatePage(currentPage);
           });
 
           rendition.on("rendered", () => setupSelectionHandlers(rendition));
         };
 
-        book.ready.then(() => {
-          const spineItems = (book.spine as unknown as ExtendedSpine).items;
-          setTotalPages(spineItems.length || 1);
-          const safePage = Math.min(currentPage, spineItems.length);
-          const spineLoc = spineItems[safePage - 1]?.href ?? spineItems[0].href;
-          setupRendition();
-          rendition.display(spineLoc).then(() => setLoadingBook(false));
+        await book.ready;
+        await book.locations.generate(1024);
+        const length = book.locations.length() || 1;
+        setTotalPages(length);
+        const safePage = Math.min(currentPage, length);
+        const cfi = bookRef.current.locations.cfiFromPercentage((safePage - 1) / (length - 1));
+        setupRendition();
+        rendition.display(cfi).then(() => {
+          setLoadingBook(false)
         });
       } catch (err: any) {
         setError("Failed to load EPUB: " + (err.message || err));
@@ -163,8 +160,18 @@ const EpubReader = ({ fileUrl, title }: Props) => {
     renditionRef.current?.annotations.remove("highlight");
   };
 
-  const handlePrev = () => currentPage > 1 && goToPage(currentPage - 1);
-  const handleNext = () => totalPages && currentPage < totalPages && goToPage(currentPage + 1);
+  const handlePrev = () => {
+    if (dragPage > 1) {
+      goToPage(dragPage - 1);
+    }
+  };
+  
+  const handleNext = () => {
+    if (dragPage < totalPages) {
+      goToPage(dragPage + 1);
+    }
+  };
+  
 
   return (
     <div className="h-screen flex flex-col items-center relative">
