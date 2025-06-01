@@ -15,6 +15,7 @@ import { BadgeDollarSign } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
 
 const UPGRADE_TEXT = "Upgrade to Premium";
 const BENEFITS = [
@@ -27,6 +28,7 @@ const BENEFITS = [
 const UpgradeModal = () => {
   const { isOpen, closeModal } = useUpgradeModal();
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   // Start Stripe Checkout
@@ -75,7 +77,7 @@ const UpgradeModal = () => {
             {loading ? "Starting Stripe Checkout..." : "Upgrade with Stripe"}
           </Button>
           <DialogClose asChild>
-            <Button variant="secondary" className="w-full mt-2">Maybe later</Button>
+            <Button variant="secondary" className="w-full mt-2" onClick={() => navigate("/account")}>Maybe later</Button>
           </DialogClose>
         </DialogFooter>
       </DialogContent>
