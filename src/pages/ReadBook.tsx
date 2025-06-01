@@ -1,3 +1,4 @@
+
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
@@ -7,11 +8,13 @@ import { supabase } from "@/integrations/supabase/client";
 import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
 import EpubReader from "@/components/reader/EpubReader";
+import { useUpgradeModal } from "@/hooks/useUpgradeModal";
 
 const ReadBook = () => {
   const { bookId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const openUpgrade = useUpgradeModal((s) => s.openModal);
   const [book, setBook] = useState<any>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,16 +28,37 @@ const ReadBook = () => {
         .select("*")
         .eq("id", bookId)
         .maybeSingle();
+      
       if (fetchError) {
         setError(fetchError.message);
         return;
       }
+      
+      if (!bookData) {
+        setError("Book not found");
+        return;
+      }
+
       setBook(bookData);
+      console.log("Book access level:", bookData.access_level);
       console.log("File path:", bookData.file_path);
+
+      // Check if authentication is required for this book
+      const requiresAuth = bookData.access_level === 'paid' || bookData.access_level === 'personal';
+      
+      if (requiresAuth && !user) {
+        setError("Please sign in to read this book");
+        return;
+      }
+
       if (bookData?.file_path) {
+        // Determine which bucket to use based on access level
+        const bucketName = bookData.access_level === 'free' ? 'public-books' : 'private-books';
+        
         const { data, error: urlError } = await supabase.storage
-          .from("books")
+          .from(bucketName)
           .createSignedUrl(bookData.file_path, 60 * 60);
+        
         if (urlError) {
           setError(urlError.message);
         } else {
@@ -43,13 +67,21 @@ const ReadBook = () => {
       }
     };
     fetchBook();
-  }, [bookId]);
+  }, [bookId, user]);
 
   const ext = (book?.file_path || "").split(".").pop()?.toLowerCase();
   let bookContent;
+  
   if (!book) {
     bookContent = error ? (
-      <div className="text-red-500">{error}</div>
+      <div className="text-center">
+        <div className="text-red-500 mb-4">{error}</div>
+        {error === "Please sign in to read this book" && (
+          <Button onClick={() => openUpgrade()}>
+            Sign In to Continue
+          </Button>
+        )}
+      </div>
     ) : (
       <div>Loading book...</div>
     );
@@ -74,7 +106,7 @@ const ReadBook = () => {
   return (
     <div className="bg-[#f9fafb] min-h-screen overflow-hidden">
       <Navbar authenticated={!!user} />
-      <main className="flex flex-row h-[calc(100vh-4rem)]"> {/* Adjust for Navbar height */}
+      <main className="flex flex-row h-[calc(100vh-4rem)]">
         {/* Sidebar */}
         <aside className="w-1/4 px-6 py-8 border-r border-gray-200 flex flex-col gap-4">
           <Button variant="ghost" onClick={() => navigate("/library")}>
@@ -92,7 +124,6 @@ const ReadBook = () => {
       </main>
     </div>
   );
-  
 };
 
 export default ReadBook;

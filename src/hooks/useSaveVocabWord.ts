@@ -21,9 +21,14 @@ export function useSaveVocabWord() {
   const save = async ({
     word, translation, bookId, bookTitle, context, pageNumber, folderId
   }: SaveVocabParams) => {
-    if (!user) return false;
+    if (!user) {
+      console.log("User not authenticated, cannot save vocabulary");
+      return false;
+    }
+    
     setSaving(true);
     setSavingDone(false);
+    
     const { error } = await supabase.from("vocab_words").insert({
       book_id: bookId,
       book_title: bookTitle ?? null,
@@ -34,6 +39,7 @@ export function useSaveVocabWord() {
       user_id: user.id,
       folder_id: folderId ?? null,
     });
+    
     setSaving(false);
     setSavingDone(!error);
     return !error;

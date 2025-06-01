@@ -1,3 +1,4 @@
+
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,8 +35,6 @@ const Upload = () => {
     );
   }
 
-  // Replace block with quota check
-  // For demonstration, prevent upload and show upgrade modal if user has >3 books, etc.
   if (!user) {
     return (
       <div className="bg-[#f8fafc] min-h-screen">
@@ -78,9 +77,9 @@ const Upload = () => {
     const bookId = crypto.randomUUID();
     const filePath = `${user.id}/${bookId}.${fileExt}`;
 
-    // 1. Upload book file to 'books' bucket
+    // 1. Upload book file to 'private-books' bucket
     const { error: fileError } = await supabase.storage
-      .from("books")
+      .from("private-books")
       .upload(filePath, form.file, {
         cacheControl: "3600",
         upsert: false,
@@ -158,8 +157,6 @@ const Upload = () => {
       notes: "",
     });
     setUploading(false);
-    // Optional: Navigate to library or detail page
-    // navigate("/library");
   };
 
   return (

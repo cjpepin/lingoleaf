@@ -3,34 +3,28 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { Plus } from "lucide-react";
 
 interface AdminBookUploadModalProps {
   onSuccess: () => void;
 }
 
 const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
-  const { user } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     title: "",
     file: undefined as File | undefined,
     image: undefined as File | undefined,
     notes: "",
-    accessLevel: "free" as "free" | "paid" | "personal",
+    accessLevel: "free" as "free" | "paid",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    
     setUploading(true);
 
     if (!form.title || !form.file) {
@@ -43,89 +37,96 @@ const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
       return;
     }
 
-    try {
-      // Generate unique file paths
-      const fileExt = form.file.name.split(".").pop();
-      const bookId = crypto.randomUUID();
-      const filePath = `admin/${bookId}.${fileExt}`;
+    const fileExt = form.file.name.split(".").pop();
+    const bookId = crypto.randomUUID();
+    
+    // Use different bucket based on access level
+    const bucketName = form.accessLevel === 'free' ? 'public-books' : 'private-books';
+    const filePath = `admin/${bookId}.${fileExt}`;
 
-      // Upload book file
-      const { error: fileError } = await supabase.storage
-        .from("books")
-        .upload(filePath, form.file, {
+    // Upload book file
+    const { error: fileError } = await supabase.storage
+      .from(bucketName)
+      .upload(filePath, form.file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (fileError) {
+      toast({
+        title: "File Upload Failed",
+        description: fileError.message,
+        variant: "destructive",
+      });
+      setUploading(false);
+      return;
+    }
+
+    // Handle cover image upload
+    let cover_image_url: string | null = null;
+    if (form.image) {
+      const imageExt = form.image.name.split(".").pop();
+      const imagePath = `admin/${bookId}-cover.${imageExt}`;
+      const { error: imgError } = await supabase.storage
+        .from("covers")
+        .upload(imagePath, form.image, {
           cacheControl: "3600",
           upsert: false,
         });
-
-      if (fileError) throw fileError;
-
-      // Handle cover image upload
-      let cover_image_url: string | null = null;
-      if (form.image) {
-        const imageExt = form.image.name.split(".").pop();
-        const imagePath = `admin/${bookId}-cover.${imageExt}`;
-        const { error: imgError } = await supabase.storage
-          .from("covers")
-          .upload(imagePath, form.image, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-        
-        if (imgError) throw imgError;
-        
+      if (!imgError) {
         const { data } = supabase.storage.from("covers").getPublicUrl(imagePath);
         cover_image_url = data?.publicUrl || null;
       }
+    }
 
-      // Insert book metadata
-      const { error: insertError } = await supabase
-        .from("books")
-        .insert([
-          {
-            id: bookId,
-            owner_id: null, // Admin books have no owner
-            title: form.title,
-            file_path: filePath,
-            cover_image_url,
-            notes: form.notes || null,
-            access_level: form.accessLevel,
-          },
-        ]);
+    // Insert into books table
+    const { error: insertError } = await supabase
+      .from("books")
+      .insert([
+        {
+          id: bookId,
+          owner_id: null, // Admin books have no owner
+          title: form.title,
+          file_path: filePath,
+          cover_image_url,
+          notes: form.notes || null,
+          access_level: form.accessLevel,
+        },
+      ]);
 
-      if (insertError) throw insertError;
-
+    if (insertError) {
       toast({
-        title: "Admin Book Uploaded",
-        description: "Book has been successfully added to the library!",
-      });
-
-      // Reset form and close modal
-      setForm({
-        title: "",
-        file: undefined,
-        image: undefined,
-        notes: "",
-        accessLevel: "free",
-      });
-      setOpen(false);
-      onSuccess();
-    } catch (error: any) {
-      toast({
-        title: "Upload Failed",
-        description: error.message,
+        title: "Database Insert Failed",
+        description: insertError.message,
         variant: "destructive",
       });
-    } finally {
       setUploading(false);
+      return;
     }
+
+    toast({
+      title: "Upload Successful",
+      description: "Admin book uploaded successfully!",
+    });
+
+    setForm({
+      title: "",
+      file: undefined,
+      image: undefined,
+      notes: "",
+      accessLevel: "free",
+    });
+    setUploading(false);
+    setIsOpen(false);
+    onSuccess();
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="w-4 h-4 mr-2" />
-          Add Admin Book
+          Upload Admin Book
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-md">
@@ -134,9 +135,10 @@ const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <Label htmlFor="admin-title">Title *</Label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Title *
+            </label>
             <Input
-              id="admin-title"
               type="text"
               value={form.title}
               onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))}
@@ -146,9 +148,28 @@ const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
           </div>
           
           <div>
-            <Label htmlFor="admin-file">Book File *</Label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Access Level *
+            </label>
+            <Select
+              value={form.accessLevel}
+              onValueChange={(value) => setForm(f => ({ ...f, accessLevel: value as "free" | "paid" }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="free">Free (Public Library)</SelectItem>
+                <SelectItem value="paid">Paid (Premium Library)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Book File *
+            </label>
             <Input
-              id="admin-file"
               type="file"
               accept=".pdf,.epub,.txt"
               onChange={(e) => setForm(f => ({
@@ -159,11 +180,12 @@ const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
               disabled={uploading}
             />
           </div>
-          
+
           <div>
-            <Label htmlFor="admin-image">Cover Image</Label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Cover Image
+            </label>
             <Input
-              id="admin-image"
               type="file"
               accept="image/*"
               onChange={(e) => setForm(f => ({
@@ -173,48 +195,26 @@ const AdminBookUploadModal = ({ onSuccess }: AdminBookUploadModalProps) => {
               disabled={uploading}
             />
           </div>
-          
+
           <div>
-            <Label htmlFor="admin-access">Access Level</Label>
-            <Select
-              value={form.accessLevel}
-              onValueChange={(value: "free" | "paid" | "personal") => 
-                setForm(f => ({ ...f, accessLevel: value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="personal">Personal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div>
-            <Label htmlFor="admin-notes">Notes</Label>
-            <Textarea
-              id="admin-notes"
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Notes
+            </label>
+            <textarea
+              rows={3}
               value={form.notes}
               onChange={(e) => setForm(f => ({ ...f, notes: e.target.value }))}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm"
               disabled={uploading}
-              rows={3}
             />
           </div>
-          
-          <div className="flex gap-2">
-            <Button type="submit" disabled={uploading} className="flex-1">
-              {uploading ? "Uploading..." : "Upload Book"}
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => setOpen(false)}
-              disabled={uploading}
-            >
+
+          <div className="flex justify-end gap-2 pt-4">
+            <Button type="button" variant="outline" onClick={() => setIsOpen(false)}>
               Cancel
+            </Button>
+            <Button type="submit" disabled={uploading}>
+              {uploading ? "Uploading..." : "Upload"}
             </Button>
           </div>
         </form>
