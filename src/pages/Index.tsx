@@ -7,6 +7,7 @@ import UpgradeCTA from "@/components/UpgradeCTA";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useAuth } from "@/hooks/useAuth";
 import { useLibraryBooks } from "@/hooks/useLibraryBooks";
+import { useUserBooks } from "@/hooks/useUserBooks";
 
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
