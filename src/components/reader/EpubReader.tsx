@@ -40,38 +40,28 @@ const EpubReader = ({ fileUrl, title }: Props) => {
   const [hoverX, setHoverX] = useState<number | null>(null);
   const [dragPage, setDragPage] = useState<number>(currentPage);
 
-  const goToPage = async (page: number) => {
-    if (!renditionRef.current || !bookRef.current || totalPages === 0) return;
-  
-    const targetPage = Math.max(1, Math.min(page, totalPages));
-    const percentage = (targetPage - 1) / (totalPages - 1);
-    const cfi = bookRef.current.locations.cfiFromPercentage(percentage);
-    
-    await renditionRef.current.display(cfi);
-    setDragPage(targetPage);
-    updatePage(targetPage);
+  const goToPage = async (prev: boolean) => {
+    const newLocation = prev 
+      ? await renditionRef.current.prev() 
+      : await renditionRef.current.next();
+
+    if (!newLocation || !newLocation.start || !newLocation.start.cfi) return;
+
+    const current = bookRef.current.locations.percentageFromCfi(newLocation.start.cfi);
+    const newPage = Math.round(current * (totalPages - 1)) + 1;
+    setDragPage(newPage);
+    updatePage(newPage);
   };
 
-  const handlePrev = async () => {
-    if (!renditionRef.current) return;
-    
-    try {
-      await renditionRef.current.prev();
-    } catch (error) {
-      console.log("Already at beginning of book");
+  const dragToPage = () => {
+    if (bookRef.current && renditionRef.current && totalPages > 1) {
+      const percentage = (dragPage - 1) / (totalPages - 1);
+      const cfi = bookRef.current.locations.cfiFromPercentage(percentage);
+      renditionRef.current.display(cfi);
+      updatePage(dragPage);
     }
-  };
-  
-  const handleNext = async () => {
-    if (!renditionRef.current) return;
-    
-    try {
-      await renditionRef.current.next();
-    } catch (error) {
-      console.log("Already at end of book");
-    }
-  };
-  
+  }
+
   useEffect(() => {
     let rendition: any;
 
@@ -193,7 +183,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         className="border shadow bg-white rounded h-full mx-auto overflow-hidden mt-1 w-[72vw] max-w-[950px] max-h-[calc(100vh-150px)] relative"
       />
 
-<div className="relative w-full px-6 mt-2 max-w-xl">
+      <div className="relative w-full px-6 mt-2 max-w-xl">
         <input
           type="range"
           min={1}
@@ -217,10 +207,10 @@ const EpubReader = ({ fileUrl, title }: Props) => {
             setHoverX(null);
           }}
           onMouseUp={() => {
-            goToPage(dragPage);
+            dragToPage();
           }}
           onTouchEnd={() => {
-            goToPage(dragPage);
+            dragToPage();
           }}
           className="w-full accent-green-600 cursor-pointer"
         />
@@ -242,7 +232,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
       <div className="flex items-center gap-4 mt-1">
         <button
           className="px-3 py-1 bg-gray-100 rounded border disabled:opacity-50"
-          onClick={handlePrev}
+          onClick={() => goToPage(true)}
           disabled={currentPage <= 1}
         >
           Previous
@@ -252,7 +242,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         </span>
         <button
           className="px-3 py-1 bg-gray-100 rounded border disabled:opacity-50"
-          onClick={handleNext}
+          onClick={() => goToPage(false)}
           disabled={!!totalPages && currentPage >= totalPages}
         >
           Next
@@ -277,7 +267,7 @@ const EpubReader = ({ fileUrl, title }: Props) => {
         />
       )}
 
-      {error && <div className="text-red-600 absolute top-4">{error}</div>}
+      {/* {error && <div className="text-red-600 absolute top-4">{error}</div>} */}
     </div>
   );
 };
