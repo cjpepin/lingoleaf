@@ -6,37 +6,15 @@ import { useNavigate } from "react-router-dom";
 import UpgradeCTA from "@/components/UpgradeCTA";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useAuth } from "@/hooks/useAuth";
-
-// Sample books to display when user has no uploads
-const DUMMY_BOOKS = [
-  {
-    id: "1",
-    title: "French for Beginners",
-    author: "Marie Dubois",
-    cover: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?auto=format&fit=cover&w=400&q=80"
-  },
-  {
-    id: "2",
-    title: "Learn Spanish Fast",
-    author: "Carlos Garcia",
-    cover: "https://images.unsplash.com/photo-1461749280684-dccba630e2f6?auto=format&fit=cover&w=400&q=80"
-  },
-  {
-    id: "3",
-    title: "Mandarin Tales",
-    author: "Sun Yan",
-    cover: "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=cover&w=400&q=80"
-  }
-];
+import { useLibraryBooks } from "@/hooks/useLibraryBooks";
 
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const isAuthenticated = user !== null && !authLoading;
-  // TODO: Replace with actual user books when implemented
-  const userBooks: any[] = [];
-  const booksToShow = userBooks.length > 0 ? userBooks : DUMMY_BOOKS;
+  const libraryBooks = useLibraryBooks();
+  const booksToShow = libraryBooks?.length > 0 ? libraryBooks : [];
 
   return (
     <div className="bg-[#F3F6F4] min-h-screen">
