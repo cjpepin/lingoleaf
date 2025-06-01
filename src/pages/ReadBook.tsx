@@ -9,7 +9,6 @@ import PdfRenderer from "@/components/reader/PdfRenderer";
 import TextFileViewer from "@/components/reader/TextFileViewer";
 import EpubReader from "@/components/reader/EpubReader";
 import { useUpgradeModal } from "@/hooks/useUpgradeModal";
-import BackupEpubReader from "@/components/reader/BackupEpubReader";
 
 const ReadBook = () => {
   const { bookId } = useParams();
