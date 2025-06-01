@@ -1,3 +1,4 @@
+
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./useAuth";
@@ -34,13 +35,43 @@ export function useVocabFolders() {
     },
   });
 
-  // Future: rename, delete, etc
+  const updateFolderMutation = useMutation({
+    mutationFn: async ({ id, name, note }: { id: string; name: string; note?: string }) => {
+      if (!user) throw new Error("Not logged in");
+      const { error } = await supabase
+        .from("vocab_folders")
+        .update({ name, note })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vocab-folders", user?.id] });
+    },
+  });
+
+  const deleteFolderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (!user) throw new Error("Not logged in");
+      const { error } = await supabase
+        .from("vocab_folders")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vocab-folders", user?.id] });
+    },
+  });
 
   return {
     folders,
     loading: isLoading,
     error,
     createFolder: createFolderMutation.mutateAsync,
+    updateFolder: updateFolderMutation.mutateAsync,
+    deleteFolder: deleteFolderMutation.mutateAsync,
   };
 }
 

@@ -1,6 +1,9 @@
+
 import { useState } from "react";
 import VocabFolderList from "./VocabFolderList";
 import VocabWords from "./VocabWords";
+import EditFolderDialog from "./EditFolderDialog";
+import DeleteFolderDialog from "./DeleteFolderDialog";
 import { useVocabFolders } from "@/hooks/useVocabFolders";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -15,12 +18,27 @@ function isPaidUser(_user: unknown) {
   return false;
 }
 
+type Folder = {
+  id: string;
+  name: string;
+  note: string | null;
+  created_at: string;
+};
+
 const VocabFolders = () => {
   const { user } = useAuth();
-  const { folders, createFolder, loading: foldersLoading, error: foldersError } = useVocabFolders();
+  const { folders, createFolder, updateFolder, deleteFolder, loading: foldersLoading, error: foldersError } = useVocabFolders();
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const openUpgrade = useUpgradeModal((s) => s.openModal);
   const canCreateFolder = isPaidUser(user) || (folders?.length ?? 0) < 3;
+
+  // Dialog states
+  const [editingFolder, setEditingFolder] = useState<Folder | null>(null);
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // For studying
   const [studyFolder, setStudyFolder] = useState<string | null>(null);
@@ -36,9 +54,64 @@ const VocabFolders = () => {
     // Or if using react-router: navigate("/study", { state: { folderId } });
   }
 
+  const handleEditFolder = (folder: Folder) => {
+    setEditingFolder(folder);
+    setIsEditDialogOpen(true);
+  };
+
+  const handleDeleteFolder = (folder: Folder) => {
+    setDeletingFolder(folder);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleSaveEdit = async (data: { id: string; name: string; note?: string }) => {
+    setIsSaving(true);
+    try {
+      await updateFolder(data);
+      toast({ title: "Folder updated successfully" });
+    } catch (error) {
+      toast({ title: "Failed to update folder", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleConfirmDelete = async (folderId: string) => {
+    setIsDeleting(true);
+    try {
+      await deleteFolder(folderId);
+      toast({ title: "Folder deleted successfully" });
+      // If the deleted folder was selected, reset selection
+      if (selectedFolder === folderId) {
+        setSelectedFolder(null);
+      }
+    } catch (error) {
+      toast({ title: "Failed to delete folder", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="flex gap-7 flex-wrap md:flex-nowrap">
       <UpgradeModal />
+      
+      <EditFolderDialog
+        folder={editingFolder}
+        isOpen={isEditDialogOpen}
+        onClose={() => setIsEditDialogOpen(false)}
+        onSave={handleSaveEdit}
+        isSaving={isSaving}
+      />
+      
+      <DeleteFolderDialog
+        folder={deletingFolder}
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
+      />
+
       <div className="w-full md:w-56">
         <div className="text-sm font-bold mb-1 mt-2 text-gray-700">Folders</div>
         <VocabFolderList
@@ -46,6 +119,8 @@ const VocabFolders = () => {
           selected={selectedFolder}
           onSelect={setSelectedFolder}
           onStudy={handleStudy}
+          onEdit={handleEditFolder}
+          onDelete={handleDeleteFolder}
         />
         <Button
           variant="secondary"
