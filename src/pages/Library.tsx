@@ -141,10 +141,10 @@ const Library = () => {
                   {libraryBooks.map((book, index) => (
                     <div key={book.id} className="contents">
                       <BookGrid books={[book]} />
-                      {/* Ad after every 6 books */}
+                      {/* Ad after every 6 books
                       {(index + 1) % 6 === 0 && index < libraryBooks.length - 1 && (
                         <LibraryAd placement="between-books" />
-                      )}
+                      )} */}
                     </div>
                   ))}
                 </div>

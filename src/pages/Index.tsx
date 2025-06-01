@@ -7,15 +7,18 @@ import UpgradeCTA from "@/components/UpgradeCTA";
 import UpgradeModal from "@/components/UpgradeModal";
 import { useAuth } from "@/hooks/useAuth";
 import { useLibraryBooks } from "@/hooks/useLibraryBooks";
-import { useUserBooks } from "@/hooks/useUserBooks";
 
 const Index = () => {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   
   const isAuthenticated = user !== null && !authLoading;
-  const libraryBooks = useLibraryBooks();
-  const { data: userBooks,  isLoading: isBooksLoading } = useUserBooks(user?.id);
+  const {
+    libraryBooks,
+    isLoading,
+    error,
+    refetch
+  } = useLibraryBooks();
   const booksToShow = libraryBooks?.length > 0 ? libraryBooks : [];
 
   return (
@@ -65,7 +68,7 @@ const Index = () => {
         <section className="pt-10">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-2xl font-bold text-green-800">
-              {userBooks?.length > 0 ? "Your Books" : "Library Highlights"}
+              Library Highlights
             </h3>
             <Button
               variant="ghost"
@@ -80,13 +83,13 @@ const Index = () => {
               <Card key={book.id} className="hover-scale transition cursor-pointer">
                 <div onClick={() => navigate(`/read/${book.id}`)}>
                   <img
-                    src={book.cover || "https://placehold.co/400x520?text=Book+Cover"}
+                    src={book.cover_image_url || "https://placehold.co/400x520?text=Book+Cover"}
                     alt={book.title}
                     className="w-full h-52 object-cover rounded-t-lg"
                   />
                   <CardHeader>
                     <CardTitle className="text-green-900 text-lg">{book.title}</CardTitle>
-                    <div className="text-sm text-gray-500">{book.author}</div>
+                    {/* <div className="text-sm text-gray-500">{book.author}</div> */}
                   </CardHeader>
                 </div>
               </Card>
