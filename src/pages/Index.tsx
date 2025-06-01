@@ -14,6 +14,7 @@ const Index = () => {
   
   const isAuthenticated = user !== null && !authLoading;
   const libraryBooks = useLibraryBooks();
+  const { data: userBooks,  isLoading: isBooksLoading } = useUserBooks(user?.id);
   const booksToShow = libraryBooks?.length > 0 ? libraryBooks : [];
 
   return (
