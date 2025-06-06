@@ -22,4 +22,10 @@ export default defineConfig(({ mode }) => ({
   optimizeDeps: {
     include: ["pdfjs-dist/build/pdf.worker.min.js"],
   },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    tsconfig: "./tsconfig.vitest.json",
+  },
 }));
