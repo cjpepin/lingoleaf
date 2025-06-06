@@ -146,11 +146,13 @@ const ReadBook = () => {
                     key={highlight.id}
                     className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 cursor-pointer hover:bg-yellow-100 transition-colors"
                   >
-                    <div 
+                    <div
                       className="text-sm text-gray-800 mb-2"
                       onClick={() => handleNavigateToHighlight(highlight)}
                     >
-                      "{highlight.text.length > 60 ? highlight.text.substring(0, 60) + '...' : highlight.text}"
+                      {highlight.text.length > 60
+                        ? highlight.text.substring(0, 60) + "..."
+                        : highlight.text}
                     </div>
                     <div className="flex justify-between items-center text-xs text-gray-500">
                       <span>Page {highlight.page}</span>
