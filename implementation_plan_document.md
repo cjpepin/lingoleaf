@@ -9,7 +9,7 @@
   * Tables: users, books, highlights, vocabulary lists, vocabulary entries, forum posts, messages
   * Storage: buckets for book files and cover images
   * Row-level security (RLS) and access policies
-* Initialize Next.js project (App Router) with TypeScript
+* Initialize Vite + React project with TypeScript and React Router
 
   * Install and configure: Tailwind, Zustand, React Query
   * Create Supabase client utility

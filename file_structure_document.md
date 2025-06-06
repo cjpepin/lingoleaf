@@ -2,27 +2,19 @@
 
 ---
 
-## 1. Frontend (Next.js w/ App Router)
+## 1. Frontend (Vite + React)
 
 ```
 /src
-├── app
-│   ├── layout.tsx
-│   ├── page.tsx (home)
-│   ├── account
-│   │   └── page.tsx
-│   ├── upload
-│   │   └── page.tsx
-│   ├── vocab
-│   │   └── page.tsx
-│   ├── study
-│   │   └── page.tsx
-│   ├── read
-│   │   └── [bookId]
-│       └── page.tsx
-│   └── forum
-│       └── [bookId]
-│           └── page.tsx
+├── pages
+│   ├── Index.tsx (home)
+│   ├── Account.tsx
+│   ├── Upload.tsx
+│   ├── Vocab.tsx
+│   ├── Study.tsx
+│   ├── ReadBook.tsx
+│   ├── Admin.tsx
+│   └── Upgrade.tsx
 ├── components
 │   ├── common (Navbar, Sidebar, etc.)
 │   ├── book (BookCard, BookUploader, etc.)
@@ -33,6 +25,10 @@
 │   ├── useAuth.ts
 │   ├── useTranslation.ts
 │   ├── useBookReader.ts
+├── integrations
+│   └── supabase
+│       ├── client.ts
+│       └── types.ts
 ├── lib
 │   ├── supabaseClient.ts
 │   ├── api.ts (wrapper for API calls)
@@ -40,10 +36,12 @@
 │   ├── book.ts
 │   ├── vocab.ts
 │   ├── user.ts
+├── utils
+│   └── translate.ts
+├── App.tsx
+├── main.tsx
 ├── styles
 │   └── globals.css
-├── utils
-│   └── formatter.ts
 ```
 
 ---

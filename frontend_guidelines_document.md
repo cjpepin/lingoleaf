@@ -4,7 +4,7 @@
 
 ## 1. Framework & Tools
 
-* **Framework**: Next.js (App Router)
+* **Framework**: Vite + React (React Router)
 * **Language**: TypeScript
 * **Styling**: Tailwind CSS
 * **Animation**: Framer Motion

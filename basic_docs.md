@@ -210,7 +210,7 @@ Create a web-based application that enables users to read full-length books, hig
 
 ## 14. Stack
 
-* **Frontend**: Next.js (TypeScript)
+* **Frontend**: Vite + React (TypeScript)
 * **Backend/DB**: Supabase
 * **Auth**: Supabase
 * **Payments**: Stripe

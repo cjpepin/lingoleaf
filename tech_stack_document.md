@@ -4,7 +4,7 @@
 
 ## 1. Frontend
 
-* **Framework**: Next.js 14
+* **Framework**: Vite + React
 * **Language**: TypeScript
 * **Styling**: Tailwind CSS
 * **State Management**: React Query + Zustand (or Context API for simple global state)
