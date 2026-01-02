@@ -1,0 +1,324 @@
+/**
+ * TranslateSheet
+ * Bottom sheet displaying translation with save option
+ */
+
+import React from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
+import { colors, spacing, typography } from '@/theme';
+import type { VocabList } from '@/supabase/types';
+
+interface Props {
+  visible: boolean;
+  term: string;
+  translation: string | null;
+  loading: boolean;
+  error: string | null;
+  selectedListName?: string | null;
+  onSelectList?: () => void;
+  listPickerVisible?: boolean;
+  lists?: VocabList[];
+  selectedListId?: string | null;
+  onPickList?: (listId: string) => void;
+  onCloseListPicker?: () => void;
+  onSave: () => void;
+  onClose: () => void;
+}
+
+export function TranslateSheet({
+  visible,
+  term,
+  translation,
+  loading,
+  error,
+  selectedListName,
+  onSelectList,
+  listPickerVisible,
+  lists,
+  selectedListId,
+  onPickList,
+  onCloseListPicker,
+  onSave,
+  onClose,
+}: Props) {
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.overlay}>
+        {/* Backdrop is a sibling behind the sheet so taps inside the sheet never close it */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+          
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={styles.loadingText}>Translating...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.button} onPress={onClose}>
+                <Text style={styles.buttonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <View style={styles.content}>
+                <Text style={styles.label}>Original</Text>
+                <Text style={styles.term}>{term}</Text>
+                
+                <Text style={styles.label}>Translation</Text>
+                <Text style={styles.translation}>{translation}</Text>
+
+                {onSelectList ? (
+                  <>
+                    <Text style={styles.label}>List</Text>
+                    <TouchableOpacity style={styles.listButton} onPress={onSelectList}>
+                      <Text style={styles.listButtonText} numberOfLines={1}>
+                        {selectedListName || 'Select list'}
+                      </Text>
+                      <Text style={styles.listButtonChevron}>›</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+              </View>
+              
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={[styles.button, styles.buttonPrimary]}
+                  onPress={onSave}
+                >
+                  <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
+                    Save to Study List
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.button} onPress={onClose}>
+                  <Text style={styles.buttonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          {/* List picker rendered inside this modal to avoid stacking Modals on iOS */}
+          {listPickerVisible && lists && onPickList && onCloseListPicker ? (
+            <View style={styles.pickerOverlay} pointerEvents="box-none">
+              <Pressable style={StyleSheet.absoluteFill} onPress={onCloseListPicker} />
+              <View style={styles.pickerCard}>
+                <Text style={styles.pickerTitle}>Choose a list</Text>
+                <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent}>
+                  {lists.map((l) => {
+                    const selected = l.id === selectedListId;
+                    return (
+                      <TouchableOpacity
+                        key={l.id}
+                        style={[styles.pickerRow, selected && styles.pickerRowSelected]}
+                        onPress={() => onPickList(l.id)}
+                      >
+                        <Text style={[styles.pickerRowText, selected && styles.pickerRowTextSelected]} numberOfLines={1}>
+                          {l.name}
+                        </Text>
+                        {selected ? <Text style={styles.pickerCheck}>✓</Text> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity style={styles.pickerCloseButton} onPress={onCloseListPicker}>
+                  <Text style={styles.pickerCloseText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: colors.overlay,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.lg,
+    minHeight: 300,
+  },
+  handle: {
+    width: 40,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  content: {
+    marginBottom: spacing.lg,
+  },
+  label: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  term: {
+    ...typography.h2,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  translation: {
+    ...typography.h2,
+    color: colors.primary,
+    marginBottom: spacing.md,
+  },
+  listButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginBottom: spacing.md,
+  },
+  listButtonText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  listButtonChevron: {
+    ...typography.h2,
+    color: colors.textSecondary,
+    marginTop: -2,
+  },
+  pickerOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  pickerCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxHeight: '80%',
+  },
+  pickerTitle: {
+    ...typography.h3,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  pickerList: {
+    marginBottom: spacing.md,
+  },
+  pickerListContent: {
+    gap: spacing.sm,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pickerRowSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.highlightMint,
+  },
+  pickerRowText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  pickerRowTextSelected: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  pickerCheck: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '700',
+  },
+  pickerCloseButton: {
+    paddingVertical: spacing.md,
+    borderRadius: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  pickerCloseText: {
+    ...typography.button,
+    color: colors.text,
+  },
+  actions: {
+    gap: spacing.sm,
+  },
+  button: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  buttonPrimary: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  buttonText: {
+    ...typography.button,
+    color: colors.text,
+  },
+  buttonTextPrimary: {
+    color: colors.surface,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.error,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+});
+

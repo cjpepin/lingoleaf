@@ -1,0 +1,50 @@
+/**
+ * Settings state management
+ * Handles user preferences like target language
+ */
+
+import { create } from 'zustand';
+import { fetchUserSettings, upsertUserSettings } from '@/supabase/queries';
+
+interface SettingsStore {
+  targetLang: string;
+  loading: boolean;
+  setTargetLang: (lang: string) => void;
+  loadSettings: (userId: string) => Promise<void>;
+  saveSettings: (userId: string) => Promise<void>;
+}
+
+export const useSettingsStore = create<SettingsStore>((set, get) => ({
+  targetLang: 'en',
+  loading: false,
+
+  setTargetLang: (lang) => set({ targetLang: lang }),
+
+  loadSettings: async (userId) => {
+    set({ loading: true });
+    try {
+      const settings = await fetchUserSettings(userId);
+      if (settings) {
+        set({ targetLang: settings.target_lang });
+      }
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  saveSettings: async (userId) => {
+    const { targetLang } = get();
+    try {
+      await upsertUserSettings({
+        user_id: userId,
+        target_lang: targetLang,
+      });
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+      throw error;
+    }
+  },
+}));
+
