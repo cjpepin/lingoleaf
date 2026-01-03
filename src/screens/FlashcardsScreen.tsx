@@ -12,6 +12,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
+import { useStudyStore } from '@/state/useStudyStore';
 import { fetchStudyWords } from '@/supabase/queries';
 import type { StudyWord } from '@/supabase/types';
 import { colors, spacing, typography } from '@/theme';
@@ -25,6 +26,7 @@ export default function FlashcardsScreen() {
   const route = useRoute<FlashcardsRouteProp>();
   const navigation = useNavigation();
   const { user } = useAuthStore();
+  const studyStore = useStudyStore();
 
   const { listId, listName } = route.params;
 
@@ -38,25 +40,47 @@ export default function FlashcardsScreen() {
   }, [listName, navigation]);
 
   const load = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await fetchStudyWords(user.id, listId);
-      setWords(data);
+      if (listId) {
+        studyStore.hydrateForUser(user.id);
+        await studyStore.refreshWordsForList(user.id, listId, { force: false });
+        const cached = studyStore.getCachedWords(listId);
+        const data = cached ?? (await fetchStudyWords(user.id, listId));
+        setWords(data);
+        logger.info('Loaded flashcards', { listId, count: data.length, source: cached ? 'cache' : 'network' });
+      } else {
+        const data = await fetchStudyWords(user.id, listId);
+        setWords(data);
+        logger.info('Loaded flashcards', { listId, count: data.length, source: 'network' });
+      }
       setIndex(0);
       setFlipped(false);
-      logger.info('Loaded flashcards', { listId, count: data.length });
     } catch (error) {
       logger.error('Failed to load flashcards:', error);
       Alert.alert('Error', 'Failed to load flashcards');
     } finally {
       setLoading(false);
     }
-  }, [listId, user]);
+  }, [listId, studyStore, user]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  if (!user && !loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Sign in required</Text>
+        <Text style={styles.subtitle}>Sign in to study flashcards and sync your vocab.</Text>
+        <Button label="Sign in" variant="primary" onPress={() => (navigation as any).navigate('Auth', { mode: 'signin' })} />
+      </View>
+    );
+  }
 
   const current = words[index] ?? null;
   const progressText = useMemo(() => {

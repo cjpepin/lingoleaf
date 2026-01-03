@@ -118,7 +118,7 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
-  const { user, loading } = useAuthStore();
+  const { loading } = useAuthStore();
 
   if (loading) {
     return null; // TODO: Add splash screen
@@ -136,52 +136,31 @@ export function RootNavigator() {
           presentation: 'card',
         }}
       >
-        {!user ? (
-          <Stack.Screen
-            name="Auth"
-            component={AuthScreen}
-            options={{ headerShown: false }}
-          />
-        ) : (
-          <>
-            <Stack.Screen
-              name="MainTabs"
-              component={MainTabs}
-              options={{ headerShown: false }}
-            />
-            <Stack.Screen
-              name="Reader"
-              component={ReaderScreen}
-              options={{
-                title: '',
-                headerBackTitle: 'Library',
-              }}
-            />
-            <Stack.Screen
-              name="BookDetails"
-              component={BookDetailsScreen}
-              options={{
-                title: 'Book',
-                presentation: 'modal',
-              }}
-            />
-            <Stack.Screen
-              name="Settings"
-              component={SettingsScreen}
-              options={{ title: 'Settings' }}
-            />
-            <Stack.Screen
-              name="Admin"
-              component={AdminScreen}
-              options={{ title: 'Admin Panel' }}
-            />
-            <Stack.Screen
-              name="Flashcards"
-              component={FlashcardsScreen}
-              options={{ title: 'Flashcards' }}
-            />
-          </>
-        )}
+        <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+        <Stack.Screen
+          name="Auth"
+          component={AuthScreen}
+          options={{ title: 'Account', presentation: 'modal' }}
+        />
+        <Stack.Screen
+          name="Reader"
+          component={ReaderScreen}
+          options={{
+            title: '',
+            headerBackTitle: 'Library',
+          }}
+        />
+        <Stack.Screen
+          name="BookDetails"
+          component={BookDetailsScreen}
+          options={{
+            title: 'Book',
+            presentation: 'modal',
+          }}
+        />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin Panel' }} />
+        <Stack.Screen name="Flashcards" component={FlashcardsScreen} options={{ title: 'Flashcards' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

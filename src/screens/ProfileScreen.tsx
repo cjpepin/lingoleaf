@@ -19,9 +19,9 @@ import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { fetchUserSettings, upsertUserSettings, checkIsAdmin } from '@/supabase/queries';
-import { supabase } from '@/supabase/client';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
+import { Button } from '@/components/ui/Button';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,6 +45,7 @@ export default function ProfileScreen() {
   const navigation = useNavigation<NavigationProp>();
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
+  const isGuest = useAuthStore((state) => state.isGuest);
   const { targetLang, setTargetLang } = useSettingsStore();
 
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,10 @@ export default function ProfileScreen() {
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     loadSettings();
   }, [user]);
 
@@ -134,8 +139,8 @@ export default function ProfileScreen() {
             try {
               if (!user) return;
               
-              // Sign out will trigger cleanup
-              await supabase.auth.signOut();
+              // Guest-first: "sign out" returns to a guest session.
+              await signOut();
               
               // Note: Actual deletion requires service role key
               // For now, just sign out. Implement server-side deletion via Edge Function
@@ -156,6 +161,7 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
+      Alert.alert('Signed out', 'You have successfully signed out from your account.');
     } catch (error) {
       logger.error('Sign out failed:', error);
       Alert.alert('Error', 'Failed to sign out');
@@ -170,13 +176,31 @@ export default function ProfileScreen() {
     );
   }
 
+  if (!user) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>Profile</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionDescription}>Sign in to sync your progress across devices.</Text>
+          <Button
+            label="Sign in / Create account"
+            variant="primary"
+            style={styles.rectButton}
+            onPress={() => navigation.navigate('Auth')}
+          />
+        </View>
+      </ScrollView>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Profile</Text>
       
       <View style={styles.section}>
         <View style={styles.emailRow}>
-          <Text style={styles.email}>{user?.email}</Text>
+          <Text style={styles.email}>{isGuest ? 'Guest' : user?.email}</Text>
           {isAdmin && (
             <View style={styles.adminChip}>
               <Text style={styles.adminChipText}>Admin</Text>
@@ -294,6 +318,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* Save Button */}
+      <View style={styles.saveButtonContainer}>
       <TouchableOpacity
         style={[styles.saveButton, saving && styles.saveButtonDisabled]}
         onPress={handleSave}
@@ -313,11 +338,20 @@ export default function ProfileScreen() {
       >
         <Text style={styles.settingsButtonText}>⚙️ Settings</Text>
       </TouchableOpacity>
+      </View>
 
       {/* Sign Out */}
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-        <Text style={styles.signOutButtonText}>Sign Out</Text>
-      </TouchableOpacity>
+      {isGuest ? (
+        <Button 
+          label="Sign in / Create account" 
+          variant="primary" 
+          style={styles.rectButton} 
+          onPress={() => navigation.navigate('Auth')} 
+          textStyle={styles.rectButtonText}
+        />
+      ) : (
+        <Button label="Sign out" variant="surface" style={styles.rectButton} onPress={handleSignOut} />
+      )}
 
       {/* Delete Account */}
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
@@ -402,12 +436,18 @@ const styles = StyleSheet.create({
     color: colors.background,
     fontWeight: '600',
   },
+  saveButtonContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.lg,
+  },
   saveButton: {
+    flex: 1,
     backgroundColor: colors.primary,
     paddingVertical: spacing.md,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: spacing.lg,
   },
   saveButtonDisabled: {
     opacity: 0.6,
@@ -417,11 +457,11 @@ const styles = StyleSheet.create({
     color: colors.background,
   },
   settingsButton: {
+    flex: 1,
     backgroundColor: colors.surface,
     paddingVertical: spacing.md,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: spacing.md,
     borderWidth: 1,
     borderColor: colors.border,
   },
@@ -458,6 +498,21 @@ const styles = StyleSheet.create({
   },
   spacer: {
     height: spacing.xl,
+  },
+  rectButton: {
+    ...typography.button,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontWeight: '600',
+  },
+  rectButtonText: {
+    ...typography.button,
+    color: colors.surface,
+    fontWeight: '600',
   },
 });
 

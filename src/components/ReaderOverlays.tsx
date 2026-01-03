@@ -2,37 +2,51 @@
  * ReaderOverlays
  *
  * Small floating UI overlays for the reader:
- * - Page counter (top right)
- * - Highlights button (top left)
+ * - Page counter (top left)
  * - Navigate button (bottom center)
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 
 interface Props {
   currentPage: number;
   totalPages: number;
-  highlightsCount: number;
-  onPressHighlights: () => void;
+  pageLoading?: boolean;
+  chapterLeftPct?: number | null;
   onPressNavigate: () => void;
 }
 
-export function ReaderOverlays({ currentPage, totalPages, highlightsCount, onPressHighlights, onPressNavigate }: Props) {
+export function ReaderOverlays({
+  currentPage,
+  totalPages,
+  pageLoading = false,
+  chapterLeftPct = null,
+  onPressNavigate,
+}: Props) {
   return (
     <>
-      {totalPages > 0 ? (
-        <View style={styles.pageIndicator}>
-          <Text style={styles.pageText}>
-            {currentPage} / {totalPages}
-          </Text>
-        </View>
-      ) : null}
-
-      <Pressable style={styles.highlightsButton} onPress={onPressHighlights}>
-        <Text style={styles.highlightsButtonText}>Highlights ({highlightsCount})</Text>
-      </Pressable>
+      <View style={styles.pageIndicator}>
+        {totalPages <= 0 ? (
+          <View style={styles.pageLoadingRow}>
+            <ActivityIndicator size="small" color="#FFFFFF" />
+            <Text style={styles.pageText}>Loading…</Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.pageRow}>
+              {pageLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+              <Text style={styles.pageText}>
+                {currentPage} / {totalPages}
+              </Text>
+            </View>
+            {typeof chapterLeftPct === 'number' ? (
+              <Text style={styles.chapterText}>{Math.max(0, Math.min(100, chapterLeftPct))}% left in this chapter</Text>
+            ) : null}
+          </>
+        )}
+      </View>
 
       <Pressable style={styles.navButton} onPress={onPressNavigate}>
         <Text style={styles.navButtonText}>Navigate</Text>
@@ -45,7 +59,7 @@ const styles = StyleSheet.create({
   pageIndicator: {
     position: 'absolute',
     top: 12,
-    right: 16,
+    left: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -62,21 +76,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.5,
   },
-  highlightsButton: {
-    position: 'absolute',
-    top: 12,
-    left: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.sm,
-    borderRadius: 16,
+  pageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
-  highlightsButtonText: {
-    ...typography.caption,
-    color: colors.text,
-    fontWeight: '600',
+  chapterText: {
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pageLoadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   navButton: {
     position: 'absolute',

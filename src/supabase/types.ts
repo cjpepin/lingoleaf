@@ -15,6 +15,7 @@ export interface Book {
   source?: string;
   source_id?: string | null;
   epub_url?: string | null;
+  popularity_score?: number | null;
   languages?: string[] | null;
   subjects?: string[] | null;
   bookshelves?: string[] | null;
@@ -61,6 +62,15 @@ export interface UserSettings {
   native_lang: string;
   known_langs: string[];
   goal_langs: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserPromptState {
+  user_id: string;
+  last_upgrade_prompt_at: string | null;
+  upgrade_prompt_dismiss_count: number;
+  upgrade_prompt_last_reason: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
@@ -18,8 +18,9 @@ import { TranslateSheet } from '@/components/TranslateSheet';
 import { BookNavigationSheet } from '@/components/BookNavigationSheet';
 import { ReaderEdgeTapOverlay } from '@/components/ReaderEdgeTapOverlay';
 import { ReaderOverlays } from '@/components/ReaderOverlays';
-import { ReaderHighlightsModal } from '@/components/ReaderHighlightsModal';
+import { UpgradeAccountPrompt } from '@/components/UpgradeAccountPrompt';
 import { useAuthStore } from '@/state/useAuthStore';
+import { useUpgradePromptStore } from '@/state/useUpgradePromptStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import {
   fetchBook,
@@ -33,11 +34,15 @@ import {
   fetchMostRecentVocabList,
   createVocabList,
   touchVocabList,
+  countAllStudyWords,
+  countAllUserHighlights,
 } from '@/supabase/queries';
 import type { Book, VocabList, UserBookHighlight } from '@/supabase/types';
 import { normalizeText, validateSelectionLength, MAX_SELECTION_LENGTH } from '@/utils/normalize';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
+import { addReadMinutes, incrementReadingSession } from '@/utils/readingEngagement';
+import { getCachedLastCfi, setCachedLastCfi } from '@/utils/readerProgressCache';
 
 type ReaderRouteProp = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -52,8 +57,10 @@ export default function ReaderScreen() {
   const route = useRoute<ReaderRouteProp>();
   const navigation = useNavigation();
   const { bookId, localPath } = route.params;
-  const { user } = useAuthStore();
+  const { user, isGuest } = useAuthStore();
   const { targetLang } = useSettingsStore();
+  const upgradePrompt = useUpgradePromptStore();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   
   const [book, setBook] = useState<Book | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -65,11 +72,13 @@ export default function ReaderScreen() {
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [listPickerVisible, setListPickerVisible] = useState(false);
   const [highlights, setHighlights] = useState<UserBookHighlight[]>([]);
-  const [highlightsVisible, setHighlightsVisible] = useState(false);
   const [highlightsEnabled, setHighlightsEnabled] = useState(true);
   const [navVisible, setNavVisible] = useState(false);
+  const [navInitialTab, setNavInitialTab] = useState<'navigate' | 'highlights'>('navigate');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [chapterLeftPct, setChapterLeftPct] = useState<number | null>(null);
   const [locationCfis, setLocationCfis] = useState<string[]>([]);
   const [lastTouchPosition, setLastTouchPosition] = useState<{ x: number; y: number } | null>(null);
   const [initialLocation, setInitialLocation] = useState<string | undefined>(undefined);
@@ -79,18 +88,80 @@ export default function ReaderScreen() {
 
   // Map CFIs to indices so we can have a stable "page number" based on onLocationsReady CFIs
   const cfiToIndexRef = useRef<Map<string, number>>(new Map());
+  const avgLocsPerPageRef = useRef<number>(42); // start near typical ~400 pages for ~16k locations
+  const lastLocIdxRef = useRef<number | null>(null);
+  const lastDisplayedPageRef = useRef<number | null>(null);
+  const lastSectionHrefRef = useRef<string | null>(null);
+  const lastProgressRef = useRef<number | null>(null);
+  const lastTotalLocsRef = useRef<number | null>(null);
+  const globalTotalPagesRef = useRef<number | null>(null);
+
+  const clampNum = useCallback((n: number, min: number, max: number): number => {
+    return Math.max(min, Math.min(max, n));
+  }, []);
+
+  const normalizeProgress = useCallback(
+    (raw: number): number | null => {
+      if (!Number.isFinite(raw)) return null;
+      // Some callbacks report progress as 0..100 (percent). Others use 0..1.
+      const p = raw > 1.001 ? raw / 100 : raw;
+      return clampNum(p, 0, 1);
+    },
+    [clampNum]
+  );
+
+  const computeGlobalTotalPages = useCallback((): number | null => {
+    const fixed = globalTotalPagesRef.current;
+    if (typeof fixed === 'number' && Number.isFinite(fixed) && fixed > 0) return fixed;
+    const totalLocs =
+      typeof lastTotalLocsRef.current === 'number' && Number.isFinite(lastTotalLocsRef.current)
+        ? lastTotalLocsRef.current
+        : locationCfis.length > 0
+          ? locationCfis.length
+          : null;
+    if (!totalLocs || totalLocs <= 0) return null;
+    const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
+    const total = Math.max(1, Math.round(totalLocs / perPage));
+    globalTotalPagesRef.current = total;
+    return total;
+  }, [locationCfis.length]);
+
+  const computeGlobalPageFromLocationIndex = useCallback(
+    (locIdx0: number, totalLocs: number, totalPages: number): number => {
+      if (!Number.isFinite(locIdx0) || !Number.isFinite(totalLocs) || totalLocs <= 0 || totalPages <= 1) return 1;
+      const idx = clampNum(locIdx0, 0, Math.max(0, totalLocs - 1));
+      const ratio = totalLocs > 1 ? idx / (totalLocs - 1) : 0;
+      return clampNum(Math.round(ratio * (totalPages - 1)) + 1, 1, totalPages);
+    },
+    [clampNum]
+  );
+
+  const computeChapterLeft = useCallback((displayedPage: unknown, displayedTotal: unknown): number | null => {
+    if (typeof displayedTotal !== 'number' || !Number.isFinite(displayedTotal) || displayedTotal <= 0) return null;
+    if (typeof displayedPage !== 'number' || !Number.isFinite(displayedPage)) return null;
+    const page = clampNum(Math.round(displayedPage), 1, Math.round(displayedTotal));
+    const total = Math.max(1, Math.round(displayedTotal));
+    const left = Math.round(((total - page) / total) * 100);
+    return clampNum(left, 0, 100);
+  }, [clampNum]);
   
   // Get reader navigation methods
   const {
     goNext,
     goPrevious,
     goToLocation,
+    getCurrentLocation,
+    getLocations,
     currentLocation,
     totalLocations,
+    progress: readerProgress,
+    atStart,
+    atEnd,
     locations,
     toc,
     addAnnotation,
     removeAnnotationByCfi,
+    injectJavascript,
   } = useReader();
   const panRef = useRef(null);
 
@@ -101,10 +172,6 @@ export default function ReaderScreen() {
       map.set(cfi, i);
     });
     cfiToIndexRef.current = map;
-
-    if (locArray.length > 0) {
-      setTotalPages(locArray.length);
-    }
   }, [locationCfis]);
   
   // Track when selection just happened to prevent immediate clearing
@@ -113,6 +180,8 @@ export default function ReaderScreen() {
   const tapNavJustMade = useRef(false);
   const lastSavedCfi = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionStartRef = useRef<number | null>(null);
+  const pendingRemoteCfiRef = useRef<string | null>(null);
 
   useEffect(() => {
     logger.info('🔵 ReaderScreen mounted', { bookId, localPath });
@@ -135,15 +204,88 @@ export default function ReaderScreen() {
     loadBookData();
   }, [bookId]);
 
-  const loadReadingProgress = useCallback(async () => {
+  // Screen-size based starting guess for locations-per-page.
+  useEffect(() => {
+    const area = windowWidth * windowHeight;
+    if (!Number.isFinite(area) || area <= 0) return;
+    const baselineArea = 390 * 844; // iPhone 13-ish
+    const baselineLocsPerPage = 42;
+    const scale = area / baselineArea;
+    const guess = baselineLocsPerPage * scale;
+    avgLocsPerPageRef.current = Math.max(10, Math.min(120, guess));
+  }, [windowHeight, windowWidth]);
+
+  // Engagement tracking for guest upgrade prompt
+  useEffect(() => {
     if (!user) return;
+    sessionStartRef.current = Date.now();
+
+    incrementReadingSession(user.id)
+      .then((e) => {
+        // M3: reading_sessions >= 3 OR total_read_minutes >= 20
+        if (e.sessions >= 3 || e.minutes >= 20) {
+          upgradePrompt.requestShow(user.id, 'read_sessions', { isGuest }).catch(() => {});
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      if (!user) return;
+      const start = sessionStartRef.current;
+      if (!start) return;
+      const minutes = Math.floor((Date.now() - start) / (1000 * 60));
+      if (minutes <= 0) return;
+
+      addReadMinutes(user.id, minutes)
+        .then((e) => {
+          if (e.sessions >= 3 || e.minutes >= 20) {
+            upgradePrompt.requestShow(user.id, 'read_sessions', { isGuest }).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    };
+  }, [isGuest, upgradePrompt, user]);
+
+  const loadReadingProgress = useCallback(async () => {
+    const userId = user?.id ?? null;
+
+    // Always try local cache first (fast, offline-friendly).
+    const local = await getCachedLastCfi(userId, bookId);
+    if (local?.cfi) {
+      setInitialLocation(local.cfi);
+      lastSavedCfi.current = local.cfi;
+      logger.info('📌 Loaded local reading progress', { bookId, hasLocal: true });
+    }
+
+    // Let the reader mount as soon as local cache is checked.
+    setProgressLoaded(true);
+
+    // No signed-in user or DB progress disabled → local-only.
+    if (!user || !readingProgressEnabled) return;
+
     try {
       const data = await fetchUserBook(user.id, bookId);
-      const lastCfi = data?.last_cfi ?? null;
+      const remoteCfi = data?.last_cfi ?? null;
       const savedHighlights = data?.highlights ?? [];
-      logger.info('📌 Loaded reading progress', { bookId, hasProgress: Boolean(lastCfi) });
-      if (lastCfi) setInitialLocation(lastCfi);
+      const remoteUpdatedAt = data?.updated_at ? Date.parse(data.updated_at) : 0;
+
+      logger.info('📌 Loaded remote reading progress', { bookId, hasProgress: Boolean(remoteCfi) });
+
       if (highlightsEnabled) setHighlights(savedHighlights);
+
+      if (remoteCfi) {
+        const shouldUseRemote = !local?.cfi || remoteUpdatedAt > (local?.updatedAt ?? 0);
+        if (shouldUseRemote) {
+          if (readerReady) {
+            goToLocation(remoteCfi);
+          } else {
+            setInitialLocation(remoteCfi);
+            pendingRemoteCfiRef.current = remoteCfi;
+          }
+          lastSavedCfi.current = remoteCfi;
+          void setCachedLastCfi(userId, bookId, remoteCfi, remoteUpdatedAt > 0 ? remoteUpdatedAt : undefined);
+        }
+      }
     } catch (error) {
       const code = (error as any)?.code;
       if (code === 'PGRST205') {
@@ -163,17 +305,13 @@ export default function ReaderScreen() {
       } else {
         logger.error('Failed to load reading progress:', error);
       }
-    } finally {
-      setProgressLoaded(true);
     }
-  }, [bookId, highlightsEnabled, user]);
+  }, [bookId, goToLocation, highlightsEnabled, readerReady, readingProgressEnabled, user]);
 
   useEffect(() => {
-    // Load progress when we have a user (RLS protected)
-    if (user) {
-      loadReadingProgress();
-    }
-  }, [loadReadingProgress, user]);
+    // Always load local cache; remote load runs only when user exists.
+    loadReadingProgress();
+  }, [loadReadingProgress]);
 
   const loadListsForSave = useCallback(async () => {
     if (!user) return;
@@ -207,6 +345,7 @@ export default function ReaderScreen() {
   }, [loadListsForSave, showTranslateSheet]);
 
   const flushReadingProgress = useCallback(async (cfi: string) => {
+    void setCachedLastCfi(user?.id ?? null, bookId, cfi);
     if (!user || !readingProgressEnabled) return;
     try {
       await upsertUserBook({
@@ -231,8 +370,9 @@ export default function ReaderScreen() {
   }, [bookId, readingProgressEnabled, user]);
 
   const scheduleSaveReadingProgress = useCallback((cfi: string) => {
-    if (!cfi || !user || !readingProgressEnabled) return;
     if (lastSavedCfi.current === cfi) return;
+    void setCachedLastCfi(user?.id ?? null, bookId, cfi);
+    if (!cfi || !user || !readingProgressEnabled) return;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -245,10 +385,7 @@ export default function ReaderScreen() {
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
       const cfi = currentLocation?.start?.cfi;
-      if (cfi && user) {
-        // Fire and forget
-        void flushReadingProgress(cfi);
-      }
+      if (cfi) void flushReadingProgress(cfi);
     };
   }, [currentLocation?.start?.cfi, flushReadingProgress, user]);
 
@@ -360,19 +497,26 @@ export default function ReaderScreen() {
 
       setHighlights((prev) => [...prev, newHighlight]);
       await addUserBookHighlight(user.id, book.id, newHighlight);
+      countAllUserHighlights(user.id)
+        .then((c) => {
+          if (c >= 5) {
+            upgradePrompt.requestShow(user.id, 'highlights_5', { isGuest }).catch(() => {});
+          }
+        })
+        .catch(() => {});
       setSelection(null);
     } catch (error) {
       logger.error('Failed to save highlight:', error);
       Alert.alert('Error', 'Failed to save highlight');
     }
-  }, [addAnnotation, addUserBookHighlight, book, highlightsEnabled, removeAnnotationByCfi, selection, user]);
+  }, [addAnnotation, addUserBookHighlight, book, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, upgradePrompt, user]);
 
   const handleJumpToHighlight = useCallback((cfiRange: string) => {
     if (!cfiRange) return;
     try {
       goToLocation?.(cfiRange);
     } catch (e) {}
-    setHighlightsVisible(false);
+    setNavVisible(false);
   }, [goToLocation]);
 
   const handleDeleteHighlight = useCallback(async (h: UserBookHighlight) => {
@@ -461,13 +605,20 @@ export default function ReaderScreen() {
 
       touchVocabList(selectedListId).catch(() => {});
       Alert.alert('Success', 'Added to study list');
+      countAllStudyWords(user.id)
+        .then((c) => {
+          if (c >= 10) {
+            upgradePrompt.requestShow(user.id, 'vocab_10', { isGuest }).catch(() => {});
+          }
+        })
+        .catch(() => {});
       setShowTranslateSheet(false);
       setSelection(null);
     } catch (error) {
       logger.error('Failed to save study word:', error);
       Alert.alert('Error', 'Failed to save word');
     }
-  }, [book, selectedListId, selection, targetLang, translation, user]);
+  }, [book, isGuest, selectedListId, selection, targetLang, translation, upgradePrompt, user]);
 
   const handleCloseToolbar = useCallback(() => {
     setSelection(null);
@@ -764,7 +915,7 @@ export default function ReaderScreen() {
       return;
     }
     // If nothing is selected and no sheet is open, treat center tap as "toggle nav"
-    if (!selection && !showTranslateSheet && !highlightsVisible) {
+    if (!selection && !showTranslateSheet) {
       setNavVisible((prev) => !prev);
       logger.debug('Single tap - toggling navigation', { next: !navVisible });
       return;
@@ -774,7 +925,7 @@ export default function ReaderScreen() {
     logger.debug('Single tap', selection ? '- clearing selection' : '- no selection');
     setSelection(null);
     setShowTranslateSheet(false);
-  }, [highlightsVisible, navVisible, selection, showTranslateSheet]);
+  }, [navVisible, selection, showTranslateSheet]);
 
   const handleReaderLongPress = useCallback(() => {
     logger.info('📱 Long press detected');
@@ -785,6 +936,15 @@ export default function ReaderScreen() {
     const cfi = readyLocation?.start?.cfi;
     const nextTotal = typeof readyTotalLocations === 'number' ? readyTotalLocations : 0;
     const nextPage = typeof idx === 'number' ? idx + 1 : 1;
+    const displayedPage = readyLocation?.start?.displayed?.page;
+    const displayedTotal = readyLocation?.start?.displayed?.total;
+    if (typeof readyTotalLocations === 'number' && Number.isFinite(readyTotalLocations)) {
+      lastTotalLocsRef.current = readyTotalLocations;
+    }
+    {
+      const p = normalizeProgress(readyProgress);
+      if (p !== null) lastProgressRef.current = p;
+    }
 
     logger.info('✅ Reader ready', {
       totalLocations: nextTotal,
@@ -793,13 +953,20 @@ export default function ReaderScreen() {
       displayed: readyLocation?.start?.displayed,
     });
 
-    // Prefer locations[]-based page numbers when available (matches Go To Page)
-    const locIdx = cfi ? cfiToIndexRef.current.get(cfi) : undefined;
-    if (typeof locIdx === 'number') {
-      setCurrentPage(locIdx + 1);
+    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
+
+    // Global pages: estimate from totalLocations + screen-derived locs-per-page.
+    if (nextTotal > 0) {
+      const globalTotal = computeGlobalTotalPages();
+      const locIdx0 = typeof idx === 'number' ? idx : 0;
+      if (globalTotal) {
+        const pageFromIdx = computeGlobalPageFromLocationIndex(locIdx0, nextTotal, globalTotal);
+        setTotalPages(globalTotal);
+        setCurrentPage(pageFromIdx);
+        setPageLoading(false);
+      }
     } else {
-      if (nextTotal > 0 && totalPages === 0) setTotalPages(nextTotal);
-      setCurrentPage(Math.max(1, nextPage));
+      setPageLoading(true);
     }
     setReaderReady(true);
 
@@ -807,7 +974,7 @@ export default function ReaderScreen() {
       // Save immediately on ready (covers cases where user opens and closes quickly)
       scheduleSaveReadingProgress(cfi);
     }
-  }, [scheduleSaveReadingProgress, totalPages]);
+  }, [computeChapterLeft, computeGlobalPageFromLocationIndex, computeGlobalTotalPages, locationCfis.length, normalizeProgress, scheduleSaveReadingProgress]);
 
   const handleLocationChange = useCallback((
     totalLocs: number,
@@ -815,26 +982,70 @@ export default function ReaderScreen() {
     progress: number,
     currentSection: Section | null
   ) => {
+    logger.info('Location change', {
+      totalLocs,
+      progress,
+      sectionHref: currentSection?.href ?? null,
+      startLocationIndex: loc?.start?.location ?? null,
+      cfi: loc?.start?.cfi ?? null,
+      displayed: loc?.start?.displayed ?? null,
+    });
     const idx = loc?.start?.location;
     const cfi = loc?.start?.cfi;
     const nextTotal = typeof totalLocs === 'number' ? totalLocs : 0;
     const nextPage = typeof idx === 'number' ? idx + 1 : 1;
+    const displayedPage = loc?.start?.displayed?.page;
+    const displayedTotal = loc?.start?.displayed?.total;
+    logger.info('Location displayed', { displayedPage, displayedTotal });
+    {
+      const p = normalizeProgress(progress);
+      if (p !== null) lastProgressRef.current = p;
+    }
+    if (typeof totalLocs === 'number' && Number.isFinite(totalLocs)) {
+      lastTotalLocsRef.current = totalLocs;
+    }
 
     let pageForLog: number | null = null;
 
-    // Prefer locations[]-based index so Navigate's "Go to page" matches the reader counter
-    const locIdx = cfi ? cfiToIndexRef.current.get(cfi) : undefined;
-    if (typeof locIdx === 'number') {
-      pageForLog = locIdx + 1;
-      setCurrentPage(pageForLog);
-      if (locationCfis.length > 0) setTotalPages(locationCfis.length);
+    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
+
+    const globalTotal = computeGlobalTotalPages();
+    if (globalTotal) {
+      const locIdx0 = typeof idx === 'number' ? idx : 0;
+      const pageFromIdx = computeGlobalPageFromLocationIndex(locIdx0, nextTotal > 0 ? nextTotal : (lastTotalLocsRef.current ?? 0), globalTotal);
+      setTotalPages(globalTotal);
+      setCurrentPage(pageFromIdx);
+      setPageLoading(false);
+      pageForLog = pageFromIdx;
     } else {
-      // Fallback when CFIs haven't been indexed yet
-      if (nextTotal > 0 && totalPages === 0) setTotalPages(nextTotal);
-      const clamped = nextTotal > 0 ? Math.max(1, Math.min(nextPage, nextTotal)) : Math.max(1, nextPage);
-      pageForLog = clamped;
-      setCurrentPage(clamped);
+      setPageLoading(true);
     }
+
+    // Adapt locations-per-page estimate using consecutive displayed.page increments within same section.
+    const sectionHref = (currentSection?.href ?? null) as string | null;
+    if (
+      typeof displayedPage === 'number' &&
+      sectionHref &&
+      lastSectionHrefRef.current === sectionHref &&
+      typeof lastLocIdxRef.current === 'number' &&
+      typeof lastDisplayedPageRef.current === 'number'
+    ) {
+      const nextLocIdx0 = typeof idx === 'number' ? idx : null;
+      if (typeof nextLocIdx0 !== 'number') {
+        // Can't learn without a numeric location index
+        return;
+      }
+      const dLoc = nextLocIdx0 - lastLocIdxRef.current;
+      const dPage = displayedPage - lastDisplayedPageRef.current;
+      if (dLoc > 0 && dPage > 0) {
+        const sample = dLoc / dPage;
+        const next = avgLocsPerPageRef.current * 0.9 + sample * 0.1;
+        avgLocsPerPageRef.current = Math.max(8, Math.min(200, next));
+      }
+    }
+    if (typeof idx === 'number') lastLocIdxRef.current = idx;
+    lastDisplayedPageRef.current = typeof displayedPage === 'number' ? displayedPage : null;
+    lastSectionHrefRef.current = (currentSection?.href ?? null) as string | null;
 
     if (cfi) {
       scheduleSaveReadingProgress(cfi);
@@ -848,15 +1059,37 @@ export default function ReaderScreen() {
       sectionHref: currentSection?.href ?? null,
       displayed: loc?.start?.displayed,
     });
-  }, [locationCfis.length, scheduleSaveReadingProgress, totalPages]);
+  }, [computeChapterLeft, computeGlobalPageFromLocationIndex, computeGlobalTotalPages, normalizeProgress, scheduleSaveReadingProgress]);
+
+  // If onLocationChange doesn't fire reliably (some engine + gesture combos),
+  // keep the global counter in sync via reader context.
+  useEffect(() => {
+    const total = computeGlobalTotalPages();
+    if (!total) return;
+    const idx = currentLocation?.start?.location;
+    const totalLocs = typeof lastTotalLocsRef.current === 'number' ? lastTotalLocsRef.current : (locationCfis.length > 0 ? locationCfis.length : 0);
+    const page = computeGlobalPageFromLocationIndex(typeof idx === 'number' ? idx : 0, totalLocs, total);
+    setTotalPages(total);
+    setCurrentPage(page);
+    setPageLoading(false);
+  }, [computeGlobalPageFromLocationIndex, computeGlobalTotalPages, currentLocation?.start?.location, locationCfis.length]);
 
   const handleLocationsReady = useCallback((epubKey: string, locs: string[]) => {
     logger.info('📍 Locations ready:', { epubKey, totalLocations: locs.length });
-    // Use actual locations array length as our canonical "page" count for Navigate + Go To Page
-    if (locs.length > 0) setTotalPages(locs.length);
     setLocationCfis(locs);
-    setCurrentPage(prev => Math.max(1, prev));
-  }, []);
+    // Ensure we lock in a stable total page count once locations are ready.
+    if (locs.length > 0 && (!globalTotalPagesRef.current || globalTotalPagesRef.current <= 0)) {
+      const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
+      globalTotalPagesRef.current = Math.max(1, Math.round(locs.length / perPage));
+    }
+    const total = computeGlobalTotalPages();
+    if (!total) return;
+    const idx = currentLocation?.start?.location;
+    const page = computeGlobalPageFromLocationIndex(typeof idx === 'number' ? idx : 0, locs.length, total);
+    setTotalPages(total);
+    setCurrentPage(page);
+    setPageLoading(false);
+  }, [computeGlobalPageFromLocationIndex, computeGlobalTotalPages, currentLocation?.start?.location]);
 
   const handlePanGesture = useCallback((event: any) => {
     const { state, translationX, velocityX, x, y } = event.nativeEvent;
@@ -902,8 +1135,24 @@ export default function ReaderScreen() {
       tapNavJustMade.current = false;
     }, 300);
 
-    logger.info('👈 Tap left edge - previous page');
-    goPrevious?.();
+    logger.info('👈 Tap left edge - previous page', { hasGoPrevious: Boolean(goPrevious), atStart: Boolean(atStart) });
+    if (!goPrevious) return;
+    goPrevious();
+    setTimeout(() => {
+      try {
+        const next = getCurrentLocation ? getCurrentLocation() : null;
+        if (next && typeof (next as any).then === 'function') {
+          (next as unknown as Promise<Location>).then((l: Location) =>
+            logger.debug('After goPrevious: currentLocation', { cfi: l?.start?.cfi ?? null })
+          );
+        } else if (next) {
+          const l = next as Location;
+          logger.debug('After goPrevious: currentLocation', { cfi: l?.start?.cfi ?? null });
+        }
+      } catch {
+        // ignore
+      }
+    }, 150);
   }, [goPrevious, navVisible, selection, showTranslateSheet]);
 
   const handleTapRightEdge = useCallback(() => {
@@ -924,36 +1173,47 @@ export default function ReaderScreen() {
       tapNavJustMade.current = false;
     }, 300);
 
-    logger.info('👉 Tap right edge - next page');
-    goNext?.();
+    logger.info('👉 Tap right edge - next page', { hasGoNext: Boolean(goNext), atEnd: Boolean(atEnd) });
+    if (!goNext) return;
+    goNext();
+    setTimeout(() => {
+      try {
+        const next = getCurrentLocation ? getCurrentLocation() : null;
+        if (next && typeof (next as any).then === 'function') {
+          (next as unknown as Promise<Location>).then((l: Location) =>
+            logger.debug('After goNext: currentLocation', { cfi: l?.start?.cfi ?? null })
+          );
+        } else if (next) {
+          const l = next as Location;
+          logger.debug('After goNext: currentLocation', { cfi: l?.start?.cfi ?? null });
+        }
+      } catch {
+        // ignore
+      }
+    }, 150);
   }, [goNext, navVisible, selection, showTranslateSheet]);
 
-  // Update page from currentLocation
   useEffect(() => {
-    // Fallback: if callbacks ever fail, keep counter in sync with reader context.
-    const cfi = currentLocation?.start?.cfi;
-    const locIdx = cfi ? cfiToIndexRef.current.get(cfi) : undefined;
-    if (typeof locIdx === 'number') {
-      setCurrentPage(locIdx + 1);
-      if (locationCfis.length > 0) setTotalPages(locationCfis.length);
-      return;
-    }
+    // Fallback: keep chapter-left percent in sync from reader context.
+    const displayedPage = currentLocation?.start?.displayed?.page;
+    const displayedTotal = currentLocation?.start?.displayed?.total;
+    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
+  }, [computeChapterLeft, currentLocation?.start?.displayed?.page, currentLocation?.start?.displayed?.total]);
 
-    const idx = currentLocation?.start?.location;
-    if (typeof idx === 'number') {
-      const pageNum = idx + 1;
-      if (totalLocations > 0 && totalPages === 0) setTotalPages(totalLocations);
-      setCurrentPage(pageNum);
-    }
-  }, [currentLocation, locationCfis.length, totalLocations, totalPages]);
+  useEffect(() => {
+    if (!readerReady) return;
+    const pending = pendingRemoteCfiRef.current;
+    if (!pending) return;
+    pendingRemoteCfiRef.current = null;
+    goToLocation(pending);
+  }, [goToLocation, readerReady]);
 
   if (!book) {
     return <View style={styles.container} />;
   }
 
-  // Ensure we have a saved starting point before mounting the Reader.
-  // Reader uses `initialLocation` during its onReady flow; changing it after mount can be unreliable.
-  if (user && !progressLoaded) {
+  // Ensure we've checked local resume state before mounting the Reader.
+  if (!progressLoaded) {
     return <View style={styles.container} />;
   }
 
@@ -1022,15 +1282,12 @@ export default function ReaderScreen() {
         <ReaderOverlays
           currentPage={currentPage}
           totalPages={totalPages}
-          highlightsCount={highlights.length}
-          onPressHighlights={() => {
-            if (!highlightsEnabled) {
-              Alert.alert('Highlights Unavailable', 'Please apply the DB migration to enable persistent highlights.');
-              return;
-            }
-            setHighlightsVisible(true);
+          pageLoading={pageLoading}
+          chapterLeftPct={chapterLeftPct}
+          onPressNavigate={() => {
+            setNavInitialTab('navigate');
+            setNavVisible(true);
           }}
-          onPressNavigate={() => setNavVisible(true)}
         />
 
           {/* Custom Selection Toolbar */}
@@ -1071,30 +1328,94 @@ export default function ReaderScreen() {
 
           <BookNavigationSheet
             visible={navVisible}
+            initialTab={navInitialTab}
             currentIndex={Math.max(0, currentPage - 1)}
             total={totalPages}
             tocItems={tocItems}
             onClose={() => setNavVisible(false)}
             onGoToIndex={(idx) => {
-              if (locationCfis.length === 0) {
-                logger.debug('Navigate: locations not ready yet - ignoring Go To Page');
+              let locs = Array.isArray(locationCfis) ? locationCfis : [];
+              if (locs.length === 0) {
+                const fromCtx = getLocations?.();
+                if (Array.isArray(fromCtx) && fromCtx.length > 0) {
+                  locs = fromCtx as string[];
+                  setLocationCfis(locs);
+                }
+              }
+              if (locs.length === 0) {
+                logger.info('Navigate: locations not ready yet - cannot go to page', { idx, totalPages });
+                Alert.alert('Pages still loading', 'Please try again in a moment.');
                 return;
               }
-              const clamped = Math.max(0, Math.min(idx, locationCfis.length - 1));
-              const cfi = locationCfis[clamped];
-              goToLocation?.(cfi);
+
+              const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
+              const mapped = Math.round(idx * perPage);
+              const clamped = Math.max(0, Math.min(mapped, locs.length - 1));
+              const cfi = locs[clamped];
+
+              logger.info('Navigate: go to page', {
+                pageIndex0: idx,
+                totalPages,
+                perPage,
+                mappedLocIndex: clamped,
+                cfiPreview: typeof cfi === 'string' ? cfi.slice(0, 32) : null,
+              });
+
+              try {
+                goToLocation(cfi);
+              } catch (e) {
+                logger.error('Navigate: goToLocation failed', e);
+              }
             }}
             onGoToHref={(href) => {
-              goToLocation?.(href as any);
+              const raw = typeof href === 'string' ? href : '';
+              const noHash = raw.split('#')[0] ?? raw;
+              const trimmed = raw.trim();
+              const candidates = Array.from(
+                new Set(
+                  [trimmed, noHash, trimmed.startsWith('/') ? trimmed.slice(1) : trimmed, noHash.startsWith('/') ? noHash.slice(1) : noHash]
+                    .filter((x) => typeof x === 'string' && x.length > 0)
+                )
+              );
+
+              logger.info('Navigate: go to chapter', {
+                href: trimmed,
+                candidates,
+                currentHref: currentLocation?.start?.href ?? null,
+              });
+
+              // Try goToLocation first (epubjs rendition.display usually supports href strings even though typed as cfi)
+              for (const c of candidates) {
+                try {
+                  goToLocation(c as any);
+                  return;
+                } catch (e) {
+                  logger.warn('Navigate: goToLocation candidate failed', { candidate: c });
+                }
+              }
+
+              // Last resort: inject a display() call into the webview template (best-effort).
+              // The core template defines `book`, `rendition`, and `getCfiFromHref(book, href)` in JS scope.
+              const safeHref = trimmed.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+              injectJavascript?.(
+                `(function(){try{var href='${safeHref}';` +
+                  `if(typeof getCfiFromHref==='function' && typeof book!=='undefined' && book){` +
+                  `var cfi=getCfiFromHref(book, href); if(cfi){ rendition.display(cfi); return; }}` +
+                  `if(typeof rendition!=='undefined' && rendition && rendition.display){ rendition.display(href); }` +
+                  `}catch(e){}})();`
+              );
             }}
+            highlights={highlights}
+            onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
+            onDeleteHighlight={(h) => handleDeleteHighlight(h)}
           />
 
-          <ReaderHighlightsModal
-            visible={highlightsVisible}
-            highlights={highlights}
-            onClose={() => setHighlightsVisible(false)}
-            onJumpToCfiRange={(cfiRange) => handleJumpToHighlight(cfiRange)}
-            onDelete={handleDeleteHighlight}
+          <UpgradeAccountPrompt
+            visible={upgradePrompt.visible}
+            onClose={upgradePrompt.close}
+            onNotNow={() => {
+              if (user) upgradePrompt.dismiss(user.id).catch(() => {});
+            }}
           />
       </View>
     </GestureHandlerRootView>
@@ -1111,6 +1432,9 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     overflow: 'hidden',
+    // Reserve space for bottom overlays (e.g. Navigate button) so they don't cover text.
+    paddingBottom: spacing.xxl,
+    paddingTop: spacing.lg,
   },
   notice: {
     margin: 20,

@@ -5,7 +5,7 @@
  * Behaves like Library: search + filters + pagination, plus a CTA to discover new books.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, FlatList, StyleSheet, Alert, RefreshControl, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
@@ -22,6 +22,9 @@ import { colors, spacing } from '@/theme';
 import { logger } from '@/utils/logger';
 import { useAuthStore } from '@/state/useAuthStore';
 import { CenteredLoader } from '@/components/ui/CenteredLoader';
+import { Button } from '@/components/ui/Button';
+import { AdBanner } from '@/components/ads/AdBanner';
+import { buildAdRows, type LibraryRow } from '@/ads/buildAdRows';
 
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<TabParamList>, NativeStackNavigationProp<RootStackParamList>>;
 
@@ -40,6 +43,7 @@ export default function HistoryScreen() {
   const [sourceLang, setSourceLang] = useState<string>('');
   const [authorFilter, setAuthorFilter] = useState<string>('');
   const [subjectFilter, setSubjectFilter] = useState<string>('');
+  const hasLoadedOnceRef = useRef(false);
 
   const pageSize = 15; // 5 rows × 3 columns
   const requestSeq = useRef(0);
@@ -54,26 +58,46 @@ export default function HistoryScreen() {
     return { columns, itemWidth, horizontalPadding, columnGap };
   }, [windowWidth]);
 
+  const rows: LibraryRow[] = useMemo(() => {
+    return buildAdRows(books, { columns: grid().columns, adEveryRows: 4 });
+  }, [books, grid]);
+
   useEffect(() => {
     booksRef.current = books;
   }, [books]);
 
   const loadBooks = useCallback(
-    async (reset: boolean = false) => {
+    async (
+      reset: boolean = false,
+      opts?: {
+        runCleanup?: boolean;
+        override?: { search?: string; language?: string; author?: string; subject?: string };
+      }
+    ) => {
       const seq = ++requestSeq.current;
       try {
-        if (!user) return;
+        if (!user) {
+          setLoading(false);
+          setLoadingMore(false);
+          return;
+        }
         if (reset) {
           setLoading(true);
           setHasMore(true);
         }
 
+        const o = opts?.override;
+        const effectiveSearch = o?.search ?? search;
+        const effectiveLang = o?.language ?? sourceLang;
+        const effectiveAuthor = o?.author ?? authorFilter;
+        const effectiveSubject = o?.subject ?? subjectFilter;
+
         const offset = reset ? 0 : booksRef.current.length;
         const data = await fetchHistoryBooks(user.id, {
-          search,
-          language: sourceLang.trim().length > 0 ? sourceLang.trim() : undefined,
-          author: authorFilter.trim().length > 0 ? authorFilter.trim() : undefined,
-          subject: subjectFilter.trim().length > 0 ? subjectFilter.trim() : undefined,
+          search: effectiveSearch,
+          language: effectiveLang.trim().length > 0 ? effectiveLang.trim() : undefined,
+          author: effectiveAuthor.trim().length > 0 ? effectiveAuthor.trim() : undefined,
+          subject: effectiveSubject.trim().length > 0 ? effectiveSubject.trim() : undefined,
           limit: pageSize,
           offset,
         });
@@ -90,10 +114,11 @@ export default function HistoryScreen() {
         if (data.length < pageSize) setHasMore(false);
 
         // Cache cleanup is expensive/noisy; run only on full refresh
-        if (reset) {
+        if (reset && (opts?.runCleanup ?? hasLoadedOnceRef.current === false)) {
           const validBookIds = data.map((b) => b.id);
           cleanupOrphanedCache(validBookIds).catch((err) => logger.warn('Cache cleanup failed', err));
         }
+        hasLoadedOnceRef.current = true;
       } catch (e) {
         logger.error('Failed to load history:', e);
         Alert.alert('Error', 'Failed to load history');
@@ -110,19 +135,19 @@ export default function HistoryScreen() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => loadBooks(true), 300);
+    const t = setTimeout(() => loadBooks(true, { runCleanup: false, override: { search } }), 250);
     return () => clearTimeout(t);
-  }, [authorFilter, search, sourceLang, subjectFilter]);
+  }, [search]);
 
   useFocusEffect(
     useCallback(() => {
-      loadBooks(true);
+      loadBooks(true, { runCleanup: false });
     }, [loadBooks])
   );
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadBooks(true);
+    await loadBooks(true, { runCleanup: true });
     setRefreshing(false);
   }, [loadBooks]);
 
@@ -139,17 +164,24 @@ export default function HistoryScreen() {
     [navigation]
   );
 
-  if (loading) {
-    return <CenteredLoader />;
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <EmptyState message="Sign in to see your reading history." />
+        <View style={styles.footerCta}>
+          <Button label="Sign in" variant="primary" onPress={() => navigation.navigate('Auth', { mode: 'signin' })} />
+        </View>
+      </View>
+    );
   }
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={books}
-        keyExtractor={(item) => item.id}
-        numColumns={grid().columns}
-        columnWrapperStyle={[styles.row, { gap: grid().columnGap }]}
+        data={rows}
+        keyExtractor={(item) => item.key}
+        numColumns={1}
+        keyboardShouldPersistTaps="always"
         ListHeaderComponent={
           <LibraryHeader
             title="History"
@@ -158,20 +190,31 @@ export default function HistoryScreen() {
             search={search}
             onChangeSearch={setSearch}
             language={sourceLang}
-            onChangeLanguage={setSourceLang}
             author={authorFilter}
-            onChangeAuthor={setAuthorFilter}
             subject={subjectFilter}
-            onChangeSubject={setSubjectFilter}
-            onReset={() => {
-              setSearch('');
+            onApplyFilters={({ language, author, subject }) => {
+              setSourceLang(language);
+              setAuthorFilter(author);
+              setSubjectFilter(subject);
+              loadBooks(true, { runCleanup: true, override: { language, author, subject } });
+            }}
+            onResetFilters={() => {
               setSourceLang('');
               setAuthorFilter('');
               setSubjectFilter('');
+              loadBooks(true, { runCleanup: true, override: { language: '', author: '', subject: '' } });
             }}
           />
         }
-        ListEmptyComponent={<EmptyState message="No reading history yet" />}
+        ListEmptyComponent={
+          loading ? (
+            <View style={styles.footer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : (
+            <EmptyState message="No reading history yet" />
+          )
+        }
         ListFooterComponent={
           loadingMore ? (
             <View style={styles.footer}>
@@ -179,12 +222,30 @@ export default function HistoryScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <View style={{ width: grid().itemWidth, marginBottom: spacing.lg }}>
-            <BookGridItem book={item} onPress={handleBookPress} />
-          </View>
-        )}
-        contentContainerStyle={[styles.list, { paddingHorizontal: grid().horizontalPadding }]}
+        renderItem={({ item }) => {
+          if (item.type === 'ad') {
+            return (
+              <View style={[styles.adRow, { paddingHorizontal: grid().horizontalPadding }]}>
+                <AdBanner />
+              </View>
+            );
+          }
+          return (
+            <View style={[styles.bookRow, { paddingHorizontal: grid().horizontalPadding, gap: grid().columnGap }]}>
+              {item.items.map((b) => (
+                <View key={b.id} style={{ width: grid().itemWidth, marginBottom: spacing.lg }}>
+                  <BookGridItem book={b} onPress={handleBookPress} />
+                </View>
+              ))}
+              {item.items.length < grid().columns
+                ? Array.from({ length: grid().columns - item.items.length }).map((_, i) => (
+                    <View key={`spacer-${i}`} style={{ width: grid().itemWidth, marginBottom: spacing.lg }} />
+                  ))
+                : null}
+            </View>
+          );
+        }}
+        contentContainerStyle={styles.list}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.6}
         refreshControl={
@@ -205,11 +266,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  footerCta: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
   list: {
     paddingBottom: spacing.lg,
   },
-  row: {
+  bookRow: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  adRow: {
+    marginBottom: spacing.lg,
   },
   footer: {
     paddingVertical: spacing.lg,

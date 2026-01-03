@@ -18,12 +18,13 @@ import { useAuthStore } from '@/state/useAuthStore';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { checkIsAdmin } from '@/supabase/queries';
+import { Button } from '@/components/ui/Button';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export default function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
-  const { user } = useAuthStore();
+  const { user, isGuest } = useAuthStore();
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -44,26 +45,22 @@ export default function SettingsScreen() {
 
   return (
     <ScrollView style={styles.container}>
-      {/* Debug section - remove after testing */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Debug Info</Text>
-        <Text style={styles.sectionDescription}>
-          User ID: {user?.id || 'No user'}
-        </Text>
-        <Text style={styles.sectionDescription}>
-          Is Admin: {isAdmin ? 'Yes' : 'No'}
-        </Text>
+        <Text style={styles.sectionTitle}>Account</Text>
+        {isGuest ? (
+          <>
+            <Text style={styles.sectionDescription}>You’re using a guest account on this device.</Text>
+            <Button label="Sign in / Create account" variant="primary" style={styles.rectButton} onPress={() => navigation.navigate('Auth')} />
+          </>
+        ) : (
+          <Text style={styles.sectionDescription}>You’re signed in.</Text>
+        )}
       </View>
 
       {isAdmin && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Admin</Text>
-          <TouchableOpacity
-            style={styles.adminButton}
-            onPress={handleAdminPress}
-          >
-            <Text style={styles.adminButtonText}>🔧 Admin Panel</Text>
-          </TouchableOpacity>
+          <Button label="Admin Panel" variant="surface" onPress={handleAdminPress} />
         </View>
       )}
     </ScrollView>
@@ -88,17 +85,8 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.md,
   },
-  adminButton: {
-    backgroundColor: colors.primary,
-    padding: spacing.md,
+  rectButton: {
     borderRadius: 8,
-    alignItems: 'center',
-  },
-  adminButtonText: {
-    ...typography.body,
-    color: colors.background,
-    fontWeight: '600',
-    fontSize: 16,
   },
 });
 

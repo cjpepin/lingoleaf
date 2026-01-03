@@ -1,0 +1,149 @@
+-- Guest-first security hardening
+-- Tighten admin/library write policies so anonymous (guest) users cannot modify global content.
+-- Also add missing WITH CHECK clauses on UPDATE policies to prevent changing user_id ownership.
+
+-- -----------------------------
+-- books: lock writes to admins
+-- -----------------------------
+
+DROP POLICY IF EXISTS "Authenticated users can insert books" ON books;
+DROP POLICY IF EXISTS "Authenticated users can update books" ON books;
+DROP POLICY IF EXISTS "Authenticated users can delete books" ON books;
+
+CREATE POLICY "Admins can insert books"
+  ON books FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+CREATE POLICY "Admins can update books"
+  ON books FOR UPDATE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+CREATE POLICY "Admins can delete books"
+  ON books FOR DELETE
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+-- --------------------------------------------
+-- storage.objects: lock general-library writes
+-- --------------------------------------------
+
+-- Remove overly-broad policies (these allow any guest to upload/overwrite/delete library files)
+DROP POLICY IF EXISTS "Authenticated users can read books" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can upload to general-library" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can read from general-library" ON storage.objects;
+DROP POLICY IF EXISTS "Public can read from general-library" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can update general-library" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated users can delete from general-library" ON storage.objects;
+DROP POLICY IF EXISTS "Service role can manage books" ON storage.objects;
+
+-- Read: allow authenticated (including anonymous guests) to download library content.
+CREATE POLICY "Authenticated can read from general-library"
+  ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'general-library');
+
+-- Write: admins only (used by Admin upload screen)
+CREATE POLICY "Admins can upload to general-library"
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    bucket_id = 'general-library'
+    AND EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+CREATE POLICY "Admins can update general-library"
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (
+    bucket_id = 'general-library'
+    AND EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'general-library'
+    AND EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+CREATE POLICY "Admins can delete from general-library"
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'general-library'
+    AND EXISTS (
+      SELECT 1
+      FROM user_settings
+      WHERE user_settings.user_id = auth.uid()
+        AND user_settings.admin = true
+    )
+  );
+
+-- Service role: keep explicit policy (optional; service role typically bypasses RLS anyway)
+CREATE POLICY "Service role can manage general-library"
+  ON storage.objects FOR ALL
+  TO service_role
+  USING (bucket_id = 'general-library');
+
+-- ---------------------------------------------------------
+-- user_settings/user_books: add WITH CHECK on UPDATE policies
+-- ---------------------------------------------------------
+
+DROP POLICY IF EXISTS "Users can update their own settings" ON user_settings;
+CREATE POLICY "Users can update their own settings"
+  ON user_settings FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own user_books" ON user_books;
+CREATE POLICY "Users can update their own user_books"
+  ON user_books FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+

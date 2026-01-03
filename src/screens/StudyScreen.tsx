@@ -27,22 +27,20 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import type { StudyWord, VocabList } from '@/supabase/types';
 import {
-  countAllStudyWords,
-  countStudyWordsForList,
   createVocabList,
   deleteStudyWord,
   deleteVocabList,
-  fetchStudyWords,
-  fetchVocabLists,
   moveStudyWordToList,
   renameVocabList,
   touchVocabList,
 } from '@/supabase/queries';
 import { useAuthStore } from '@/state/useAuthStore';
+import { useStudyStore } from '@/state/useStudyStore';
 import { EmptyState } from '@/components/EmptyState';
 import { VocabListPickerModal } from '@/components/VocabListPickerModal';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
+import { Button } from '@/components/ui/Button';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -51,13 +49,14 @@ type ViewMode = 'lists' | 'detail';
 export default function StudyScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { user } = useAuthStore();
+  const studyStore = useStudyStore();
 
   const [mode, setMode] = useState<ViewMode>('lists');
   const [activeListId, setActiveListId] = useState<string | null>(null);
 
-  const [lists, setLists] = useState<VocabList[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [allCount, setAllCount] = useState(0);
+  const lists = studyStore.lists;
+  const counts = studyStore.counts;
+  const allCount = studyStore.allCount;
 
   const [words, setWords] = useState<StudyWord[]>([]);
   const wordsRef = useRef<StudyWord[]>([]);
@@ -81,32 +80,31 @@ export default function StudyScreen() {
   const activeList = useMemo(() => lists.find((l) => l.id === activeListId) ?? null, [activeListId, lists]);
   const activeListName = activeList?.name ?? 'List';
 
-  const loadListsAndCounts = useCallback(async (): Promise<void> => {
-    if (!user) return;
-    const nextLists = await fetchVocabLists(user.id);
-    setLists(nextLists);
+  const loadListsAndCounts = useCallback(
+    async (opts?: { force?: boolean }): Promise<void> => {
+      if (!user) return;
+      studyStore.hydrateForUser(user.id);
+      await studyStore.refreshListsAndCounts(user.id, opts);
+    },
+    [studyStore, user]
+  );
 
-    const [total, ...perListCounts] = await Promise.all([
-      countAllStudyWords(user.id),
-      ...nextLists.map((l) => countStudyWordsForList(user.id, l.id)),
-    ]);
-
-    const nextCounts: Record<string, number> = {};
-    nextLists.forEach((l, i) => {
-      nextCounts[l.id] = perListCounts[i] ?? 0;
-    });
-    setAllCount(total);
-    setCounts(nextCounts);
-  }, [user]);
-
-  const loadWordsForActiveList = useCallback(async (): Promise<void> => {
-    if (!user || !activeListId) return;
-    const data = await fetchStudyWords(user.id, activeListId);
-    setWords(data);
-  }, [activeListId, user]);
+  const loadWordsForActiveList = useCallback(
+    async (opts?: { force?: boolean }): Promise<void> => {
+      if (!user || !activeListId) return;
+      studyStore.hydrateForUser(user.id);
+      await studyStore.refreshWordsForList(user.id, activeListId, opts);
+      const cached = studyStore.getCachedWords(activeListId);
+      if (cached) setWords(cached);
+    },
+    [activeListId, studyStore, user]
+  );
 
   const reload = useCallback(async (): Promise<void> => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       await loadListsAndCounts();
@@ -121,7 +119,10 @@ export default function StudyScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
       reload();
     }, [reload, user])
   );
@@ -130,8 +131,8 @@ export default function StudyScreen() {
     if (!user) return;
     setRefreshing(true);
     try {
-      await loadListsAndCounts();
-      if (mode === 'detail') await loadWordsForActiveList();
+      await loadListsAndCounts({ force: true });
+      if (mode === 'detail') await loadWordsForActiveList({ force: true });
     } finally {
       setRefreshing(false);
     }
@@ -145,8 +146,9 @@ export default function StudyScreen() {
       if (!user) return;
       try {
         setLoading(true);
-        const data = await fetchStudyWords(user.id, listId);
-        setWords(data);
+        await studyStore.refreshWordsForList(user.id, listId, { force: false });
+        const cached = studyStore.getCachedWords(listId);
+        if (cached) setWords(cached);
       } catch (e) {
         logger.error('Failed to load list words', e);
         Alert.alert('Error', 'Failed to load words');
@@ -154,7 +156,7 @@ export default function StudyScreen() {
         setLoading(false);
       }
     },
-    [user]
+    [studyStore, user]
   );
 
   const handleStudyList = useCallback(
@@ -187,10 +189,11 @@ export default function StudyScreen() {
           try {
             await deleteStudyWord(word.id);
             setWords((prev) => prev.filter((w) => w.id !== word.id));
-            setAllCount((prev) => Math.max(0, prev - 1));
             if (activeListId) {
-              setCounts((prev) => ({ ...prev, [activeListId]: Math.max(0, (prev[activeListId] ?? 0) - 1) }));
+              studyStore.removeWordFromCache(activeListId, word.id);
+              studyStore.adjustListCount(activeListId, -1);
             }
+            studyStore.adjustAllCount(-1);
           } catch (e) {
             logger.error('Failed to delete word', e);
             Alert.alert('Error', 'Failed to delete word');
@@ -198,7 +201,7 @@ export default function StudyScreen() {
         },
       },
     ]);
-  }, [activeListId]);
+  }, [activeListId, studyStore]);
 
   const handleMoveWord = useCallback(
     async (word: StudyWord, toListId: string) => {
@@ -209,20 +212,20 @@ export default function StudyScreen() {
 
         if (activeListId && updated.list_id !== activeListId) {
           setWords((prev) => prev.filter((w) => w.id !== word.id));
-          setCounts((prev) => ({
-            ...prev,
-            [activeListId]: Math.max(0, (prev[activeListId] ?? 0) - 1),
-            [toListId]: (prev[toListId] ?? 0) + 1,
-          }));
+          studyStore.removeWordFromCache(activeListId, word.id);
+          studyStore.adjustListCount(activeListId, -1);
+          studyStore.adjustListCount(toListId, 1);
+          studyStore.upsertWordInCache(toListId, updated);
         } else {
           setWords((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+          studyStore.upsertWordInCache(toListId, updated);
         }
       } catch (e) {
         logger.error('Failed to move word', e);
         Alert.alert('Error', 'Failed to move word');
       }
     },
-    [activeListId]
+    [activeListId, studyStore]
   );
 
   const handleCreateList = useCallback(async () => {
@@ -231,13 +234,12 @@ export default function StudyScreen() {
     if (!name) return;
     try {
       const created = await createVocabList(user.id, name);
-      setLists((prev) => [...prev, created]);
-      setCounts((prev) => ({ ...prev, [created.id]: 0 }));
+      studyStore.addListToCache(created);
       setCreateName('');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to create list');
     }
-  }, [createName, user]);
+  }, [createName, studyStore, user]);
 
   const handleRenameList = useCallback(async () => {
     if (!renameTarget) return;
@@ -245,13 +247,13 @@ export default function StudyScreen() {
     if (!name) return;
     try {
       const updated = await renameVocabList(renameTarget.id, name);
-      setLists((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+      studyStore.updateListInCache(updated);
       setRenameTarget(null);
       setRenameName('');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to rename list');
     }
-  }, [renameName, renameTarget]);
+  }, [renameName, renameTarget, studyStore]);
 
   const handleConfirmDeleteList = useCallback(async () => {
     if (!deleteTarget) return;
@@ -261,14 +263,10 @@ export default function StudyScreen() {
     }
     try {
       await deleteVocabList(deleteTarget.id);
-      setLists((prev) => prev.filter((l) => l.id !== deleteTarget.id));
-      setCounts((prev) => {
-        const { [deleteTarget.id]: _drop, ...rest } = prev;
-        return rest;
-      });
+      studyStore.removeListFromCache(deleteTarget.id);
       setDeleteTarget(null);
       setDeleteConfirm('');
-      await loadListsAndCounts();
+      await loadListsAndCounts({ force: true });
       if (activeListId === deleteTarget.id) {
         setActiveListId(null);
         setWords([]);
@@ -278,7 +276,7 @@ export default function StudyScreen() {
       logger.error('Failed to delete list', e);
       Alert.alert('Error', 'Failed to delete list');
     }
-  }, [activeListId, deleteConfirm, deleteTarget, loadListsAndCounts]);
+  }, [activeListId, deleteConfirm, deleteTarget, loadListsAndCounts, studyStore]);
 
   const manageModals = (
     <>
@@ -361,6 +359,17 @@ export default function StudyScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <EmptyState message="Sign in to view and sync your vocab lists." />
+        <View style={styles.footerCta}>
+          <Button label="Sign in" variant="primary" onPress={() => navigation.navigate('Auth', { mode: 'signin' })} />
+        </View>
       </View>
     );
   }
@@ -512,6 +521,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  footerCta: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
   centered: {
     flex: 1,
     justifyContent: 'center',
@@ -561,9 +574,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md
   },
   createInput: {
     flex: 1,
@@ -592,7 +603,6 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
     borderRadius: 999,
     backgroundColor: colors.surface,
     borderWidth: 1,

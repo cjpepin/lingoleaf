@@ -6,7 +6,7 @@
  */
 
 import React from 'react';
-import { Pressable, Text, StyleSheet, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
+import { Pressable, Text, View, StyleSheet, type StyleProp, type ViewStyle, type TextStyle } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 
 type Variant = 'primary' | 'surface' | 'outline' | 'danger';
@@ -19,9 +19,22 @@ interface Props {
   variant?: Variant;
   size?: Size;
   style?: StyleProp<ViewStyle>;
+  textStyle?: StyleProp<TextStyle>;
+  leftIcon?: React.ReactNode;
+  rightIcon?: React.ReactNode;
 }
 
-export function Button({ label, onPress, disabled = false, variant = 'surface', size = 'md', style }: Props) {
+export function Button({
+  label,
+  onPress,
+  disabled = false,
+  variant = 'surface',
+  size = 'md',
+  style,
+  textStyle: textStyleOverride,
+  leftIcon,
+  rightIcon,
+}: Props) {
   const containerStyle: StyleProp<ViewStyle> = [
     styles.base,
     styles[size],
@@ -35,13 +48,18 @@ export function Button({ label, onPress, disabled = false, variant = 'surface', 
     styles[`text_${size}`],
     styles[`text_${variant}`],
     disabled ? styles.textDisabled : null,
+    textStyleOverride,
   ];
 
   return (
     <Pressable onPress={onPress} disabled={disabled} style={containerStyle}>
-      <Text style={textStyle} numberOfLines={1}>
-        {label}
-      </Text>
+      <View style={styles.inner}>
+        {leftIcon ? <View style={styles.icon}>{leftIcon}</View> : null}
+        <Text style={textStyle} numberOfLines={1}>
+          {label}
+        </Text>
+        {rightIcon ? <View style={styles.icon}>{rightIcon}</View> : null}
+      </View>
     </Pressable>
   );
 }
@@ -53,6 +71,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  icon: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sm: {
     paddingHorizontal: spacing.md,

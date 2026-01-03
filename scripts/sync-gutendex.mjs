@@ -108,6 +108,7 @@ async function main() {
         const formats = b?.formats;
         const epubUrl = pickBestEpubUrl(formats);
         const coverUrl = pickCoverUrl(formats);
+        const popularityScore = typeof b?.download_count === 'number' && Number.isFinite(b.download_count) ? b.download_count : null;
 
         return {
           // existing schema
@@ -117,6 +118,7 @@ async function main() {
           cover_path: null,
           description,
           source_lang: sourceLang,
+          popularity_score: popularityScore,
 
           // catalog metadata
           source: 'gutenberg',

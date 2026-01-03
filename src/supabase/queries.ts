@@ -5,7 +5,18 @@
 
 import { logger } from '@/utils/logger';
 import { supabase } from './client';
-import type { Book, Highlight, StudyWord, UserSettings, TranslationRequest, TranslationResponse, UserBook, VocabList, UserBookHighlight } from './types';
+import type {
+  Book,
+  Highlight,
+  StudyWord,
+  UserSettings,
+  TranslationRequest,
+  TranslationResponse,
+  UserBook,
+  VocabList,
+  UserBookHighlight,
+  UserPromptState,
+} from './types';
 
 // Books
 export interface BookFilters {
@@ -49,7 +60,10 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
   }
 
   // Stable ordering for pagination
-  query = query.order('created_at', { ascending: false }).order('id', { ascending: false });
+  query = query
+    .order('popularity_score', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
 
   if (typeof filters?.limit === 'number' && filters.limit > 0) {
     const offset = typeof filters.offset === 'number' && filters.offset >= 0 ? filters.offset : 0;
@@ -164,6 +178,55 @@ export async function countAllStudyWords(userId: string): Promise<number> {
 
   if (error) throw error;
   return count ?? 0;
+}
+
+export async function countAllUserHighlights(userId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('user_books')
+    .select('highlights')
+    .eq('user_id', userId);
+
+  if (error) throw error;
+  const rows = (data ?? []) as Array<{ highlights: unknown }>;
+  let total = 0;
+  rows.forEach((r) => {
+    if (Array.isArray(r.highlights)) total += r.highlights.length;
+  });
+  return total;
+}
+
+// Upgrade prompt state (anti-spam)
+export async function fetchUserPromptState(userId: string): Promise<UserPromptState | null> {
+  const { data, error } = await supabase
+    .from('user_prompt_state')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertUserPromptState(
+  state: Pick<UserPromptState, 'user_id'> &
+    Partial<Pick<UserPromptState, 'last_upgrade_prompt_at' | 'upgrade_prompt_dismiss_count' | 'upgrade_prompt_last_reason'>>
+): Promise<UserPromptState> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('user_prompt_state')
+    .upsert(
+      {
+        ...state,
+        updated_at: now,
+        created_at: now,
+      },
+      { onConflict: 'user_id' }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 }
 
 export async function createStudyWord(word: Omit<StudyWord, 'id' | 'created_at'>): Promise<StudyWord> {
@@ -295,7 +358,16 @@ export async function fetchUserSettings(userId: string): Promise<UserSettings | 
     .single();
   
   if (error && error.code !== 'PGRST116') throw error; // PGRST116 = not found
-  return data;
+  if (data) return data;
+
+  // First-time user (including anonymous guest) — create a default row so downstream
+  // code (admin checks, profile language prefs) doesn't spam warnings.
+  try {
+    return await upsertUserSettings({ user_id: userId });
+  } catch (e) {
+    // If insert is blocked/misconfigured, just fall back to null.
+    return null;
+  }
 }
 
 export async function checkIsAdmin(userId: string): Promise<boolean> {
@@ -315,7 +387,6 @@ export async function checkIsAdmin(userId: string): Promise<boolean> {
   }
   
   if (!data) {
-    logger.warn('No user_settings record found for user:', userId);
     return false;
   }
   

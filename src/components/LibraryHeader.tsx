@@ -4,23 +4,27 @@
  * Lightweight search + filter inputs for the Library screen.
  * Filters are applied by the parent (server-side via Supabase query).
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { OverlayModal } from '@/components/ui/OverlayModal';
 import { Button } from '@/components/ui/Button';
+
+interface Filters {
+  language: string;
+  author: string;
+  subject: string;
+}
 
 interface Props {
   title: string;
   search: string;
   onChangeSearch: (next: string) => void;
   language: string;
-  onChangeLanguage: (next: string) => void;
   author: string;
-  onChangeAuthor: (next: string) => void;
   subject: string;
-  onChangeSubject: (next: string) => void;
-  onReset: () => void;
+  onApplyFilters: (filters: Filters) => void;
+  onResetFilters: () => void;
   ctaLabel?: string;
   onPressCta?: () => void;
 }
@@ -30,23 +34,44 @@ export function LibraryHeader({
   search,
   onChangeSearch,
   language,
-  onChangeLanguage,
   author,
-  onChangeAuthor,
   subject,
-  onChangeSubject,
-  onReset,
+  onApplyFilters,
+  onResetFilters,
   ctaLabel,
   onPressCta,
 }: Props) {
-  const [filtersVisible, setFiltersVisible] = React.useState(false);
+  const [filtersVisible, setFiltersVisible] = useState(false);
+  const [draftLanguage, setDraftLanguage] = useState(language);
+  const [draftAuthor, setDraftAuthor] = useState(author);
+  const [draftSubject, setDraftSubject] = useState(subject);
 
   const handleReset = useCallback(() => {
-    onReset();
-  }, [onReset]);
+    setDraftLanguage('');
+    setDraftAuthor('');
+    setDraftSubject('');
+    onResetFilters();
+  }, [onResetFilters]);
 
-  const activeFilterCount =
-    (language.trim().length > 0 ? 1 : 0) + (author.trim().length > 0 ? 1 : 0) + (subject.trim().length > 0 ? 1 : 0);
+  const activeFilterCount = useMemo(() => {
+    return (
+      (language.trim().length > 0 ? 1 : 0) +
+      (author.trim().length > 0 ? 1 : 0) +
+      (subject.trim().length > 0 ? 1 : 0)
+    );
+  }, [author, language, subject]);
+
+  useEffect(() => {
+    if (!filtersVisible) return;
+    setDraftLanguage(language);
+    setDraftAuthor(author);
+    setDraftSubject(subject);
+  }, [author, filtersVisible, language, subject]);
+
+  const handleApply = useCallback(() => {
+    onApplyFilters({ language: draftLanguage, author: draftAuthor, subject: draftSubject });
+    setFiltersVisible(false);
+  }, [draftAuthor, draftLanguage, draftSubject, onApplyFilters]);
 
   return (
     <View style={styles.container}>
@@ -61,7 +86,6 @@ export function LibraryHeader({
 
       <View style={styles.searchRow}>
         <View style={styles.searchCol}>
-          <Text style={styles.label}>Search</Text>
           <TextInput
             value={search}
             onChangeText={onChangeSearch}
@@ -83,14 +107,14 @@ export function LibraryHeader({
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Filters</Text>
           <Pressable onPress={() => setFiltersVisible(false)}>
-            <Text style={styles.modalClose}>Done</Text>
+            <Text style={styles.modalClose}>Cancel</Text>
           </Pressable>
         </View>
 
         <Text style={styles.label}>Language</Text>
         <TextInput
-          value={language}
-          onChangeText={onChangeLanguage}
+          value={draftLanguage}
+          onChangeText={setDraftLanguage}
           placeholder="e.g., en, es"
           placeholderTextColor={colors.textSecondary}
           style={styles.input}
@@ -101,8 +125,8 @@ export function LibraryHeader({
 
         <Text style={styles.label}>Author</Text>
         <TextInput
-          value={author}
-          onChangeText={onChangeAuthor}
+          value={draftAuthor}
+          onChangeText={setDraftAuthor}
           placeholder="e.g., Tolstoy"
           placeholderTextColor={colors.textSecondary}
           style={styles.input}
@@ -112,8 +136,8 @@ export function LibraryHeader({
 
         <Text style={styles.label}>Subject / genre</Text>
         <TextInput
-          value={subject}
-          onChangeText={onChangeSubject}
+          value={draftSubject}
+          onChangeText={setDraftSubject}
           placeholder="e.g., Fiction, Poetry"
           placeholderTextColor={colors.textSecondary}
           style={styles.input}
@@ -123,7 +147,7 @@ export function LibraryHeader({
 
         <View style={styles.modalActions}>
           <Button label="Reset" onPress={handleReset} variant="surface" size="sm" />
-          <Button label="Done" onPress={() => setFiltersVisible(false)} variant="primary" size="sm" />
+          <Button label="Done" onPress={handleApply} variant="primary" size="sm" />
         </View>
       </OverlayModal>
     </View>
@@ -132,7 +156,7 @@ export function LibraryHeader({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
     backgroundColor: colors.background,
@@ -140,13 +164,13 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h2,
     color: colors.text,
-    marginBottom: spacing.xs,
   },
   titleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   ctaButton: {
     paddingVertical: spacing.sm,

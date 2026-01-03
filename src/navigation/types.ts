@@ -11,7 +11,7 @@ export type TabParamList = {
 };
 
 export type RootStackParamList = {
-  Auth: undefined;
+  Auth: { mode?: 'upgrade' | 'signin' } | undefined;
   MainTabs: undefined;
   Reader: { bookId: string; localPath: string };
   BookDetails: { bookId: string };
