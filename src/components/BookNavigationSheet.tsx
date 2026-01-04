@@ -2,14 +2,14 @@
  * BookNavigationSheet
  *
  * Reader navigation UI:
- * - Scrub progress (by location index)
  * - Jump to page number
  * - Jump to chapter (TOC)
+ * - Go back to previous spot (after a jump)
  *
  * Hidden by default; parent controls visibility.
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,56 +33,55 @@ type TabKey = 'navigate' | 'highlights';
 interface Props {
   visible: boolean;
   initialTab?: TabKey;
-  currentIndex: number; // 0-based
-  total: number; // total locations
+  currentPage: number;
+  totalPages: number;
   tocItems: TocItem[];
   highlights?: UserBookHighlight[];
+  canGoBack?: boolean;
   onClose: () => void;
-  onGoToIndex: (index: number) => void;
   onGoToHref: (href: string) => void;
+  onGoToPage: (page: number) => void;
+  onGoBack?: () => void;
   onJumpToHighlight?: (cfiRange: string) => void;
   onDeleteHighlight?: (highlight: UserBookHighlight) => void;
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
 }
 
 export function BookNavigationSheet({
   visible,
   initialTab = 'navigate',
-  currentIndex,
-  total,
+  currentPage,
+  totalPages,
   tocItems,
   highlights = [],
+  canGoBack = false,
   onClose,
-  onGoToIndex,
   onGoToHref,
+  onGoToPage,
+  onGoBack,
   onJumpToHighlight,
   onDeleteHighlight,
 }: Props) {
-  const [pageInput, setPageInput] = useState('');
   const [tab, setTab] = useState<TabKey>('navigate');
+  const [pageInput, setPageInput] = useState('');
 
   useEffect(() => {
     if (!visible) return;
     setTab(initialTab);
   }, [initialTab, visible]);
 
-  const currentPage = useMemo(() => (total > 0 ? currentIndex + 1 : 1), [currentIndex, total]);
-  const percent = useMemo(() => {
-    if (total <= 1) return 0;
-    return Math.round((currentIndex / (total - 1)) * 100);
-  }, [currentIndex, total]);
+  useEffect(() => {
+    if (!visible) return;
+    setPageInput('');
+  }, [visible]);
 
-  const handleJump = useCallback(() => {
+  const handleGoToPage = useCallback(() => {
     const n = parseInt(pageInput.trim(), 10);
-    if (!Number.isFinite(n) || total <= 0) return;
-    const idx = clamp(n - 1, 0, total - 1);
-    onGoToIndex(idx);
+    if (!Number.isFinite(n)) return;
+    if (totalPages > 0 && (n < 1 || n > totalPages)) return;
+    onGoToPage(n);
     setPageInput('');
     onClose();
-  }, [onClose, onGoToIndex, pageInput, total]);
+  }, [onClose, onGoToPage, pageInput, totalPages]);
 
   return (
     <OverlayModal visible={visible} onClose={onClose} cardStyle={styles.card}>
@@ -112,23 +111,32 @@ export function BookNavigationSheet({
 
       {tab === 'navigate' ? (
         <>
-          <Text style={styles.meta}>{total > 0 ? `${currentPage} / ${total} • ${percent}%` : 'Generating pages…'}</Text>
+          {canGoBack && onGoBack ? (
+            <>
+              <Button label="Go back to previous spot" onPress={() => { onGoBack(); onClose(); }} variant="outline" />
+              <View style={styles.sectionSpacer} />
+            </>
+          ) : null}
+
+          <Text style={styles.meta}>
+            {totalPages > 0 && currentPage > 0 ? `Page ${currentPage} / ${totalPages}` : 'Pages loading…'}
+          </Text>
 
           <Text style={styles.label}>Go to page</Text>
           <View style={styles.inputRow}>
             <TextInput
               value={pageInput}
               onChangeText={setPageInput}
-              placeholder={total > 0 ? `1–${total}` : 'Waiting…'}
+              placeholder={totalPages > 0 ? `1–${totalPages}` : 'Waiting…'}
               placeholderTextColor={colors.textSecondary}
               keyboardType="number-pad"
               style={styles.input}
-              editable={total > 0}
+              editable={totalPages > 0}
             />
             <Button
               label="Go"
-              onPress={handleJump}
-              disabled={total <= 0}
+              onPress={handleGoToPage}
+              disabled={totalPages <= 0}
               variant="primary"
               size="sm"
               style={styles.goButton}

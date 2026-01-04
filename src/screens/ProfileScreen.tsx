@@ -350,7 +350,13 @@ export default function ProfileScreen() {
           textStyle={styles.rectButtonText}
         />
       ) : (
-        <Button label="Sign out" variant="surface" style={styles.rectButton} onPress={handleSignOut} />
+        <Button 
+          label="Sign out" 
+          variant="primary" 
+          style={styles.rectButton} 
+          onPress={handleSignOut} 
+          textStyle={styles.rectButtonText}
+        />
       )}
 
       {/* Delete Account */}

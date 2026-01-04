@@ -35,6 +35,29 @@ type AuthRouteProp = RouteProp<RootStackParamList, 'Auth'>;
 
 WebBrowser.maybeCompleteAuthSession();
 
+function isUserCancelledAuth(error: unknown): boolean {
+  const code = (error as any)?.code;
+  // Apple (expo-apple-authentication) cancellation can come through as string or numeric.
+  if (code === 'ERR_CANCELED' || code === 'ERR_REQUEST_CANCELED' || code === 'CANCELED') return true;
+
+  const domain = ((error as any)?.domain as string | undefined) ?? '';
+  const nativeCode = (error as any)?.nativeCode;
+  // Some iOS auth errors surface as ASAuthorizationErrorDomain with numeric codes.
+  // 1001 is "canceled"; 1000 is "unknown" but can appear when the sheet is dismissed.
+  if (typeof domain === 'string' && domain.includes('ASAuthorizationErrorDomain')) {
+    if (nativeCode === 1001 || nativeCode === 1000) return true;
+  }
+
+  const message = ((error as any)?.message as string | undefined) ?? '';
+  if (typeof message === 'string') {
+    const m = message.toLowerCase();
+    if (m.includes('canceled') || m.includes('cancelled') || m.includes('cancel')) return true;
+    // iOS sometimes reports dismiss/cancel as an "unknown reason" authorization failure.
+    if (m.includes('authorization attempt') && m.includes('unknown reason')) return true;
+  }
+  return false;
+}
+
 export default function AuthScreen() {
   const route = useRoute<AuthRouteProp>();
   const navigation = useNavigation();
@@ -101,7 +124,7 @@ export default function AuthScreen() {
       await handlePostAuthMigration(fromUserId);
       navigation.goBack();
     } catch (e: any) {
-      if (e?.code === 'ERR_CANCELED') return;
+      if (isUserCancelledAuth(e)) return;
       logger.error('Apple sign-in failed', e);
       Alert.alert('Error', e?.message ?? 'Apple sign-in failed');
     } finally {
@@ -130,6 +153,8 @@ export default function AuthScreen() {
       return;
     }
 
+    const fromUserId = isGuest ? user?.id ?? null : null;
+
     setLoading(true);
     try {
       if (effectiveIsSignUp && isGuest) {
@@ -139,6 +164,8 @@ export default function AuthScreen() {
       } else {
         await signIn(email, password);
       }
+      // If the user was a guest and this flow produced a NEW user id, merge their guest data.
+      await handlePostAuthMigration(fromUserId);
       navigation.goBack();
     } catch (error: any) {
       logger.error('Auth error:', error);
@@ -182,7 +209,16 @@ export default function AuthScreen() {
                   Alert.alert('Google not configured', 'Missing Google OAuth client IDs in env vars.');
                   return;
                 }
-                googlePromptAsync().catch(() => {});
+                googlePromptAsync()
+                  .then((res) => {
+                    // Treat user cancellation/dismiss as a no-op.
+                    if (res.type === 'cancel' || res.type === 'dismiss') return;
+                  })
+                  .catch((e) => {
+                    if (isUserCancelledAuth(e)) return;
+                    // Avoid throwing an Alert here; handle real errors via the response effect / token flow.
+                    logger.error('Google prompt failed', e);
+                  });
               }}
               disabled={loading}
               style={styles.providerButton}

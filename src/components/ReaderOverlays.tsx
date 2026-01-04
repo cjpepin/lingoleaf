@@ -1,8 +1,7 @@
 /**
  * ReaderOverlays
  *
- * Small floating UI overlays for the reader:
- * - Page counter (top left)
+ * Small floating UI overlay for the reader:
  * - Navigate button (bottom center)
  */
 
@@ -28,10 +27,15 @@ export function ReaderOverlays({
   return (
     <>
       <View style={styles.pageIndicator}>
-        {totalPages <= 0 ? (
+        {currentPage <= 0 ? (
           <View style={styles.pageLoadingRow}>
             <ActivityIndicator size="small" color="#FFFFFF" />
             <Text style={styles.pageText}>Loading…</Text>
+          </View>
+        ) : totalPages <= 0 ? (
+          <View style={styles.pageLoadingRow}>
+            {pageLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+            <Text style={styles.pageText}>Page {currentPage}</Text>
           </View>
         ) : (
           <>

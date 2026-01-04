@@ -8,6 +8,12 @@ Format: `[Date] [Type] Description (Files affected)`
 
 ### Latest Updates
 
+- `[2026-01-04]` `[FIX]` Merge guest reading history/progress into signed-in account on login (handles `user_books` PK conflicts) (`supabase/functions/migrate-user-data/index.ts`, `src/screens/AuthScreen.tsx`)
+- `[2026-01-04]` `[FIX]` Treat Apple/Google auth cancel/dismiss as no-op (no error alert) (`src/screens/AuthScreen.tsx`)
+- `[2026-01-04]` `[FEAT]` Add Navigate modal “Go to page” + “Go back to previous spot” after jumps (`src/components/BookNavigationSheet.tsx`, `src/screens/ReaderScreen.tsx`)
+- `[2026-01-04]` `[FIX]` Ensure reader `onLocationChange` fires reliably on mid-chapter page turns by adding safe relocated bridge in injected JS (`src/reader/readerInjectedJavascript.ts`)
+- `[2026-01-04]` `[REFACTOR]` Remove reader page counter + page-based navigation; keep Navigate modal with Chapters + Highlights (`src/screens/ReaderScreen.tsx`, `src/components/ReaderOverlays.tsx`, `src/components/BookNavigationSheet.tsx`)
+- `[2026-01-04]` `[FIX]` Reader progress cache: preserve per-book page/total across saves, reset page counter between books, render reader without blocking on metadata, and improve TOC chapter navigation fallback (`src/utils/readerProgressCache.ts`, `src/screens/ReaderScreen.tsx`)
 - `[2026-01-02]` `[FEAT]` Guest-first auth: auto anonymous sessions, optional upgrade prompt with milestones + anti-spam, and Create Account entry point (`src/state/useAuthStore.ts`, `src/navigation/index.tsx`, `src/navigation/types.ts`, `src/screens/AuthScreen.tsx`, `src/screens/SettingsScreen.tsx`, `src/screens/ReaderScreen.tsx`, `src/components/UpgradeAccountPrompt.tsx`, `src/state/useUpgradePromptStore.ts`, `src/utils/readingEngagement.ts`, `src/supabase/queries.ts`, `src/supabase/types.ts`, `supabase/migrations/012_user_prompt_state.sql`)
 - `[2026-01-03]` `[FEAT]` Sort library by Gutendex popularity (download_count) (`supabase/migrations/014_books_popularity_score.sql`, `scripts/sync-gutendex.mjs`, `src/supabase/queries.ts`, `src/supabase/types.ts`)
 - `[2026-01-02]` `[SEC]` Lock down library writes for guest-first auth (admins-only writes for `books` + `storage.objects` in `general-library`, add missing `WITH CHECK` on user-owned update policies) (`supabase/migrations/013_guest_security_hardening.sql`)

@@ -4,8 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Alert, useWindowDimensions } from 'react-native';
-import { GestureHandlerRootView, PanGestureHandler, State } from 'react-native-gesture-handler';
+import { View, StyleSheet, Alert } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
@@ -16,8 +15,8 @@ import * as FileSystem from 'expo-file-system';
 import { SelectionToolbar } from '@/components/SelectionToolbar';
 import { TranslateSheet } from '@/components/TranslateSheet';
 import { BookNavigationSheet } from '@/components/BookNavigationSheet';
-import { ReaderEdgeTapOverlay } from '@/components/ReaderEdgeTapOverlay';
 import { ReaderOverlays } from '@/components/ReaderOverlays';
+import { ReaderEdgeTapOverlay } from '@/components/ReaderEdgeTapOverlay';
 import { UpgradeAccountPrompt } from '@/components/UpgradeAccountPrompt';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useUpgradePromptStore } from '@/state/useUpgradePromptStore';
@@ -39,10 +38,13 @@ import {
 } from '@/supabase/queries';
 import type { Book, VocabList, UserBookHighlight } from '@/supabase/types';
 import { normalizeText, validateSelectionLength, MAX_SELECTION_LENGTH } from '@/utils/normalize';
-import { colors, spacing, typography } from '@/theme';
+import { colors, spacing } from '@/theme';
 import { logger } from '@/utils/logger';
 import { addReadMinutes, incrementReadingSession } from '@/utils/readingEngagement';
-import { getCachedLastCfi, setCachedLastCfi } from '@/utils/readerProgressCache';
+import { getCachedLastCfi, setCachedLastCfi, setCachedLastPosition } from '@/utils/readerProgressCache';
+import { READER_INJECTED_JAVASCRIPT } from '@/reader/readerInjectedJavascript';
+import { READER_THEME } from '@/reader/readerTheme';
+import { useReaderStore } from '@/state/useReaderStore';
 
 type ReaderRouteProp = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -59,8 +61,8 @@ export default function ReaderScreen() {
   const { bookId, localPath } = route.params;
   const { user, isGuest } = useAuthStore();
   const { targetLang } = useSettingsStore();
+  const { currentPage, totalPages, pageLoading, chapterLeftPct, setCurrentPage, setTotalPages, setPageLoading, setChapterLeftPct } = useReaderStore();
   const upgradePrompt = useUpgradePromptStore();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   
   const [book, setBook] = useState<Book | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -75,105 +77,52 @@ export default function ReaderScreen() {
   const [highlightsEnabled, setHighlightsEnabled] = useState(true);
   const [navVisible, setNavVisible] = useState(false);
   const [navInitialTab, setNavInitialTab] = useState<'navigate' | 'highlights'>('navigate');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-  const [pageLoading, setPageLoading] = useState(true);
-  const [chapterLeftPct, setChapterLeftPct] = useState<number | null>(null);
-  const [locationCfis, setLocationCfis] = useState<string[]>([]);
   const [lastTouchPosition, setLastTouchPosition] = useState<{ x: number; y: number } | null>(null);
   const [initialLocation, setInitialLocation] = useState<string | undefined>(undefined);
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [readingProgressEnabled, setReadingProgressEnabled] = useState(true);
   const [readerReady, setReaderReady] = useState(false);
 
-  // Map CFIs to indices so we can have a stable "page number" based on onLocationsReady CFIs
-  const cfiToIndexRef = useRef<Map<string, number>>(new Map());
-  const avgLocsPerPageRef = useRef<number>(42); // start near typical ~400 pages for ~16k locations
-  const lastLocIdxRef = useRef<number | null>(null);
-  const lastDisplayedPageRef = useRef<number | null>(null);
-  const lastSectionHrefRef = useRef<string | null>(null);
-  const lastProgressRef = useRef<number | null>(null);
-  const lastTotalLocsRef = useRef<number | null>(null);
-  const globalTotalPagesRef = useRef<number | null>(null);
-
-  const clampNum = useCallback((n: number, min: number, max: number): number => {
-    return Math.max(min, Math.min(max, n));
-  }, []);
-
-  const normalizeProgress = useCallback(
-    (raw: number): number | null => {
-      if (!Number.isFinite(raw)) return null;
-      // Some callbacks report progress as 0..100 (percent). Others use 0..1.
-      const p = raw > 1.001 ? raw / 100 : raw;
-      return clampNum(p, 0, 1);
-    },
-    [clampNum]
-  );
-
-  const computeGlobalTotalPages = useCallback((): number | null => {
-    const fixed = globalTotalPagesRef.current;
-    if (typeof fixed === 'number' && Number.isFinite(fixed) && fixed > 0) return fixed;
-    const totalLocs =
-      typeof lastTotalLocsRef.current === 'number' && Number.isFinite(lastTotalLocsRef.current)
-        ? lastTotalLocsRef.current
-        : locationCfis.length > 0
-          ? locationCfis.length
-          : null;
-    if (!totalLocs || totalLocs <= 0) return null;
-    const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
-    const total = Math.max(1, Math.round(totalLocs / perPage));
-    globalTotalPagesRef.current = total;
-    return total;
-  }, [locationCfis.length]);
-
-  const computeGlobalPageFromLocationIndex = useCallback(
-    (locIdx0: number, totalLocs: number, totalPages: number): number => {
-      if (!Number.isFinite(locIdx0) || !Number.isFinite(totalLocs) || totalLocs <= 0 || totalPages <= 1) return 1;
-      const idx = clampNum(locIdx0, 0, Math.max(0, totalLocs - 1));
-      const ratio = totalLocs > 1 ? idx / (totalLocs - 1) : 0;
-      return clampNum(Math.round(ratio * (totalPages - 1)) + 1, 1, totalPages);
-    },
-    [clampNum]
-  );
-
-  const computeChapterLeft = useCallback((displayedPage: unknown, displayedTotal: unknown): number | null => {
-    if (typeof displayedTotal !== 'number' || !Number.isFinite(displayedTotal) || displayedTotal <= 0) return null;
-    if (typeof displayedPage !== 'number' || !Number.isFinite(displayedPage)) return null;
-    const page = clampNum(Math.round(displayedPage), 1, Math.round(displayedTotal));
-    const total = Math.max(1, Math.round(displayedTotal));
-    const left = Math.round(((total - page) / total) * 100);
-    return clampNum(left, 0, 100);
-  }, [clampNum]);
-  
   // Get reader navigation methods
   const {
-    goNext,
-    goPrevious,
     goToLocation,
-    getCurrentLocation,
-    getLocations,
     currentLocation,
     totalLocations,
-    progress: readerProgress,
-    atStart,
-    atEnd,
-    locations,
     toc,
     addAnnotation,
     removeAnnotationByCfi,
     injectJavascript,
+    goNext,
+    goPrevious,
+    atStart,
+    atEnd,
   } = useReader();
-  const panRef = useRef(null);
+
+  const tocItems = useMemo(() => {
+    const out: Array<{ label: string; href: string }> = [];
+    const walk = (items: any[]) => {
+      items.forEach((t) => {
+        if (t?.href) {
+          out.push({
+            label: typeof t.label === 'string' ? t.label : '',
+            href: typeof t.href === 'string' ? t.href : '',
+          });
+        }
+        if (Array.isArray(t?.subitems) && t.subitems.length > 0) {
+          walk(t.subitems);
+        }
+      });
+    };
+    walk((toc ?? []) as any[]);
+    return out;
+  }, [toc]);
 
   useEffect(() => {
-    const locArray: string[] = Array.isArray(locationCfis) ? locationCfis : [];
-    const map = new Map<string, number>();
-    locArray.forEach((cfi, i) => {
-      map.set(cfi, i);
-    });
-    cfiToIndexRef.current = map;
-  }, [locationCfis]);
-  
+    if (!readerReady) return;
+    if (!tocItems || tocItems.length === 0) return;
+    logger.info('📚 TOC loaded', { bookId, count: tocItems.length, sample: tocItems.slice(0, 8) });
+  }, [bookId, readerReady, tocItems]);
+
   // Track when selection just happened to prevent immediate clearing
   const selectionJustMade = useRef(false);
   const lastSelectionSource = useRef<'epubjs' | 'fallback' | null>(null);
@@ -182,6 +131,37 @@ export default function ReaderScreen() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sessionStartRef = useRef<number | null>(null);
   const pendingRemoteCfiRef = useRef<string | null>(null);
+  const resumeGuardRef = useRef<{ expectedCfi: string; expectedIndex0: number | null; expiresAt: number } | null>(null);
+  const previousNavRef = useRef<{ cfi: string; page: number | null } | null>(null);
+
+  // Reset per-book reader state so we never show stale page totals from the previous book.
+  useEffect(() => {
+    // Cancel any in-flight save timer from the previous book instance.
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    lastSavedCfi.current = null;
+    pendingRemoteCfiRef.current = null;
+    resumeGuardRef.current = null;
+
+    setSelection(null);
+    setShowTranslateSheet(false);
+    setTranslation(null);
+    setTranslateError(null);
+    setTranslating(false);
+
+    setNavVisible(false);
+    setNavInitialTab('navigate');
+
+    setInitialLocation(undefined);
+    setReaderReady(false);
+    setProgressLoaded(false);
+
+    // Reset overlay/progress UI (page counter)
+    setCurrentPage(0);
+    setTotalPages(0);
+    setPageLoading(true);
+    setChapterLeftPct(null);
+  }, [bookId]);
 
   useEffect(() => {
     logger.info('🔵 ReaderScreen mounted', { bookId, localPath });
@@ -203,17 +183,6 @@ export default function ReaderScreen() {
     verifyFile();
     loadBookData();
   }, [bookId]);
-
-  // Screen-size based starting guess for locations-per-page.
-  useEffect(() => {
-    const area = windowWidth * windowHeight;
-    if (!Number.isFinite(area) || area <= 0) return;
-    const baselineArea = 390 * 844; // iPhone 13-ish
-    const baselineLocsPerPage = 42;
-    const scale = area / baselineArea;
-    const guess = baselineLocsPerPage * scale;
-    avgLocsPerPageRef.current = Math.max(10, Math.min(120, guess));
-  }, [windowHeight, windowWidth]);
 
   // Engagement tracking for guest upgrade prompt
   useEffect(() => {
@@ -255,6 +224,41 @@ export default function ReaderScreen() {
       setInitialLocation(local.cfi);
       lastSavedCfi.current = local.cfi;
       logger.info('📌 Loaded local reading progress', { bookId, hasLocal: true });
+
+      // Hydrate page counter immediately from local cache (best-effort).
+      const hasTotal =
+        typeof local.totalLocations === 'number' && Number.isFinite(local.totalLocations) && local.totalLocations > 0;
+      const hasIndex = typeof local.locationIndex0 === 'number' && Number.isFinite(local.locationIndex0) && local.locationIndex0 >= 0;
+      if (typeof local.totalLocations === 'number' && Number.isFinite(local.totalLocations) && local.totalLocations > 0) {
+        setTotalPages(Math.floor(local.totalLocations));
+      }
+      if (typeof local.locationIndex0 === 'number' && Number.isFinite(local.locationIndex0) && local.locationIndex0 >= 0) {
+        logger.info('setCurrentPage 1');
+        setCurrentPage(Math.floor(local.locationIndex0) + 1);
+      }
+
+      // Guard against the common flicker where the reader briefly reports page 1 before jumping to the resume CFI.
+      resumeGuardRef.current = {
+        expectedCfi: local.cfi,
+        expectedIndex0: hasIndex ? Math.floor(local.locationIndex0 as number) : null,
+        expiresAt: Date.now() + 5000,
+      };
+
+      // If we have both page + total cached, we can render immediately without a loading state.
+      // Otherwise, keep the spinner until `onLocationChange` fills in missing data.
+      setPageLoading(!(hasTotal && hasIndex));
+    }
+    if (!local?.cfi) {
+      // No local cache. If there's also no remote resume, this is a first-time open and we start at the beginning.
+      // For signed-in users we wait for the remote fetch before assuming page 1.
+      if (!user || !readingProgressEnabled) {
+        logger.info('setCurrentPage 2');
+        setCurrentPage(1);
+      } else {
+        setCurrentPage(0);
+      }
+      setTotalPages(0);
+      setPageLoading(true);
     }
 
     // Let the reader mount as soon as local cache is checked.
@@ -284,7 +288,18 @@ export default function ReaderScreen() {
           }
           lastSavedCfi.current = remoteCfi;
           void setCachedLastCfi(userId, bookId, remoteCfi, remoteUpdatedAt > 0 ? remoteUpdatedAt : undefined);
+
+          // Remote resume can also cause a brief "page 1" relocation before the jump; guard similarly.
+          resumeGuardRef.current = {
+            expectedCfi: remoteCfi,
+            expectedIndex0: null,
+            expiresAt: Date.now() + 5000,
+          };
         }
+      } else if (!local?.cfi) {
+        // No remote resume and no local cache → first-time open → start at page 1.
+        logger.info('setCurrentPage 3');
+        setCurrentPage(1);
       }
     } catch (error) {
       const code = (error as any)?.code;
@@ -307,6 +322,15 @@ export default function ReaderScreen() {
       }
     }
   }, [bookId, goToLocation, highlightsEnabled, readerReady, readingProgressEnabled, user]);
+
+  // As soon as the reader reports total locations, populate totalPages so we don't show "1 / 0".
+  useEffect(() => {
+    if (typeof totalLocations !== 'number' || !Number.isFinite(totalLocations) || totalLocations <= 0) return;
+    if (totalPages > 0) return;
+    setTotalPages(Math.floor(totalLocations));
+    // If we already know the current page, we can stop showing the loading state.
+    if (currentPage > 0) setPageLoading(false);
+  }, [currentPage, setPageLoading, setTotalPages, totalLocations, totalPages]);
 
   useEffect(() => {
     // Always load local cache; remote load runs only when user exists.
@@ -636,6 +660,10 @@ export default function ReaderScreen() {
     // We use it as a "selection debug + fallback" bridge.
     try {
       const type = event?.type;
+      if (type === 'llNavDebug') {
+        logger.info('🧭 llNavDebug (web)', event);
+        return;
+      }
       if (type === 'llSelectionCleared') {
         logger.info('🧪 llSelectionCleared (web)', { sourceHref: event?.sourceHref });
         setSelection(null);
@@ -690,191 +718,42 @@ export default function ReaderScreen() {
     }
   }, [lastTouchPosition, selection]);
 
-  // Memoize theme to prevent re-renders
-  const readerTheme = useMemo(() => ({ 
-    body: { 
-      background: colors.background,
-      overflow: 'hidden',
-    } 
-  }), []);
+  const handleTapLeftEdge = useCallback(() => {
+    if (selection || showTranslateSheet || selectionJustMade.current) return;
+    if (navVisible) return;
+    if (atStart) return;
+    tapNavJustMade.current = true;
+    setTimeout(() => {
+      tapNavJustMade.current = false;
+    }, 250);
+    logger.info('👈 Tap left edge');
+    // Optimistic UI update: location events can lag briefly on resume.
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+      if (totalPages > 0) setPageLoading(false);
+    }
+    goPrevious?.();
+  }, [atStart, currentPage, goPrevious, navVisible, selection, setCurrentPage, setPageLoading, showTranslateSheet, totalPages]);
 
-  // Inject JavaScript - SIMPLIFIED to just suppress menu, let library handle selection
-  const injectedJavascript = useMemo(
-    () => `
-    (function() {
-      console.log('🚀 LinguaLeaf JS injected!');
+  const handleTapRightEdge = useCallback(() => {
+    if (selection || showTranslateSheet || selectionJustMade.current) return;
+    if (navVisible) return;
+    if (atEnd) return;
+    tapNavJustMade.current = true;
+    setTimeout(() => {
+      tapNavJustMade.current = false;
+    }, 250);
+    logger.info('👉 Tap right edge');
+    // Optimistic UI update: location events can lag briefly on resume.
+    if (currentPage > 0 && (totalPages <= 0 || currentPage < totalPages)) {
+      setCurrentPage(currentPage + 1);
+      if (totalPages > 0) setPageLoading(false);
+    }
+    goNext?.();
+  }, [atEnd, currentPage, goNext, navVisible, selection, setCurrentPage, setPageLoading, showTranslateSheet, totalPages]);
 
-      function postToRN(payload) {
-        try {
-          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-            window.ReactNativeWebView.postMessage(JSON.stringify(payload));
-          }
-        } catch (e) {}
-      }
-      
-      // Just apply CSS to suppress menu - let epub.js handle selection detection
-      function applyCSS(doc) {
-        if (doc.__llCSS) return;
-        
-        const style = doc.createElement('style');
-        style.textContent = \`
-          * {
-            -webkit-touch-callout: none !important;
-            -webkit-user-select: text !important;
-            user-select: text !important;
-          }
-          ::selection {
-            background: rgba(180, 215, 255, 0.4) !important;
-          }
-        \`;
-        (doc.head || doc.documentElement).appendChild(style);
-        
-        // Block context menu
-        doc.addEventListener('contextmenu', e => {
-          e.preventDefault();
-          return false;
-        }, { capture: true, passive: false });
-        
-        doc.__llCSS = true;
-        console.log('✅ CSS applied to', doc.location?.href || 'document');
-      }
-
-      function attachSelectionDebug(doc) {
-        if (doc.__llSelectionDebug) return;
-        try {
-          const handler = () => {
-            try {
-              const sel = doc.getSelection ? doc.getSelection() : null;
-              const text = sel ? (sel.toString() || '').trim() : '';
-              const href = doc.location?.href || null;
-
-              // Emit "selection cleared" once when transitioning from non-empty -> empty
-              if (!text) {
-                if (doc.__llHadSelection) {
-                  doc.__llHadSelection = false;
-                  doc.__llLastSelectionText = '';
-                  postToRN({
-                    type: 'llSelectionCleared',
-                    sourceHref: href,
-                  });
-                }
-                return;
-              }
-
-              // De-dupe repeated events (selectionchange can spam)
-              if (doc.__llLastSelectionText === text) return;
-              doc.__llLastSelectionText = text;
-              doc.__llHadSelection = true;
-
-              let rect = null;
-              let context = null;
-              try {
-                if (sel && sel.rangeCount > 0) {
-                  const range = sel.getRangeAt(0);
-                  const r = range.getBoundingClientRect();
-                  rect = { x: r.x, y: r.y, width: r.width, height: r.height };
-
-                  // Context: 1 word before + 1 word after, best-effort (works reliably for single text node selections)
-                  try {
-                    const sc = range.startContainer;
-                    const ec = range.endContainer;
-                    if (sc && ec && sc === ec && sc.nodeType === 3) {
-                      const full = (sc.textContent || '');
-                      const start = range.startOffset;
-                      const end = range.endOffset;
-
-                      const isWs = (ch) => ch === ' ' || ch === '\\n' || ch === '\\t' || ch === '\\r';
-
-                      let left = start;
-                      // Skip whitespace immediately before selection
-                      while (left > 0 && isWs(full[left - 1])) left--;
-                      // Consume one word before
-                      while (left > 0 && !isWs(full[left - 1])) left--;
-                      // Optional: also include any whitespace between word and selection
-                      while (left > 0 && isWs(full[left - 1])) left--;
-                      while (left > 0 && !isWs(full[left - 1])) left--;
-
-                      let right = end;
-                      // Skip whitespace immediately after selection
-                      while (right < full.length && isWs(full[right])) right++;
-                      // Consume one word after
-                      while (right < full.length && !isWs(full[right])) right++;
-
-                      const slice = full.slice(left, right).trim();
-                      if (slice && slice !== text) context = slice;
-                    }
-                  } catch (e) {}
-                }
-              } catch (e) {}
-
-              postToRN({
-                type: 'llSelectionDebug',
-                sourceHref: href,
-                text: text.length > 400 ? text.slice(0, 400) : text,
-                context,
-                rect,
-              });
-            } catch (e) {}
-          };
-
-          doc.addEventListener('selectionchange', handler, { passive: true });
-          doc.addEventListener('mouseup', handler, { passive: true });
-          doc.addEventListener('touchend', handler, { passive: true });
-          doc.__llHadSelection = false;
-          doc.__llLastSelectionText = '';
-          doc.__llSelectionDebug = true;
-          console.log('✅ Selection debug attached to', doc.location?.href || 'document');
-        } catch (e) {}
-      }
-      
-      // Apply to main doc
-      applyCSS(document);
-      attachSelectionDebug(document);
-      
-      // Patch iframes
-      function patchIframes() {
-        document.querySelectorAll('iframe').forEach((iframe, i) => {
-          try {
-            const doc = iframe.contentDocument || iframe.contentWindow?.document;
-            if (doc && !doc.__llCSS) {
-              applyCSS(doc);
-              console.log('✅ Patched iframe', i);
-            }
-            if (doc && !doc.__llSelectionDebug) {
-              attachSelectionDebug(doc);
-            }
-          } catch (e) {
-            if (!iframe.__listener) {
-              iframe.addEventListener('load', () => {
-                try {
-                  const doc = iframe.contentDocument || iframe.contentWindow?.document;
-                  if (doc) {
-                    applyCSS(doc);
-                    attachSelectionDebug(doc);
-                  }
-                } catch (e2) {}
-              });
-              iframe.__listener = true;
-            }
-          }
-        });
-      }
-      
-      patchIframes();
-      new MutationObserver(patchIframes).observe(document.documentElement, { childList: true, subtree: true });
-      
-      let count = 0;
-      const interval = setInterval(() => {
-        patchIframes();
-        if (++count > 100) clearInterval(interval);
-      }, 100);
-      
-      console.log('✅ LinguaLeaf JS initialized');
-    })();
-    true;
-  `,
-    []
-  );
+  const readerTheme = READER_THEME;
+  const injectedJavascript = READER_INJECTED_JAVASCRIPT;
 
 
   // Memoize callbacks to prevent Reader re-renders
@@ -909,6 +788,7 @@ export default function ReaderScreen() {
   }, [selection]);
 
   const handleReaderSingleTap = useCallback(() => {
+    logger.info('📱 Single tap detected');
     // Don't clear if selection was just made (prevents race condition)
     if (selectionJustMade.current || tapNavJustMade.current) {
       logger.debug('Single tap - ignoring, selection just made');
@@ -934,47 +814,40 @@ export default function ReaderScreen() {
   const handleReaderReady = useCallback((readyTotalLocations: number, readyLocation: Location, readyProgress: number) => {
     const idx = readyLocation?.start?.location;
     const cfi = readyLocation?.start?.cfi;
-    const nextTotal = typeof readyTotalLocations === 'number' ? readyTotalLocations : 0;
-    const nextPage = typeof idx === 'number' ? idx + 1 : 1;
     const displayedPage = readyLocation?.start?.displayed?.page;
     const displayedTotal = readyLocation?.start?.displayed?.total;
-    if (typeof readyTotalLocations === 'number' && Number.isFinite(readyTotalLocations)) {
-      lastTotalLocsRef.current = readyTotalLocations;
-    }
-    {
-      const p = normalizeProgress(readyProgress);
-      if (p !== null) lastProgressRef.current = p;
-    }
 
     logger.info('✅ Reader ready', {
-      totalLocations: nextTotal,
+      totalLocations: typeof readyTotalLocations === 'number' ? readyTotalLocations : 0,
       startLocationIndex: idx,
       progress: readyProgress,
       displayed: readyLocation?.start?.displayed,
+      displayedPage,
+      displayedTotal,
     });
 
-    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
-
-    // Global pages: estimate from totalLocations + screen-derived locs-per-page.
-    if (nextTotal > 0) {
-      const globalTotal = computeGlobalTotalPages();
-      const locIdx0 = typeof idx === 'number' ? idx : 0;
-      if (globalTotal) {
-        const pageFromIdx = computeGlobalPageFromLocationIndex(locIdx0, nextTotal, globalTotal);
-        setTotalPages(globalTotal);
-        setCurrentPage(pageFromIdx);
-        setPageLoading(false);
-      }
-    } else {
-      setPageLoading(true);
-    }
     setReaderReady(true);
 
     if (cfi) {
       // Save immediately on ready (covers cases where user opens and closes quickly)
       scheduleSaveReadingProgress(cfi);
     }
-  }, [computeChapterLeft, computeGlobalPageFromLocationIndex, computeGlobalTotalPages, locationCfis.length, normalizeProgress, scheduleSaveReadingProgress]);
+
+    // Force paginated flow so epub.js emits "relocated" on each page turn (not only when changing spine items).
+    // This makes `onLocationChange` reliable for mid-chapter progress updates.
+    injectJavascript?.(
+      `(function(){` +
+        `try{` +
+          `var r=null; try{r=(typeof rendition!=='undefined'?rendition:(window.rendition||null));}catch(e){r=(window.rendition||null);}` +
+          `if(!r){return true;}` +
+          `if(r.flow){try{r.flow('paginated');}catch(e1){}}` +
+          `if(r.spread){try{r.spread('none');}catch(e2){}}` +
+          `if(r.resize){try{r.resize();}catch(e3){}}` +
+        `}catch(e){}` +
+        `return true;` +
+      `})()`
+    );
+  }, [scheduleSaveReadingProgress]);
 
   const handleLocationChange = useCallback((
     totalLocs: number,
@@ -990,215 +863,285 @@ export default function ReaderScreen() {
       cfi: loc?.start?.cfi ?? null,
       displayed: loc?.start?.displayed ?? null,
     });
-    const idx = loc?.start?.location;
     const cfi = loc?.start?.cfi;
-    const nextTotal = typeof totalLocs === 'number' ? totalLocs : 0;
-    const nextPage = typeof idx === 'number' ? idx + 1 : 1;
     const displayedPage = loc?.start?.displayed?.page;
     const displayedTotal = loc?.start?.displayed?.total;
     logger.info('Location displayed', { displayedPage, displayedTotal });
-    {
-      const p = normalizeProgress(progress);
-      if (p !== null) lastProgressRef.current = p;
-    }
-    if (typeof totalLocs === 'number' && Number.isFinite(totalLocs)) {
-      lastTotalLocsRef.current = totalLocs;
-    }
 
-    let pageForLog: number | null = null;
+    // Update page counter from the reader's generated location index (0-based).
+    const idx0 = loc?.start?.location;
+    const hasTotalLocs = typeof totalLocs === 'number' && Number.isFinite(totalLocs) && totalLocs > 0;
 
-    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
-
-    const globalTotal = computeGlobalTotalPages();
-    if (globalTotal) {
-      const locIdx0 = typeof idx === 'number' ? idx : 0;
-      const pageFromIdx = computeGlobalPageFromLocationIndex(locIdx0, nextTotal > 0 ? nextTotal : (lastTotalLocsRef.current ?? 0), globalTotal);
-      setTotalPages(globalTotal);
-      setCurrentPage(pageFromIdx);
-      setPageLoading(false);
-      pageForLog = pageFromIdx;
-    } else {
-      setPageLoading(true);
-    }
-
-    // Adapt locations-per-page estimate using consecutive displayed.page increments within same section.
-    const sectionHref = (currentSection?.href ?? null) as string | null;
+    // Avoid "correct page → 1/total → correct" flicker during resume by ignoring early relocations.
+    const guard = resumeGuardRef.current;
     if (
-      typeof displayedPage === 'number' &&
-      sectionHref &&
-      lastSectionHrefRef.current === sectionHref &&
-      typeof lastLocIdxRef.current === 'number' &&
-      typeof lastDisplayedPageRef.current === 'number'
+      guard &&
+      Date.now() < guard.expiresAt &&
+      typeof idx0 === 'number' &&
+      Number.isFinite(idx0) &&
+      idx0 >= 0 &&
+      guard.expectedIndex0 !== null
     ) {
-      const nextLocIdx0 = typeof idx === 'number' ? idx : null;
-      if (typeof nextLocIdx0 !== 'number') {
-        // Can't learn without a numeric location index
+      const expected = guard.expectedIndex0;
+      if (expected !== null && idx0 < expected - 2 && cfi && cfi !== guard.expectedCfi) {
         return;
       }
-      const dLoc = nextLocIdx0 - lastLocIdxRef.current;
-      const dPage = displayedPage - lastDisplayedPageRef.current;
-      if (dLoc > 0 && dPage > 0) {
-        const sample = dLoc / dPage;
-        const next = avgLocsPerPageRef.current * 0.9 + sample * 0.1;
-        avgLocsPerPageRef.current = Math.max(8, Math.min(200, next));
+      if (expected !== null && idx0 >= expected - 2) {
+        resumeGuardRef.current = null;
       }
     }
-    if (typeof idx === 'number') lastLocIdxRef.current = idx;
-    lastDisplayedPageRef.current = typeof displayedPage === 'number' ? displayedPage : null;
-    lastSectionHrefRef.current = (currentSection?.href ?? null) as string | null;
+    // IMPORTANT: don't clear the guard just because the CFI matches if locations aren't ready yet.
+    // Some books report idx0=0 with the resume CFI before locations are generated (totalLocs=0).
+    if (guard && Date.now() < guard.expiresAt && cfi && cfi === guard.expectedCfi && hasTotalLocs) {
+      resumeGuardRef.current = null;
+    }
+
+    if (hasTotalLocs) {
+      setTotalPages(Math.floor(totalLocs));
+    }
+    if (typeof idx0 === 'number' && Number.isFinite(idx0) && idx0 >= 0) {
+      // If locations aren't ready yet, don't overwrite an already-known page (from cache/remote) with idx0=0/1.
+      // This is the root cause of "correct page → 1/total → correct after a couple turns".
+      if (!hasTotalLocs && currentPage > 0) {
+        // Still allow saving CFI remotely, but don't touch the numeric counter.
+        if (cfi) scheduleSaveReadingProgress(cfi);
+        return;
+      }
+
+      logger.info('🔄 Location change', { idx0 });
+      logger.info('setCurrentPage 4');
+      setCurrentPage(Math.floor(idx0) + 1);
+      setPageLoading(false);
+      setChapterLeftPct(null);
+
+      // Persist numeric index only when locations are ready (avoid clobbering cache with idx0=0).
+      if (hasTotalLocs && cfi) {
+        void setCachedLastPosition(user?.id ?? null, bookId, {
+          cfi,
+          locationIndex0: Math.floor(idx0),
+          totalLocations: Math.floor(totalLocs),
+        });
+      }
+    }
 
     if (cfi) {
       scheduleSaveReadingProgress(cfi);
     }
 
     logger.debug('📄 Location changed', {
-      page: pageForLog,
-      total: nextTotal,
-      startLocationIndex: idx,
+      startLocationIndex: loc?.start?.location ?? null,
       progress,
       sectionHref: currentSection?.href ?? null,
       displayed: loc?.start?.displayed,
     });
-  }, [computeChapterLeft, computeGlobalPageFromLocationIndex, computeGlobalTotalPages, normalizeProgress, scheduleSaveReadingProgress]);
+  }, [bookId, scheduleSaveReadingProgress, setChapterLeftPct, setCurrentPage, setPageLoading, setTotalPages, user?.id]);
 
-  // If onLocationChange doesn't fire reliably (some engine + gesture combos),
-  // keep the global counter in sync via reader context.
-  useEffect(() => {
-    const total = computeGlobalTotalPages();
-    if (!total) return;
-    const idx = currentLocation?.start?.location;
-    const totalLocs = typeof lastTotalLocsRef.current === 'number' ? lastTotalLocsRef.current : (locationCfis.length > 0 ? locationCfis.length : 0);
-    const page = computeGlobalPageFromLocationIndex(typeof idx === 'number' ? idx : 0, totalLocs, total);
-    setTotalPages(total);
-    setCurrentPage(page);
-    setPageLoading(false);
-  }, [computeGlobalPageFromLocationIndex, computeGlobalTotalPages, currentLocation?.start?.location, locationCfis.length]);
+  const handleGoToHref = useCallback(
+    (href: string) => {
+      const raw = typeof href === 'string' ? href.trim() : '';
+      if (!raw) return;
 
-  const handleLocationsReady = useCallback((epubKey: string, locs: string[]) => {
-    logger.info('📍 Locations ready:', { epubKey, totalLocations: locs.length });
-    setLocationCfis(locs);
-    // Ensure we lock in a stable total page count once locations are ready.
-    if (locs.length > 0 && (!globalTotalPagesRef.current || globalTotalPagesRef.current <= 0)) {
-      const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
-      globalTotalPagesRef.current = Math.max(1, Math.round(locs.length / perPage));
-    }
-    const total = computeGlobalTotalPages();
-    if (!total) return;
-    const idx = currentLocation?.start?.location;
-    const page = computeGlobalPageFromLocationIndex(typeof idx === 'number' ? idx : 0, locs.length, total);
-    setTotalPages(total);
-    setCurrentPage(page);
-    setPageLoading(false);
-  }, [computeGlobalPageFromLocationIndex, computeGlobalTotalPages, currentLocation?.start?.location]);
+      // Allow "go back" if this jump was accidental.
+      const curCfi = currentLocation?.start?.cfi ?? null;
+      previousNavRef.current = curCfi ? { cfi: curCfi, page: currentPage > 0 ? currentPage : null } : null;
 
-  const handlePanGesture = useCallback((event: any) => {
-    const { state, translationX, velocityX, x, y } = event.nativeEvent;
-    
-    // Track touch position for selection positioning
-    if (state === State.BEGAN || state === State.ACTIVE) {
-      setLastTouchPosition({ x, y });
-    }
-    
-    if (state === State.END) {
-      // Swipe left (next page)
-      if (translationX < -50 || velocityX < -500) {
-        logger.info('👉 Swipe left - next page');
-        if (goNext) {
-          goNext();
+      const tryDecode = (s: string): string | null => {
+        try {
+          const out = decodeURIComponent(s);
+          return out === s ? null : out;
+        } catch {
+          return null;
         }
-      }
-      // Swipe right (previous page)
-      else if (translationX > 50 || velocityX > 500) {
-        logger.info('👈 Swipe right - previous page');
-        if (goPrevious) {
-          goPrevious();
-        }
-      }
-    }
-  }, [goNext, goPrevious]);
+      };
 
-  const handleTapLeftEdge = useCallback(() => {
-    if (selection || showTranslateSheet || selectionJustMade.current) {
-      logger.debug('Tap left edge ignored (selection active)', {
-        selection: Boolean(selection),
-        showTranslateSheet,
+      const stripLeading = (s: string): string => {
+        let out = s;
+        // Common EPUB root folders
+        out = out.replace(/^\/+/, '');
+        out = out.replace(/^(OEBPS|OPS)\//i, '');
+        out = out.replace(/^\.\/+/, '');
+        return out;
+      };
+
+      // Normalization: keep both with/without fragment; also include decoded variants.
+      const noHash = raw.split('#')[0] ?? raw;
+      const decodedRaw = tryDecode(raw);
+      const decodedNoHash = tryDecode(noHash);
+
+      const candidates = Array.from(
+        new Set(
+          [
+            raw,
+            noHash,
+            decodedRaw,
+            decodedNoHash,
+            stripLeading(raw),
+            stripLeading(noHash),
+            decodedRaw ? stripLeading(decodedRaw) : null,
+            decodedNoHash ? stripLeading(decodedNoHash) : null,
+          ].filter((x): x is string => typeof x === 'string' && x.length > 0)
+        )
+      );
+
+      logger.info('Navigate: go to chapter', {
+        href: raw,
+        candidates,
+        currentHref: currentLocation?.start?.href ?? null,
       });
-      return;
-    }
-    if (navVisible) {
-      logger.debug('Tap left edge ignored (nav open)');
-      return;
-    }
 
-    tapNavJustMade.current = true;
-    setTimeout(() => {
-      tapNavJustMade.current = false;
-    }, 300);
-
-    logger.info('👈 Tap left edge - previous page', { hasGoPrevious: Boolean(goPrevious), atStart: Boolean(atStart) });
-    if (!goPrevious) return;
-    goPrevious();
-    setTimeout(() => {
-      try {
-        const next = getCurrentLocation ? getCurrentLocation() : null;
-        if (next && typeof (next as any).then === 'function') {
-          (next as unknown as Promise<Location>).then((l: Location) =>
-            logger.debug('After goPrevious: currentLocation', { cfi: l?.start?.cfi ?? null })
-          );
-        } else if (next) {
-          const l = next as Location;
-          logger.debug('After goPrevious: currentLocation', { cfi: l?.start?.cfi ?? null });
+      // Only use goToLocation directly for CFIs. For hrefs, prefer rendition.display().
+      const looksLikeCfi = raw.startsWith('epubcfi(');
+      if (looksLikeCfi) {
+        try {
+          goToLocation(raw);
+        } catch {
+          // fall through to WebView display
         }
-      } catch {
-        // ignore
       }
-    }, 150);
-  }, [goPrevious, navVisible, selection, showTranslateSheet]);
 
-  const handleTapRightEdge = useCallback(() => {
-    if (selection || showTranslateSheet || selectionJustMade.current) {
-      logger.debug('Tap right edge ignored (selection active)', {
-        selection: Boolean(selection),
-        showTranslateSheet,
-      });
-      return;
+      // Reliable fallback: call epub.js rendition.display(href) inside the WebView.
+      const safeCandidates = candidates
+        .map((c) => c.replace(/\\/g, '\\\\').replace(/'/g, "\\'"))
+        .map((c) => `'${c}'`)
+        .join(',');
+
+      injectJavascript?.(
+        `(function(){` +
+          `var post=function(p){try{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage&&window.ReactNativeWebView.postMessage(JSON.stringify(p));}catch(e){}};` +
+          `try{` +
+            `var r=null; try{r=(typeof rendition!=='undefined'?rendition:(window.rendition||null));}catch(e){r=(window.rendition||null);}` +
+            `if(!r||!r.display){post({type:'llNavDebug', did:false, reason:'no_rendition'}); return true;}` +
+            `var candidates=[${safeCandidates}];` +
+            // Prefer fragment candidates first (single-file books often use #id for chapters)
+            `candidates.sort(function(a,b){return (String(a).indexOf('#')>=0?0:1) - (String(b).indexOf('#')>=0?0:1);});` +
+            `var splitHref=function(h){try{h=String(h||''); var i=h.indexOf('#'); return i>=0?{path:h.slice(0,i), frag:h.slice(i+1)}:{path:h, frag:''};}catch(e){return {path:String(h||''), frag:''};}};` +
+            `var normPath=function(s){try{` +
+              `s=String(s||'');` +
+              `s=s.replace(/^\\/+/, '');` +
+              `s=s.replace(/^(OEBPS|OPS)\\//i, '');` +
+              `s=s.replace(/^\\.\\/+/, '');` +
+              `s=s.split('#')[0]||s;` +
+              `try{s=decodeURIComponent(s);}catch(e){};` +
+              `return s;` +
+            `}catch(e){return String(s||'');}};` +
+            `var curLoc=function(){try{` +
+              `if(typeof r.currentLocation==='function') return r.currentLocation();` +
+              `return (r.location||null);` +
+            `}catch(e){return null;}};` +
+            `var curHref=function(){try{var l=curLoc(); return l&&l.start&&l.start.href?l.start.href:null;}catch(e){return null;}};` +
+            `var curCfi=function(){try{var l=curLoc(); return l&&l.start&&l.start.cfi?l.start.cfi:null;}catch(e){return null;}};` +
+            `var findAndDisplayAnchor=async function(frag){` +
+              `try{` +
+                `if(!frag) return true;` +
+                `var cs=[]; try{cs=(typeof r.getContents==='function')?r.getContents():[];}catch(e){cs=[];}` +
+                `for(var j=0;j<cs.length;j++){` +
+                  `var c=cs[j];` +
+                  `var doc=c&&c.document?c.document:null;` +
+                  `if(!doc||!doc.getElementById) continue;` +
+                  `var el=null; try{el=doc.getElementById(frag);}catch(e2){el=null;}` +
+                  `if(!el) continue;` +
+                  `try{` +
+                    `if(typeof c.cfiFromElement==='function'){` +
+                      `var acfi=c.cfiFromElement(el);` +
+                      `if(acfi){try{await r.display(acfi);}catch(e3){}}` +
+                    `}else{` +
+                      `try{el.scrollIntoView();}catch(e4){}` +
+                    `}` +
+                  `}catch(e5){}` +
+                  `return true;` +
+                `}` +
+                `return false;` +
+              `}catch(e){return false;}` +
+            `};` +
+            `(async function(){` +
+              `var beforeHref=curHref();` +
+              `var beforeCfi=curCfi();` +
+              `for(var i=0;i<candidates.length;i++){` +
+                `var h=candidates[i];` +
+                `var sp=splitHref(h);` +
+                `var did=false;` +
+                `try{await r.display(h); did=true;}catch(e){try{await r.display(sp.path); did=true;}catch(e2){did=false;}}` +
+                `if(!did) continue;` +
+                `try{await new Promise(function(res){setTimeout(res, 0);});}catch(e3){}` +
+                `if(sp.frag){` +
+                  `var ok=await findAndDisplayAnchor(sp.frag);` +
+                  `try{await new Promise(function(res){setTimeout(res, 0);});}catch(e4){}` +
+                  `if(!ok){continue;}` +
+                `}` +
+                `var afterHref=curHref();` +
+                `var afterCfi=curCfi();` +
+                // Success if we landed on the right spine doc, and if fragment exists we also changed CFI (best-effort)
+                `var sameDoc=afterHref && normPath(afterHref)===normPath(sp.path||h);` +
+                `var moved=!beforeCfi || !afterCfi ? true : (afterCfi!==beforeCfi);` +
+                `if(sameDoc && (!sp.frag || moved)){` +
+                  `post({type:'llNavDebug', did:true, used:h, before:beforeHref, after:afterHref, beforeCfi:beforeCfi, afterCfi:afterCfi, frag:sp.frag||null, candidates:candidates});` +
+                  `return;` +
+                `}` +
+              `}` +
+              `post({type:'llNavDebug', did:false, reason:'no_match', before:beforeHref, after:curHref(), candidates:candidates});` +
+            `})();` +
+          `}catch(e){post({type:'llNavDebug', did:false, error:String(e)});}` +
+          `return true;` +
+        `})()`
+      );
+
+      setNavVisible(false);
+    },
+    [currentLocation?.start?.cfi, currentLocation?.start?.href, currentPage, goToLocation, injectJavascript]
+  );
+
+  const handleGoBack = useCallback(() => {
+    const prev = previousNavRef.current;
+    if (!prev?.cfi) return;
+    try {
+      goToLocation(prev.cfi);
+    } catch {
+      // ignore
     }
-    if (navVisible) {
-      logger.debug('Tap right edge ignored (nav open)');
-      return;
-    }
+  }, [goToLocation]);
 
-    tapNavJustMade.current = true;
-    setTimeout(() => {
-      tapNavJustMade.current = false;
-    }, 300);
+  const handleGoToPage = useCallback(
+    (page: number) => {
+      const total = totalPages;
+      if (total <= 0) return;
+      if (!Number.isFinite(page) || page < 1 || page > total) return;
 
-    logger.info('👉 Tap right edge - next page', { hasGoNext: Boolean(goNext), atEnd: Boolean(atEnd) });
-    if (!goNext) return;
-    goNext();
-    setTimeout(() => {
-      try {
-        const next = getCurrentLocation ? getCurrentLocation() : null;
-        if (next && typeof (next as any).then === 'function') {
-          (next as unknown as Promise<Location>).then((l: Location) =>
-            logger.debug('After goNext: currentLocation', { cfi: l?.start?.cfi ?? null })
-          );
-        } else if (next) {
-          const l = next as Location;
-          logger.debug('After goNext: currentLocation', { cfi: l?.start?.cfi ?? null });
-        }
-      } catch {
-        // ignore
-      }
-    }, 150);
-  }, [goNext, navVisible, selection, showTranslateSheet]);
+      // Capture "go back" target before jumping.
+      const curCfi = currentLocation?.start?.cfi ?? null;
+      previousNavRef.current = curCfi ? { cfi: curCfi, page: currentPage > 0 ? currentPage : null } : null;
 
-  useEffect(() => {
-    // Fallback: keep chapter-left percent in sync from reader context.
-    const displayedPage = currentLocation?.start?.displayed?.page;
-    const displayedTotal = currentLocation?.start?.displayed?.total;
-    setChapterLeftPct(computeChapterLeft(displayedPage, displayedTotal));
-  }, [computeChapterLeft, currentLocation?.start?.displayed?.page, currentLocation?.start?.displayed?.total]);
+      const idx0 = page - 1;
+      // Optimistic UI + guard against early bogus relocations.
+      setCurrentPage(page);
+      setPageLoading(true);
+      resumeGuardRef.current = { expectedCfi: '', expectedIndex0: idx0, expiresAt: Date.now() + 5000 };
+
+      // Prefer a WebView-side jump that doesn't require pulling the huge `locations[]` array into RN memory.
+      // This works as soon as book.locations are generated (which is also what sets totalPages).
+      injectJavascript?.(
+        `(function(){` +
+          `var post=function(p){try{window.ReactNativeWebView&&window.ReactNativeWebView.postMessage&&window.ReactNativeWebView.postMessage(JSON.stringify(p));}catch(e){}};` +
+          `try{` +
+            `var b=null; try{b=(typeof book!=='undefined'?book:(window.book||null));}catch(e){b=(window.book||null);}` +
+            `var r=null; try{r=(typeof rendition!=='undefined'?rendition:(window.rendition||null));}catch(e2){r=(window.rendition||null);}` +
+            `if(!b||!r||!r.display||!b.locations){post({type:'llNavDebug', did:false, reason:'no_book_or_rendition'}); return true;}` +
+            `var idx=${idx0};` +
+            `var cfi=null; try{` +
+              `if(typeof b.locations.cfiFromLocation==='function'){cfi=b.locations.cfiFromLocation(idx);} ` +
+              `else if(typeof b.locations.cfiFromPercentage==='function' && b.locations.total>0){cfi=b.locations.cfiFromPercentage(idx/(b.locations.total-1));}` +
+            `}catch(e3){cfi=null;}` +
+            `if(!cfi){post({type:'llNavDebug', did:false, reason:'no_cfi_for_page', idx:idx, total:(b.locations&&b.locations.total)||0}); return true;}` +
+            `(async function(){` +
+              `try{await r.display(cfi);}catch(e4){try{r.display(cfi);}catch(e5){}}` +
+              `post({type:'llNavDebug', did:true, used:'page', idx:idx, cfi:cfi});` +
+            `})();` +
+          `}catch(e){post({type:'llNavDebug', did:false, error:String(e)});}` +
+          `return true;` +
+        `})()`
+      );
+    },
+    [currentLocation?.start?.cfi, currentPage, injectJavascript, setCurrentPage, setPageLoading, totalPages]
+  );
 
   useEffect(() => {
     if (!readerReady) return;
@@ -1208,217 +1151,115 @@ export default function ReaderScreen() {
     goToLocation(pending);
   }, [goToLocation, readerReady]);
 
-  if (!book) {
-    return <View style={styles.container} />;
-  }
-
   // Ensure we've checked local resume state before mounting the Reader.
   if (!progressLoaded) {
     return <View style={styles.container} />;
   }
 
-  const tocItems = (() => {
-    const out: Array<{ label: string; href: string }> = [];
-    const walk = (items: any[]) => {
-      items.forEach((t) => {
-        if (t?.href) {
-          out.push({
-            label: typeof t.label === 'string' ? t.label : '',
-            href: typeof t.href === 'string' ? t.href : '',
-          });
-        }
-        if (Array.isArray(t?.subitems) && t.subitems.length > 0) {
-          walk(t.subitems);
-        }
-      });
-    };
-    walk((toc ?? []) as any[]);
-    return out;
-  })();
-
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <View style={styles.container}>
-        <PanGestureHandler
-          ref={panRef}
-          onHandlerStateChange={handlePanGesture}
-          activeOffsetX={[-30, 30]}
-          failOffsetY={[-20, 20]}
-          shouldCancelWhenOutside={false}
-          maxPointers={1}
-        >
-          <View style={styles.readerWrapper}>
-            <Reader
-              src={localPath}
-              fileSystem={useFileSystem}
-              defaultTheme={readerTheme}
-              injectedJavascript={injectedJavascript}
-              manager="default"
-              flow="paginated"
-              snap={true}
-              enableSwipe={false}
-              enableSelection={true}
-              allowPopups={false}
-              allowScriptedContent={true}
-              initialLocation={initialLocation}
-              menuItems={[]}
-              onSelected={handleReaderSelected}
-              onStarted={handleReaderStarted}
-              onReady={handleReaderReady}
-              onRendered={handleReaderRendered}
-              onDisplayError={handleReaderError}
-              onPress={handleReaderPress}
-              onSingleTap={handleReaderSingleTap}
-              onLongPress={handleReaderLongPress}
-              onLocationChange={handleLocationChange}
-              onLocationsReady={handleLocationsReady}
-              onWebViewMessage={handleReaderWebViewMessage}
-            />
-
-            <ReaderEdgeTapOverlay onTapLeft={handleTapLeftEdge} onTapRight={handleTapRightEdge} />
-          </View>
-        </PanGestureHandler>
-
-        <ReaderOverlays
-          currentPage={currentPage}
-          totalPages={totalPages}
-          pageLoading={pageLoading}
-          chapterLeftPct={chapterLeftPct}
-          onPressNavigate={() => {
-            setNavInitialTab('navigate');
-            setNavVisible(true);
-          }}
+    <View style={styles.container}>
+      <View style={styles.readerWrapper}>
+        <Reader
+          src={localPath}
+          fileSystem={useFileSystem}
+          defaultTheme={readerTheme}
+          injectedJavascript={injectedJavascript}
+          manager="default"
+          flow="paginated"
+          snap={true}
+          enableSwipe={true}
+          enableSelection={true}
+          allowPopups={false}
+          allowScriptedContent={true}
+          initialLocation={initialLocation}
+          menuItems={[]}
+          onSelected={handleReaderSelected}
+          onStarted={handleReaderStarted}
+          onReady={handleReaderReady}
+          onRendered={handleReaderRendered}
+          onDisplayError={handleReaderError}
+          onPress={handleReaderPress}
+          onSingleTap={handleReaderSingleTap}
+          onLongPress={handleReaderLongPress}
+          onLocationChange={handleLocationChange}
+             onLocationsReady={(epubKey, locs) => {
+               // Locations list can be huge; we only use its length for the total.
+               if (Array.isArray(locs) && locs.length > 0) {
+                 setTotalPages(locs.length);
+                 if (currentPage > 0) setPageLoading(false);
+               }
+             }}
+          onWebViewMessage={handleReaderWebViewMessage}
         />
-
-          {/* Custom Selection Toolbar */}
-          {selection && !showTranslateSheet && (
-            <SelectionToolbar
-              onHighlight={handleHighlight}
-              onTranslate={handleTranslate}
-              onClose={handleCloseToolbar}
-              selectionBounds={selection.position}
-            />
-          )}
-
-          <TranslateSheet
-            visible={showTranslateSheet}
-            term={selection?.text || ''}
-            translation={translation}
-            loading={translating}
-            error={translateError}
-            selectedListName={vocabLists.find((l) => l.id === selectedListId)?.name ?? null}
-            onSelectList={() => {
-              logger.info('Opening vocab list picker', {
-                listCount: vocabLists.length,
-                selectedListId,
-              });
-              setListPickerVisible(true);
-            }}
-            listPickerVisible={listPickerVisible}
-            lists={vocabLists}
-            selectedListId={selectedListId}
-            onPickList={(id) => {
-              setSelectedListId(id);
-              setListPickerVisible(false);
-            }}
-            onCloseListPicker={() => setListPickerVisible(false)}
-            onSave={handleSaveStudyWord}
-            onClose={handleCloseSheet}
-          />
-
-          <BookNavigationSheet
-            visible={navVisible}
-            initialTab={navInitialTab}
-            currentIndex={Math.max(0, currentPage - 1)}
-            total={totalPages}
-            tocItems={tocItems}
-            onClose={() => setNavVisible(false)}
-            onGoToIndex={(idx) => {
-              let locs = Array.isArray(locationCfis) ? locationCfis : [];
-              if (locs.length === 0) {
-                const fromCtx = getLocations?.();
-                if (Array.isArray(fromCtx) && fromCtx.length > 0) {
-                  locs = fromCtx as string[];
-                  setLocationCfis(locs);
-                }
-              }
-              if (locs.length === 0) {
-                logger.info('Navigate: locations not ready yet - cannot go to page', { idx, totalPages });
-                Alert.alert('Pages still loading', 'Please try again in a moment.');
-                return;
-              }
-
-              const perPage = Math.max(8, Math.min(200, avgLocsPerPageRef.current));
-              const mapped = Math.round(idx * perPage);
-              const clamped = Math.max(0, Math.min(mapped, locs.length - 1));
-              const cfi = locs[clamped];
-
-              logger.info('Navigate: go to page', {
-                pageIndex0: idx,
-                totalPages,
-                perPage,
-                mappedLocIndex: clamped,
-                cfiPreview: typeof cfi === 'string' ? cfi.slice(0, 32) : null,
-              });
-
-              try {
-                goToLocation(cfi);
-              } catch (e) {
-                logger.error('Navigate: goToLocation failed', e);
-              }
-            }}
-            onGoToHref={(href) => {
-              const raw = typeof href === 'string' ? href : '';
-              const noHash = raw.split('#')[0] ?? raw;
-              const trimmed = raw.trim();
-              const candidates = Array.from(
-                new Set(
-                  [trimmed, noHash, trimmed.startsWith('/') ? trimmed.slice(1) : trimmed, noHash.startsWith('/') ? noHash.slice(1) : noHash]
-                    .filter((x) => typeof x === 'string' && x.length > 0)
-                )
-              );
-
-              logger.info('Navigate: go to chapter', {
-                href: trimmed,
-                candidates,
-                currentHref: currentLocation?.start?.href ?? null,
-              });
-
-              // Try goToLocation first (epubjs rendition.display usually supports href strings even though typed as cfi)
-              for (const c of candidates) {
-                try {
-                  goToLocation(c as any);
-                  return;
-                } catch (e) {
-                  logger.warn('Navigate: goToLocation candidate failed', { candidate: c });
-                }
-              }
-
-              // Last resort: inject a display() call into the webview template (best-effort).
-              // The core template defines `book`, `rendition`, and `getCfiFromHref(book, href)` in JS scope.
-              const safeHref = trimmed.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-              injectJavascript?.(
-                `(function(){try{var href='${safeHref}';` +
-                  `if(typeof getCfiFromHref==='function' && typeof book!=='undefined' && book){` +
-                  `var cfi=getCfiFromHref(book, href); if(cfi){ rendition.display(cfi); return; }}` +
-                  `if(typeof rendition!=='undefined' && rendition && rendition.display){ rendition.display(href); }` +
-                  `}catch(e){}})();`
-              );
-            }}
-            highlights={highlights}
-            onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
-            onDeleteHighlight={(h) => handleDeleteHighlight(h)}
-          />
-
-          <UpgradeAccountPrompt
-            visible={upgradePrompt.visible}
-            onClose={upgradePrompt.close}
-            onNotNow={() => {
-              if (user) upgradePrompt.dismiss(user.id).catch(() => {});
-            }}
-          />
+        <ReaderEdgeTapOverlay onTapLeft={handleTapLeftEdge} onTapRight={handleTapRightEdge} />
       </View>
-    </GestureHandlerRootView>
+      <ReaderOverlays
+        currentPage={currentPage}
+        totalPages={totalPages}
+        pageLoading={pageLoading}
+        chapterLeftPct={chapterLeftPct}
+        onPressNavigate={() => {
+          setNavInitialTab('navigate');
+          setNavVisible(true);
+        }}
+      />
+      {/* Custom Selection Toolbar */}
+      {selection && !showTranslateSheet && (
+        <SelectionToolbar
+          onHighlight={handleHighlight}
+          onTranslate={handleTranslate}
+          onClose={handleCloseToolbar}
+          selectionBounds={selection.position}
+        />
+      )}
+      <TranslateSheet
+        visible={showTranslateSheet}
+        term={selection?.text || ''}
+        translation={translation}
+        loading={translating}
+        error={translateError}
+        selectedListName={vocabLists.find((l) => l.id === selectedListId)?.name ?? null}
+        onSelectList={() => {
+          logger.info('Opening vocab list picker', {
+            listCount: vocabLists.length,
+            selectedListId,
+          });
+          setListPickerVisible(true);
+        }}
+        listPickerVisible={listPickerVisible}
+        lists={vocabLists}
+        selectedListId={selectedListId}
+        onPickList={(id) => {
+          setSelectedListId(id);
+          setListPickerVisible(false);
+        }}
+        onCloseListPicker={() => setListPickerVisible(false)}
+        onSave={handleSaveStudyWord}
+        onClose={handleCloseSheet}
+      />
+      <BookNavigationSheet
+        visible={navVisible}
+        initialTab={navInitialTab}
+            currentPage={currentPage}
+            totalPages={totalPages}
+        tocItems={tocItems}
+            canGoBack={Boolean(previousNavRef.current?.cfi)}
+        onClose={() => setNavVisible(false)}
+        onGoToHref={handleGoToHref}
+            onGoToPage={handleGoToPage}
+            onGoBack={handleGoBack}
+        highlights={highlights}
+        onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
+        onDeleteHighlight={(h) => handleDeleteHighlight(h)}
+      />
+      <UpgradeAccountPrompt
+        visible={upgradePrompt.visible}
+        onClose={upgradePrompt.close}
+        onNotNow={() => {
+          if (user) upgradePrompt.dismiss(user.id).catch(() => {});
+        }}
+      />
+    </View>
   );
 }
 
