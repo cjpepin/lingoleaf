@@ -7,7 +7,7 @@
 
 export const READER_INJECTED_JAVASCRIPT = `
     (function() {
-      console.log('🚀 LinguaLeaf JS injected!');
+      console.log('🚀 LingoLeaf JS injected!');
 
       function postToRN(payload) {
         try {
@@ -289,8 +289,27 @@ export const READER_INJECTED_JAVASCRIPT = `
         patchIframes();
         if (++count > 100) clearInterval(interval);
       }, 100);
+
+      // Detect clicks on highlights (epub.js adds data-epubcfi attribute to highlight elements)
+      document.addEventListener('click', function(e) {
+        try {
+          var target = e.target;
+          // Walk up the DOM to find a highlight element
+          for (var i = 0; i < 5 && target; i++) {
+            if (target.dataset && target.dataset.epubcfi) {
+              var cfi = target.dataset.epubcfi;
+              var highlightId = target.dataset.id || null;
+              postToRN({ type: 'llHighlightClicked', cfi: cfi, highlightId: highlightId });
+              e.stopPropagation();
+              e.preventDefault();
+              return;
+            }
+            target = target.parentElement;
+          }
+        } catch (err) {}
+      }, true);
       
-      console.log('✅ LinguaLeaf JS initialized');
+      console.log('✅ LingoLeaf JS initialized');
     })();
     true;
   `;

@@ -1,5 +1,5 @@
 /**
- * Color tokens for LinguaLeaf theme
+ * Color tokens for LingoLeaf theme
  * Natural "leaf green" palette with warm neutrals
  */
 

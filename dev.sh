@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# LinguaLeaf Development Script
+# LingoLeaf Development Script
 # Runs the custom development client
 
 set -e
 
-echo "🍃 LinguaLeaf Development Client"
+echo "🍃 LingoLeaf Development Client"
 echo "================================"
 echo ""
 
@@ -37,8 +37,8 @@ case $PLATFORM in
     if [ "$CLEAN" = "clean" ]; then
       echo "🧹 Cleaning build artifacts..."
       rm -rf ios/build
-      rm -rf ~/Library/Developer/Xcode/DerivedData/LinguaLeaf-*
-      cd ios && xcodebuild clean -workspace LinguaLeaf.xcworkspace -scheme LinguaLeaf && cd ..
+      rm -rf ~/Library/Developer/Xcode/DerivedData/lingoleaf-*
+      cd ios && xcodebuild clean -workspace lingoleaf.xcworkspace -scheme lingoleaf && cd ..
     fi
     export LANG=en_US.UTF-8
     npx expo run:ios

@@ -18,7 +18,6 @@ interface AuthStore {
   ensureGuestSession: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  upgradeGuestToEmailPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   initialize: () => Promise<void>;
 }
@@ -87,18 +86,19 @@ export const useAuthStore = create<AuthStore>((set) => ({
       password,
     });
     if (error) throw error;
+    
+    // When email confirmation is enabled, data.session will be null and user.identities will be empty
+    // until the user clicks the confirmation link.
+    const needsEmailConfirmation = !data.session && data.user && (data.user.identities?.length === 0 || !data.user.email_confirmed_at);
+    
     set({ session: data.session, user: data.user, isGuest: isAnonymousUser(data.user) });
+    
+    // Return a signal so AuthScreen can show appropriate messaging
+    if (needsEmailConfirmation) {
+      throw new Error('EMAIL_CONFIRMATION_REQUIRED');
+    }
   },
 
-  upgradeGuestToEmailPassword: async (email, password) => {
-    // Upgrade the currently-anonymous user to an email/password account.
-    // This preserves the same user id, so all user-owned rows remain valid.
-    const { data, error } = await supabase.auth.updateUser({ email, password });
-    if (error) throw error;
-    const user = data.user ?? null;
-    const { data: sessionData } = await supabase.auth.getSession();
-    set({ user, session: sessionData.session ?? null, isGuest: isAnonymousUser(user) });
-  },
 
   signOut: async () => {
     const { error } = await supabase.auth.signOut();

@@ -12,10 +12,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   return {
     ...config,
     // Ensure required ExpoConfig fields are always present for type-safety.
-    name: config.name ?? 'LinguaLeaf',
-    slug: config.slug ?? 'lingualeaf',
+    name: config.name ?? 'LingoLeaf',
+    slug: config.slug ?? 'lingoleaf',
     version: config.version ?? '1.0.0',
-    scheme: config.scheme ?? 'lingualeaf',
+    scheme: config.scheme ?? 'lingoleaf',
     ios: {
       ...(config.ios ?? {}),
       infoPlist: {

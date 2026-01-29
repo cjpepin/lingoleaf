@@ -1,4 +1,4 @@
-# LinguaLeaf
+# LingoLeaf
 
 A React Native app for reading EPUBs with integrated translation and vocabulary learning. Read books in foreign languages with instant translation and build your vocabulary list.
 

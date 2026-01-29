@@ -18,9 +18,11 @@ import { BookNavigationSheet } from '@/components/BookNavigationSheet';
 import { ReaderOverlays } from '@/components/ReaderOverlays';
 import { ReaderEdgeTapOverlay } from '@/components/ReaderEdgeTapOverlay';
 import { UpgradeAccountPrompt } from '@/components/UpgradeAccountPrompt';
+import { Snackbar } from '@/components/Snackbar';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useUpgradePromptStore } from '@/state/useUpgradePromptStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
+import { useStudyStore } from '@/state/useStudyStore';
 import {
   fetchBook,
   createStudyWord,
@@ -63,6 +65,7 @@ export default function ReaderScreen() {
   const { targetLang } = useSettingsStore();
   const { currentPage, totalPages, pageLoading, chapterLeftPct, setCurrentPage, setTotalPages, setPageLoading, setChapterLeftPct } = useReaderStore();
   const upgradePrompt = useUpgradePromptStore();
+  const studyStore = useStudyStore();
   
   const [book, setBook] = useState<Book | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -82,6 +85,11 @@ export default function ReaderScreen() {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [readingProgressEnabled, setReadingProgressEnabled] = useState(true);
   const [readerReady, setReaderReady] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    visible: false,
+    message: '',
+    type: 'info',
+  });
 
   // Get reader navigation methods
   const {
@@ -249,14 +257,8 @@ export default function ReaderScreen() {
       setPageLoading(!(hasTotal && hasIndex));
     }
     if (!local?.cfi) {
-      // No local cache. If there's also no remote resume, this is a first-time open and we start at the beginning.
-      // For signed-in users we wait for the remote fetch before assuming page 1.
-      if (!user || !readingProgressEnabled) {
-        logger.info('setCurrentPage 2');
-        setCurrentPage(1);
-      } else {
-        setCurrentPage(0);
-      }
+      // No local cache. Keep currentPage at 0 (loading state) until we know more.
+      setCurrentPage(0);
       setTotalPages(0);
       setPageLoading(true);
     }
@@ -297,9 +299,9 @@ export default function ReaderScreen() {
           };
         }
       } else if (!local?.cfi) {
-        // No remote resume and no local cache → first-time open → start at page 1.
-        logger.info('setCurrentPage 3');
-        setCurrentPage(1);
+        // No remote resume and no local cache → first-time open.
+        // onLocationChange will set the correct page once the reader reports its location.
+        logger.info('First-time open, waiting for onLocationChange to set page');
       }
     } catch (error) {
       const code = (error as any)?.code;
@@ -471,8 +473,8 @@ export default function ReaderScreen() {
     
     if (lastTouchPosition) {
       position = {
-        x: lastTouchPosition.x - 50, // Center around touch point
-        y: lastTouchPosition.y - 20,
+        x: lastTouchPosition.x, // Center around touch point
+        y: lastTouchPosition.y,
         width: 100, // Approximate selection width
         height: 40, // Approximate selection height
       };
@@ -610,12 +612,12 @@ export default function ReaderScreen() {
   const handleSaveStudyWord = useCallback(async () => {
     if (!selection || !translation || !user || !book?.source_lang) return;
     if (!selectedListId) {
-      Alert.alert('Select a List', 'Please choose a list to save this word to.');
+      setSnackbar({ visible: true, message: 'Please choose a list to save this word to', type: 'error' });
       return;
     }
 
     try {
-      await createStudyWord({
+      const newWord = await createStudyWord({
         user_id: user.id,
         book_id: book.id,
         list_id: selectedListId,
@@ -627,8 +629,13 @@ export default function ReaderScreen() {
         context_snippet: selection.context ?? null,
       });
 
+      // Optimistically update the study store cache
+      studyStore.upsertWordInCache(selectedListId, newWord);
+      studyStore.adjustListCount(selectedListId, 1);
+      studyStore.adjustAllCount(1);
+
       touchVocabList(selectedListId).catch(() => {});
-      Alert.alert('Success', 'Added to study list');
+      setSnackbar({ visible: true, message: 'Added to study list!', type: 'success' });
       countAllStudyWords(user.id)
         .then((c) => {
           if (c >= 10) {
@@ -640,13 +647,26 @@ export default function ReaderScreen() {
       setSelection(null);
     } catch (error) {
       logger.error('Failed to save study word:', error);
-      Alert.alert('Error', 'Failed to save word');
+      setSnackbar({ visible: true, message: 'Failed to save word', type: 'error' });
     }
-  }, [book, isGuest, selectedListId, selection, targetLang, translation, upgradePrompt, user]);
+  }, [book, isGuest, selectedListId, selection, studyStore, targetLang, translation, upgradePrompt, user]);
 
   const handleCloseToolbar = useCallback(() => {
     setSelection(null);
   }, []);
+
+  const handleCreateNewList = useCallback(async (listName: string) => {
+    if (!user) return;
+    try {
+      const newList = await createVocabList(user.id, listName);
+      setVocabLists((prev) => [...prev, newList]);
+      setSelectedListId(newList.id);
+      setSnackbar({ visible: true, message: `Created list "${listName}"`, type: 'success' });
+    } catch (error) {
+      logger.error('Failed to create list:', error);
+      setSnackbar({ visible: true, message: 'Failed to create list', type: 'error' });
+    }
+  }, [user]);
 
   const handleCloseSheet = useCallback(() => {
     logger.info('Closing TranslateSheet', { listPickerVisible });
@@ -674,6 +694,24 @@ export default function ReaderScreen() {
         lastSelectionSource.current = null;
         return;
       }
+      if (type === 'llHighlightClicked') {
+        logger.info('💡 Highlight clicked', { cfi: event?.cfi, highlightId: event?.highlightId });
+        const highlightId = event?.highlightId;
+        if (highlightId) {
+          const highlight = highlights.find((h) => h.id === highlightId);
+          if (highlight) {
+            Alert.alert('Highlight', highlight.selected_text, [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: () => handleDeleteHighlight(highlight),
+              },
+            ]);
+          }
+        }
+        return;
+      }
 
       if (type !== 'llSelectionDebug') {
         logger.debug('🌐 Reader onWebViewMessage', event);
@@ -699,24 +737,25 @@ export default function ReaderScreen() {
         setSelection({
           text,
           cfiRange: '',
-          position: lastTouchPosition
+          position: event?.rect
             ? {
-                x: lastTouchPosition.x - 50,
-                y: lastTouchPosition.y - 20,
-                width: 100,
-                height: 40,
+                x: event.rect.x ?? 0,
+                y: event.rect.y ?? 0,
+                width: event.rect.width ?? 100,
+                height: event.rect.height ?? 40,
               }
             : undefined,
           context: context || null,
         });
+        setLastTouchPosition({ x: event?.rect?.x ?? 0, y: event?.rect?.y ?? 0 });
       } else if (selection.text === text && context) {
         // Enrich existing selection (e.g. epubjs onSelected fired) with context from the web layer.
-        setSelection(prev => (prev ? { ...prev, context } : prev));
+        setSelection(prev => (prev ? { ...prev, context, position: event?.rect ? { x: event.rect.x ?? prev?.position?.x ?? 0, y: event.rect.y ?? prev?.position?.y ?? 0, width: event.rect.width ?? prev?.position?.width ?? 100, height: event.rect.height ?? prev?.position?.height ?? 40 } : prev?.position } : prev));
       }
     } catch (error) {
       logger.error('Failed handling onWebViewMessage', error);
     }
-  }, [lastTouchPosition, selection]);
+  }, [handleDeleteHighlight, highlights, lastTouchPosition, selection]);
 
   const handleTapLeftEdge = useCallback(() => {
     if (selection || showTranslateSheet || selectionJustMade.current) return;
@@ -1234,6 +1273,7 @@ export default function ReaderScreen() {
           setListPickerVisible(false);
         }}
         onCloseListPicker={() => setListPickerVisible(false)}
+        onCreateNewList={handleCreateNewList}
         onSave={handleSaveStudyWord}
         onClose={handleCloseSheet}
       />
@@ -1258,6 +1298,12 @@ export default function ReaderScreen() {
         onNotNow={() => {
           if (user) upgradePrompt.dismiss(user.id).catch(() => {});
         }}
+      />
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
       />
     </View>
   );

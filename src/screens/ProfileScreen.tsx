@@ -19,27 +19,40 @@ import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { fetchUserSettings, upsertUserSettings, checkIsAdmin } from '@/supabase/queries';
+import { supabase } from '@/supabase/client';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { Button } from '@/components/ui/Button';
+import { Snackbar } from '@/components/Snackbar';
+import { LANGUAGES } from '@/constants/languages';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-// Common language options
-const LANGUAGES = [
-  { code: 'en', name: 'English' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'it', name: 'Italian' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'ru', name: 'Russian' },
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-];
+// Helper to get display name for Apple/Google users
+function getUserDisplayName(user: any): string {
+  if (!user) return '';
+  
+  // Check if this is an Apple sign-in (privaterelay email or user_metadata has apple provider)
+  const email = user.email || '';
+  const isApplePrivateRelay = email.includes('@privaterelay.appleid.com');
+  const providers = user.app_metadata?.providers || [];
+  const isAppleUser = providers.includes('apple') || isApplePrivateRelay;
+  
+  // Try to get full name from user_metadata (Apple provides this on first sign-in)
+  const fullName = user.user_metadata?.full_name;
+  const firstName = user.user_metadata?.first_name;
+  const lastName = user.user_metadata?.last_name;
+  
+  if (fullName) return fullName;
+  if (firstName && lastName) return `${firstName} ${lastName}`;
+  if (firstName) return firstName;
+  
+  // For Apple users without a name, show "Apple User"
+  if (isAppleUser) return 'Apple User';
+  
+  // For Google or other providers, show email
+  return email;
+}
 
 export default function ProfileScreen() {
   const navigation = useNavigation<NavigationProp>();
@@ -54,6 +67,11 @@ export default function ProfileScreen() {
   const [knownLangs, setKnownLangs] = useState<string[]>(['en']);
   const [goalLangs, setGoalLangs] = useState<string[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+    visible: false,
+    message: '',
+    type: 'info',
+  });
 
   useEffect(() => {
     if (!user) {
@@ -139,18 +157,20 @@ export default function ProfileScreen() {
             try {
               if (!user) return;
               
-              // Guest-first: "sign out" returns to a guest session.
+              // Call soft-delete function
+              const { error } = await supabase.rpc('soft_delete_user_account');
+              if (error) throw error;
+              
+              // Sign out (returns to guest session)
               await signOut();
               
-              // Note: Actual deletion requires service role key
-              // For now, just sign out. Implement server-side deletion via Edge Function
               Alert.alert(
-                'Account Deletion',
-                'Please contact support to complete account deletion.'
+                'Account Deleted',
+                'Your account has been deleted. All your data will be removed within 30 days. You can continue using the app as a guest.'
               );
             } catch (error) {
               logger.error('Failed to delete account:', error);
-              Alert.alert('Error', 'Failed to delete account');
+              Alert.alert('Error', 'Failed to delete account. Please try again or contact support.');
             }
           },
         },
@@ -161,10 +181,10 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      Alert.alert('Signed out', 'You have successfully signed out from your account.');
+      setSnackbar({ visible: true, message: 'Signed out successfully', type: 'success' });
     } catch (error) {
       logger.error('Sign out failed:', error);
-      Alert.alert('Error', 'Failed to sign out');
+      setSnackbar({ visible: true, message: 'Failed to sign out', type: 'error' });
     }
   };
 
@@ -200,7 +220,7 @@ export default function ProfileScreen() {
       
       <View style={styles.section}>
         <View style={styles.emailRow}>
-          <Text style={styles.email}>{isGuest ? 'Guest' : user?.email}</Text>
+          <Text style={styles.email}>{isGuest ? 'Guest' : getUserDisplayName(user)}</Text>
           {isAdmin && (
             <View style={styles.adminChip}>
               <Text style={styles.adminChipText}>Admin</Text>
@@ -365,6 +385,12 @@ export default function ProfileScreen() {
       </TouchableOpacity>
 
       <View style={styles.spacer} />
+      <Snackbar
+        visible={snackbar.visible}
+        message={snackbar.message}
+        type={snackbar.type}
+        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
+      />
     </ScrollView>
   );
 }

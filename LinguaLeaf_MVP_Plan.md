@@ -1,4 +1,4 @@
-# LinguaLeaf MVP Build Plan (Expo + Supabase + EPUB Reader + Translation)
+# LingoLeaf MVP Build Plan (Expo + Supabase + EPUB Reader + Translation)
 _Last updated: 2025-12-26_
 
 This doc is optimized as **Cursor context**: clear decisions, file structure, concrete steps, and acceptance criteria.
@@ -356,7 +356,7 @@ Output JSON:
 
 ---
 
-## 7) UI: LinguaLeaf theme tokens
+## 7) UI: LingoLeaf theme tokens
 ### Design goals
 - Simple, elegant
 - Natural “leaf green” palette

@@ -47,6 +47,8 @@ export default function LibraryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const hasLoadedOnceRef = useRef(false);
+  const hasInitiallyLoadedRef = useRef(false);
+  const hasSetDefaultLangRef = useRef(false);
 
   const pageSize = 15; // 5 rows × 3 columns
   const requestSeq = useRef(0);
@@ -68,12 +70,6 @@ export default function LibraryScreen() {
   const rows: LibraryRow[] = useMemo(() => {
     return buildAdRows(books, { columns: grid().columns, adEveryRows: 4 });
   }, [books, grid]);
-
-  useEffect(() => {
-    if (user) {
-      loadSettings(user.id);
-    }
-  }, [user]);
 
   const loadBooks = useCallback(
     async (
@@ -136,9 +132,29 @@ export default function LibraryScreen() {
     [authorFilter, search, sourceLang, subjectFilter]
   );
 
+  // Default to first goal language on mount
   useEffect(() => {
+    if (user) {
+      loadSettings(user.id).then((settings) => {
+        // Default to first goal language if available and not already set
+        if (!hasSetDefaultLangRef.current && settings?.goal_langs && settings.goal_langs.length > 0 && !sourceLang) {
+          const firstGoalLang = settings.goal_langs[0];
+          setSourceLang(firstGoalLang);
+          hasSetDefaultLangRef.current = true;
+          // Reload books with the default language
+          loadBooks(true, { override: { language: firstGoalLang } });
+        }
+      });
+    }
+  }, [user, loadSettings, sourceLang, loadBooks]);
+
+  useEffect(() => {
+    // Only load once on mount, not every time loadBooks changes
+    if (hasInitiallyLoadedRef.current) return;
+    hasInitiallyLoadedRef.current = true;
     loadBooks(true);
-  }, [loadBooks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {

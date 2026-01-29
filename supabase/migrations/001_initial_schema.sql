@@ -1,4 +1,4 @@
--- LinguaLeaf Initial Schema
+-- LingoLeaf Initial Schema
 -- Creates all tables and RLS policies
 
 -- Enable UUID extension

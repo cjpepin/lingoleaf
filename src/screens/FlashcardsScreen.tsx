@@ -6,8 +6,8 @@
  * - Next/Prev controls
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, Animated, Pressable } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
@@ -34,6 +34,11 @@ export default function FlashcardsScreen() {
   const [words, setWords] = useState<StudyWord[]>([]);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [showTranslationFirst, setShowTranslationFirst] = useState(false);
+
+  // Animation values
+  const flipAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     navigation.setOptions({ title: listName || 'Flashcards' });
@@ -88,15 +93,56 @@ export default function FlashcardsScreen() {
     return `${index + 1} / ${words.length}`;
   }, [index, words.length]);
 
+  const handleFlip = useCallback(() => {
+    setFlipped((p) => !p);
+    // 3D flip animation
+    Animated.spring(flipAnim, {
+      toValue: flipped ? 0 : 180,
+      friction: 8,
+      tension: 10,
+      useNativeDriver: true,
+    }).start();
+  }, [flipped, flipAnim]);
+
   const handlePrev = useCallback(() => {
+    // Slide right animation
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: 100,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     setIndex((prev) => Math.max(0, prev - 1));
     setFlipped(false);
-  }, []);
+    flipAnim.setValue(0);
+  }, [slideAnim, flipAnim]);
 
   const handleNext = useCallback(() => {
+    // Slide left animation
+    Animated.sequence([
+      Animated.timing(slideAnim, {
+        toValue: -100,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 0,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
     setIndex((prev) => Math.min(words.length - 1, prev + 1));
     setFlipped(false);
-  }, [words.length]);
+    flipAnim.setValue(0);
+  }, [words.length, slideAnim, flipAnim]);
 
   if (loading) {
     return <CenteredLoader />;
@@ -111,17 +157,90 @@ export default function FlashcardsScreen() {
     );
   }
 
+  // Determine front and back based on showTranslationFirst
+  const frontText = showTranslationFirst ? current.translation : current.term;
+  const backText = showTranslationFirst ? current.term : current.translation;
+  const frontLabel = showTranslationFirst ? 'Translation' : 'Term';
+  const backLabel = showTranslationFirst ? 'Term' : 'Translation';
+
+  // Interpolate flip animation for 3D effect
+  const frontInterpolate = flipAnim.interpolate({
+    inputRange: [0, 180],
+    outputRange: ['0deg', '180deg'],
+  });
+  const backInterpolate = flipAnim.interpolate({
+    inputRange: [0, 180],
+    outputRange: ['180deg', '360deg'],
+  });
+
+  const frontOpacity = flipAnim.interpolate({
+    inputRange: [0, 90, 180],
+    outputRange: [1, 0, 0],
+  });
+  const backOpacity = flipAnim.interpolate({
+    inputRange: [0, 90, 180],
+    outputRange: [0, 0, 1],
+  });
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.progress}>{progressText}</Text>
+        <Pressable
+          style={styles.toggleButton}
+          onPress={() => {
+            setShowTranslationFirst((p) => !p);
+            setFlipped(false);
+            flipAnim.setValue(0);
+          }}
+        >
+          <Text style={styles.toggleText}>
+            {showTranslationFirst ? '🔄 Translation → Term' : '🔄 Term → Translation'}
+          </Text>
+        </Pressable>
       </View>
 
-      <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={() => setFlipped((p) => !p)}>
-        <Text style={styles.cardLabel}>{flipped ? 'Translation' : 'Term'}</Text>
-        <Text style={styles.cardText}>{flipped ? current.translation : current.term}</Text>
-        <Text style={styles.cardHint}>Tap to flip</Text>
-      </TouchableOpacity>
+      <Animated.View
+        style={[
+          styles.cardContainer,
+          {
+            transform: [{ translateX: slideAnim }],
+          },
+        ]}
+      >
+        <TouchableOpacity style={styles.card} activeOpacity={0.9} onPress={handleFlip}>
+          {/* Front of card */}
+          <Animated.View
+            style={[
+              styles.cardFace,
+              {
+                opacity: frontOpacity,
+                transform: [{ rotateY: frontInterpolate }],
+              },
+            ]}
+          >
+            <Text style={styles.cardLabel}>{frontLabel}</Text>
+            <Text style={styles.cardText}>{frontText}</Text>
+            <Text style={styles.cardHint}>Tap to flip</Text>
+          </Animated.View>
+
+          {/* Back of card */}
+          <Animated.View
+            style={[
+              styles.cardFace,
+              styles.cardBack,
+              {
+                opacity: backOpacity,
+                transform: [{ rotateY: backInterpolate }],
+              },
+            ]}
+          >
+            <Text style={styles.cardLabel}>{backLabel}</Text>
+            <Text style={styles.cardText}>{backText}</Text>
+            <Text style={styles.cardHint}>Tap to flip</Text>
+          </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
 
       <View style={styles.actions}>
         <Button label="Prev" onPress={handlePrev} disabled={index === 0} variant="surface" size="md" style={styles.actionButton} />
@@ -147,11 +266,28 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   progress: {
     ...typography.caption,
     color: colors.textSecondary,
     fontWeight: '600',
+  },
+  toggleButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: 20,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  toggleText: {
+    ...typography.bodySmall,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  cardContainer: {
+    flex: 1,
   },
   card: {
     flex: 1,
@@ -162,6 +298,15 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  cardFace: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backfaceVisibility: 'hidden',
+  },
+  cardBack: {
+    position: 'absolute',
   },
   cardLabel: {
     ...typography.caption,

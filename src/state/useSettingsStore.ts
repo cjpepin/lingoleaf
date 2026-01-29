@@ -5,12 +5,13 @@
 
 import { create } from 'zustand';
 import { fetchUserSettings, upsertUserSettings } from '@/supabase/queries';
+import type { UserSettings } from '@/supabase/types';
 
 interface SettingsStore {
   targetLang: string;
   loading: boolean;
   setTargetLang: (lang: string) => void;
-  loadSettings: (userId: string) => Promise<void>;
+  loadSettings: (userId: string) => Promise<UserSettings | null>;
   saveSettings: (userId: string) => Promise<void>;
 }
 
@@ -27,8 +28,10 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       if (settings) {
         set({ targetLang: settings.target_lang });
       }
+      return settings;
     } catch (error) {
       console.error('Failed to load settings:', error);
+      return null;
     } finally {
       set({ loading: false });
     }

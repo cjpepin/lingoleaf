@@ -73,7 +73,7 @@ function MainTabs() {
         name="Library"
         component={LibraryScreen}
         options={{
-          title: 'LinguaLeaf',
+          title: 'LingoLeaf',
           tabBarLabel: 'Library',
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <Feather name="book-open" size={size} color={color} />

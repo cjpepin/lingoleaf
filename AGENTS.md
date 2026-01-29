@@ -1,4 +1,4 @@
-# AGENTS.md - LinguaLeaf Development Guidelines
+# AGENTS.md - LingoLeaf Development Guidelines
 
 ## Code Style & Conventions
 
@@ -286,5 +286,5 @@ Code style and patterns (link to AGENTS.md)
 ---
 
 **Last updated**: 2025-12-27
-**Applies to**: LinguaLeaf MVP (Expo + Supabase + EPUB Reader)
+**Applies to**: LingoLeaf MVP (Expo + Supabase + EPUB Reader)
 

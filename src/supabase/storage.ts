@@ -33,7 +33,7 @@ export async function getSignedUrl(storagePath: string, expiresIn: number = 3600
 export async function downloadBook(bookId: string, storagePath: string): Promise<string> {
   logger.info('Downloading book', { bookId, storagePath });
   
-  const localPath = `${FileSystem.cacheDirectory}books/${bookId}.epub`;
+  const localPath = `${FileSystem.documentDirectory}books/${bookId}.epub`;
   logger.debug('Local path', { localPath });
   
   // Check if already cached and valid
@@ -51,7 +51,7 @@ export async function downloadBook(bookId: string, storagePath: string): Promise
   }
   
   // Ensure directory exists
-  const dirPath = `${FileSystem.cacheDirectory}books/`;
+  const dirPath = `${FileSystem.documentDirectory}books/`;
   const dirInfo = await FileSystem.getInfoAsync(dirPath);
   if (!dirInfo.exists) {
     logger.debug('Creating books directory', { dirPath });
@@ -93,7 +93,7 @@ export async function downloadBook(bookId: string, storagePath: string): Promise
 export async function downloadExternalBook(bookId: string, epubUrl: string): Promise<string> {
   logger.info('Downloading external book', { bookId });
 
-  const localPath = `${FileSystem.cacheDirectory}books/${bookId}.epub`;
+  const localPath = `${FileSystem.documentDirectory}books/${bookId}.epub`;
 
   const fileInfo = await FileSystem.getInfoAsync(localPath);
   if (fileInfo.exists) {
@@ -105,7 +105,7 @@ export async function downloadExternalBook(bookId: string, epubUrl: string): Pro
     await FileSystem.deleteAsync(localPath, { idempotent: true });
   }
 
-  const dirPath = `${FileSystem.cacheDirectory}books/`;
+  const dirPath = `${FileSystem.documentDirectory}books/`;
   const dirInfo = await FileSystem.getInfoAsync(dirPath);
   if (!dirInfo.exists) {
     await FileSystem.makeDirectoryAsync(dirPath, { intermediates: true });
@@ -137,7 +137,7 @@ export async function downloadExternalBook(bookId: string, epubUrl: string): Pro
  */
 export async function cleanupOrphanedCache(validBookIds: string[]): Promise<void> {
   try {
-    const dirPath = `${FileSystem.cacheDirectory}books/`;
+    const dirPath = `${FileSystem.documentDirectory}books/`;
     const dirInfo = await FileSystem.getInfoAsync(dirPath);
     
     if (!dirInfo.exists) {

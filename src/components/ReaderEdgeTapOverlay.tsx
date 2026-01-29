@@ -36,14 +36,14 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     left: 0,
-    width: '20%',
+    width: '5%',
   },
   right: {
     position: 'absolute',
     top: 0,
     bottom: 0,
     right: 0,
-    width: '20%',
+    width: '5%',
   },
 });
 

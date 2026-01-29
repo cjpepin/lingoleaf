@@ -3,7 +3,7 @@
  * Bottom sheet displaying translation with save option
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   Modal,
   ActivityIndicator,
   ScrollView,
+  TextInput,
+  Alert,
 } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import type { VocabList } from '@/supabase/types';
@@ -30,6 +32,7 @@ interface Props {
   selectedListId?: string | null;
   onPickList?: (listId: string) => void;
   onCloseListPicker?: () => void;
+  onCreateNewList?: (listName: string) => void;
   onSave: () => void;
   onClose: () => void;
 }
@@ -47,9 +50,12 @@ export function TranslateSheet({
   selectedListId,
   onPickList,
   onCloseListPicker,
+  onCreateNewList,
   onSave,
   onClose,
 }: Props) {
+  const [showNewListInput, setShowNewListInput] = useState(false);
+  const [newListName, setNewListName] = useState('');
   return (
     <Modal
       visible={visible}
@@ -136,6 +142,52 @@ export function TranslateSheet({
                       </TouchableOpacity>
                     );
                   })}
+                  {/* Create New List */}
+                  {showNewListInput ? (
+                    <View style={styles.newListInput}>
+                      <TextInput
+                        style={styles.newListTextInput}
+                        placeholder="List name"
+                        placeholderTextColor={colors.textTertiary}
+                        value={newListName}
+                        onChangeText={setNewListName}
+                        autoFocus
+                      />
+                      <View style={styles.newListActions}>
+                        <TouchableOpacity
+                          style={[styles.newListButton, styles.newListButtonCreate]}
+                          onPress={() => {
+                            if (!newListName.trim()) {
+                              Alert.alert('Error', 'Please enter a list name');
+                              return;
+                            }
+                            onCreateNewList?.(newListName.trim());
+                            setNewListName('');
+                            setShowNewListInput(false);
+                            onCloseListPicker();
+                          }}
+                        >
+                          <Text style={styles.newListButtonTextCreate}>Create</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.newListButton}
+                          onPress={() => {
+                            setNewListName('');
+                            setShowNewListInput(false);
+                          }}
+                        >
+                          <Text style={styles.newListButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.pickerRow, styles.newListRow]}
+                      onPress={() => setShowNewListInput(true)}
+                    >
+                      <Text style={styles.newListText}>+ Create New List</Text>
+                    </TouchableOpacity>
+                  )}
                 </ScrollView>
                 <TouchableOpacity style={styles.pickerCloseButton} onPress={onCloseListPicker}>
                   <Text style={styles.pickerCloseText}>Close</Text>
@@ -265,6 +317,60 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.primary,
     fontWeight: '700',
+  },
+  newListRow: {
+    borderColor: colors.primary,
+    borderStyle: 'dashed',
+  },
+  newListText: {
+    ...typography.body,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  newListInput: {
+    padding: spacing.md,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  newListTextInput: {
+    ...typography.body,
+    color: colors.text,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.surface,
+  },
+  newListActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  newListButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  newListButtonCreate: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  newListButtonText: {
+    ...typography.body,
+    color: colors.text,
+    fontWeight: '600',
+  },
+  newListButtonTextCreate: {
+    ...typography.body,
+    color: colors.surface,
+    fontWeight: '600',
   },
   pickerCloseButton: {
     paddingVertical: spacing.md,

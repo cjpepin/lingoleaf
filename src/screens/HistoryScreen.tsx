@@ -44,6 +44,7 @@ export default function HistoryScreen() {
   const [authorFilter, setAuthorFilter] = useState<string>('');
   const [subjectFilter, setSubjectFilter] = useState<string>('');
   const hasLoadedOnceRef = useRef(false);
+  const hasInitiallyLoadedRef = useRef(false);
 
   const pageSize = 15; // 5 rows × 3 columns
   const requestSeq = useRef(0);
@@ -131,7 +132,11 @@ export default function HistoryScreen() {
   );
 
   useEffect(() => {
+    // Only load once on mount, not every time loadBooks changes
+    if (hasInitiallyLoadedRef.current) return;
+    hasInitiallyLoadedRef.current = true;
     loadBooks(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

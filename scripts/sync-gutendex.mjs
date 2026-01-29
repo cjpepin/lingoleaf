@@ -2,7 +2,7 @@
  * Sync Gutendex → Supabase books table
  *
  * Purpose:
- * - Populate LinguaLeaf with a large, US-first public-domain catalog.
+ * - Populate LingoLeaf with a large, US-first public-domain catalog.
  * - Store enough metadata to filter by author/language/subject.
  *
  * Requires env:

@@ -1,12 +1,13 @@
 {
   "expo": {
-    "name": "LinguaLeaf",
-    "slug": "lingualeaf",
+    "name": "LingoLeaf",
+    "slug": "lingoleaf",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/lingualeaf_icon.png",
+    "icon": "./assets/lingoleaf_icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "scheme": "lingoleaf",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -14,21 +15,44 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.lingualeaf.app"
+      "bundleIdentifier": "com.lingoleaf.app",
+      "associatedDomains": ["applinks:lingoleafapp.com"],
+      "infoPlist": {
+        "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/lingualeaf_icon.png",
+        "foregroundImage": "./assets/lingoleaf_icon.png",
         "backgroundColor": "#F5F5F0"
       },
-      "package": "com.lingualeaf.app"
+      "package": "com.lingoleaf.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lingoleafapp.com",
+              "pathPrefix": "/auth"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-file-system"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "cdf11764-8f6b-4595-bef0-94920ee02faa"
+      }
+    }
   }
 }
-
