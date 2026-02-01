@@ -21,10 +21,10 @@ import { LibraryHeader } from '@/components/LibraryHeader';
 import { colors, spacing } from '@/theme';
 import { logger } from '@/utils/logger';
 import { useAuthStore } from '@/state/useAuthStore';
-import { CenteredLoader } from '@/components/ui/CenteredLoader';
 import { Button } from '@/components/ui/Button';
 import { AdBanner } from '@/components/ads/AdBanner';
 import { buildAdRows, type LibraryRow } from '@/ads/buildAdRows';
+import { useTranslation } from '@/i18n/useTranslation';
 
 type Nav = CompositeNavigationProp<BottomTabNavigationProp<TabParamList>, NativeStackNavigationProp<RootStackParamList>>;
 
@@ -32,6 +32,7 @@ export default function HistoryScreen() {
   const navigation = useNavigation<Nav>();
   const { user } = useAuthStore();
   const { width: windowWidth } = useWindowDimensions();
+  const t = useTranslation();
 
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,8 +42,7 @@ export default function HistoryScreen() {
 
   const [search, setSearch] = useState('');
   const [sourceLang, setSourceLang] = useState<string>('');
-  const [authorFilter, setAuthorFilter] = useState<string>('');
-  const [subjectFilter, setSubjectFilter] = useState<string>('');
+  const [subjectFilters, setSubjectFilters] = useState<string[]>([]);
   const hasLoadedOnceRef = useRef(false);
   const hasInitiallyLoadedRef = useRef(false);
 
@@ -72,7 +72,7 @@ export default function HistoryScreen() {
       reset: boolean = false,
       opts?: {
         runCleanup?: boolean;
-        override?: { search?: string; language?: string; author?: string; subject?: string };
+        override?: { search?: string; language?: string; subjects?: string[] };
       }
     ) => {
       const seq = ++requestSeq.current;
@@ -90,15 +90,13 @@ export default function HistoryScreen() {
         const o = opts?.override;
         const effectiveSearch = o?.search ?? search;
         const effectiveLang = o?.language ?? sourceLang;
-        const effectiveAuthor = o?.author ?? authorFilter;
-        const effectiveSubject = o?.subject ?? subjectFilter;
+        const effectiveSubjects = o?.subjects ?? subjectFilters;
 
         const offset = reset ? 0 : booksRef.current.length;
         const data = await fetchHistoryBooks(user.id, {
           search: effectiveSearch,
           language: effectiveLang.trim().length > 0 ? effectiveLang.trim() : undefined,
-          author: effectiveAuthor.trim().length > 0 ? effectiveAuthor.trim() : undefined,
-          subject: effectiveSubject.trim().length > 0 ? effectiveSubject.trim() : undefined,
+          subjects: effectiveSubjects.length > 0 ? effectiveSubjects : undefined,
           limit: pageSize,
           offset,
         });
@@ -128,7 +126,7 @@ export default function HistoryScreen() {
         setLoadingMore(false);
       }
     },
-    [authorFilter, search, sourceLang, subjectFilter, user]
+    [search, sourceLang, subjectFilters, user]
   );
 
   useEffect(() => {
@@ -139,13 +137,25 @@ export default function HistoryScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Debounced search - skip on mount to avoid double load with initial effect
+  const searchInitializedRef = useRef(false);
   useEffect(() => {
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      return;
+    }
     const t = setTimeout(() => loadBooks(true, { runCleanup: false, override: { search } }), 250);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, loadBooks]);
 
+  // Refresh when returning to screen (skip first mount to avoid double load)
+  const isFirstFocusRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
       loadBooks(true, { runCleanup: false });
     }, [loadBooks])
   );
@@ -184,30 +194,28 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       <FlatList
         data={rows}
+        extraData={books.length}
         keyExtractor={(item) => item.key}
         numColumns={1}
         keyboardShouldPersistTaps="always"
         ListHeaderComponent={
           <LibraryHeader
-            title="History"
-            ctaLabel="Find a new book"
+            title={t('history.history')}
+            ctaLabel={t('history.findANewBook')}
             onPressCta={() => navigation.navigate('Library')}
             search={search}
             onChangeSearch={setSearch}
             language={sourceLang}
-            author={authorFilter}
-            subject={subjectFilter}
-            onApplyFilters={({ language, author, subject }) => {
+            subjects={subjectFilters}
+            onApplyFilters={({ language, subjects }) => {
               setSourceLang(language);
-              setAuthorFilter(author);
-              setSubjectFilter(subject);
-              loadBooks(true, { runCleanup: true, override: { language, author, subject } });
+              setSubjectFilters(subjects);
+              loadBooks(true, { runCleanup: true, override: { search, language, subjects } });
             }}
             onResetFilters={() => {
               setSourceLang('');
-              setAuthorFilter('');
-              setSubjectFilter('');
-              loadBooks(true, { runCleanup: true, override: { language: '', author: '', subject: '' } });
+              setSubjectFilters([]);
+              loadBooks(true, { runCleanup: true, override: { search, language: '', subjects: [] } });
             }}
           />
         }
@@ -217,7 +225,7 @@ export default function HistoryScreen() {
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
-            <EmptyState message="No reading history yet" />
+            <EmptyState message={t('history.noReadingHistory')} />
           )
         }
         ListFooterComponent={

@@ -6,6 +6,9 @@
 import { create } from 'zustand';
 import { fetchUserSettings, upsertUserSettings } from '@/supabase/queries';
 import type { UserSettings } from '@/supabase/types';
+import { useReaderSettingsStore } from './useReaderSettingsStore';
+import { useFlashcardSettingsStore } from './useFlashcardSettingsStore';
+import { useAppLangStore } from './useAppLangStore';
 
 interface SettingsStore {
   targetLang: string;
@@ -27,6 +30,9 @@ export const useSettingsStore = create<SettingsStore>((set, get) => ({
       const settings = await fetchUserSettings(userId);
       if (settings) {
         set({ targetLang: settings.target_lang });
+        useReaderSettingsStore.getState().hydrateFromSettings(settings);
+        useFlashcardSettingsStore.getState().hydrateFromSettings(settings);
+        useAppLangStore.getState().hydrateFromSettings(settings);
       }
       return settings;
     } catch (error) {

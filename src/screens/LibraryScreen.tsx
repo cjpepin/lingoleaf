@@ -28,6 +28,7 @@ import { logger } from '@/utils/logger';
 import { LibraryHeader } from '@/components/LibraryHeader';
 import { AdBanner } from '@/components/ads/AdBanner';
 import { buildAdRows, type LibraryRow } from '@/ads/buildAdRows';
+import { useTranslation } from '@/i18n/useTranslation';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -42,13 +43,13 @@ export default function LibraryScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
   const [sourceLang, setSourceLang] = useState<string>('');
-  const [authorFilter, setAuthorFilter] = useState<string>('');
-  const [subjectFilter, setSubjectFilter] = useState<string>('');
+  const [subjectFilters, setSubjectFilters] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const hasLoadedOnceRef = useRef(false);
   const hasInitiallyLoadedRef = useRef(false);
   const hasSetDefaultLangRef = useRef(false);
+  const t = useTranslation();
 
   const pageSize = 15; // 5 rows × 3 columns
   const requestSeq = useRef(0);
@@ -76,7 +77,7 @@ export default function LibraryScreen() {
       reset: boolean = false,
       opts?: {
         runCleanup?: boolean;
-        override?: { search?: string; language?: string; author?: string; subject?: string };
+        override?: { search?: string; language?: string; subjects?: string[] };
       }
     ) => {
       const seq = ++requestSeq.current;
@@ -89,15 +90,13 @@ export default function LibraryScreen() {
         const o = opts?.override;
         const effectiveSearch = o?.search ?? search;
         const effectiveLang = o?.language ?? sourceLang;
-        const effectiveAuthor = o?.author ?? authorFilter;
-        const effectiveSubject = o?.subject ?? subjectFilter;
+        const effectiveSubjects = o?.subjects ?? subjectFilters;
 
         const offset = reset ? 0 : booksRef.current.length;
         const data = await fetchBooks({
-          search: effectiveSearch,
+          search: effectiveSearch.trim().length > 0 ? effectiveSearch.trim() : undefined,
           language: effectiveLang.trim().length > 0 ? effectiveLang.trim() : undefined,
-          author: effectiveAuthor.trim().length > 0 ? effectiveAuthor.trim() : undefined,
-          subject: effectiveSubject.trim().length > 0 ? effectiveSubject.trim() : undefined,
+          subjects: effectiveSubjects.length > 0 ? effectiveSubjects : undefined,
           limit: pageSize,
           offset,
         });
@@ -123,51 +122,60 @@ export default function LibraryScreen() {
         hasLoadedOnceRef.current = true;
       } catch (error) {
         logger.error('Failed to load books:', error);
-        Alert.alert('Error', 'Failed to load library');
+        Alert.alert('Error', t('library.loadLibraryError'));
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [authorFilter, search, sourceLang, subjectFilter]
+    [search, sourceLang, subjectFilters]
   );
 
-  // Default to first goal language on mount
+  // Single initial load: get settings first, then load books with default lang.
+  // No cleanup/abort - let the load always complete so state updates trigger UI refresh.
   useEffect(() => {
-    if (user) {
-      loadSettings(user.id).then((settings) => {
-        // Default to first goal language if available and not already set
-        if (!hasSetDefaultLangRef.current && settings?.goal_langs && settings.goal_langs.length > 0 && !sourceLang) {
-          const firstGoalLang = settings.goal_langs[0];
-          setSourceLang(firstGoalLang);
-          hasSetDefaultLangRef.current = true;
-          // Reload books with the default language
-          loadBooks(true, { override: { language: firstGoalLang } });
-        }
-      });
-    }
-  }, [user, loadSettings, sourceLang, loadBooks]);
-
-  useEffect(() => {
-    // Only load once on mount, not every time loadBooks changes
-    if (hasInitiallyLoadedRef.current) return;
+    if (!user || hasInitiallyLoadedRef.current) return;
     hasInitiallyLoadedRef.current = true;
-    loadBooks(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
+    (async () => {
+      try {
+        const settings = await loadSettings(user.id);
+        const lang = settings?.goal_langs?.[0] ?? '';
+        await loadBooks(true, {
+          override: { language: lang || undefined },
+          runCleanup: true,
+        });
+        if (lang) {
+          setSourceLang(lang);
+          hasSetDefaultLangRef.current = true;
+        }
+      } catch (err) {
+        hasInitiallyLoadedRef.current = false;
+      }
+    })();
+  }, [user, loadSettings, loadBooks]);
+
+  // Debounced title/author search
+  const searchInitializedRef = useRef(false);
   useEffect(() => {
+    if (!searchInitializedRef.current) {
+      searchInitializedRef.current = true;
+      return;
+    }
     const t = setTimeout(() => {
-      // Search should not feel like a full-screen reset.
       loadBooks(true, { runCleanup: false, override: { search } });
     }, 250);
     return () => clearTimeout(t);
-  }, [loadBooks, search]);
+  }, [search, loadBooks]);
 
-  // Refresh books list when screen comes into focus
+  // Refresh when returning to screen (skip first mount to avoid double load)
+  const isFirstFocusRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
-      logger.info('LibraryScreen focused, refreshing books list');
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
       loadBooks(true, { runCleanup: false });
     }, [loadBooks])
   );
@@ -179,7 +187,7 @@ export default function LibraryScreen() {
       logger.info('Library refreshed');
     } catch (error) {
       logger.error('Failed to refresh library:', error);
-      Alert.alert('Error', 'Failed to refresh library');
+      Alert.alert('Error', t('library.refreshError'));
     } finally {
       setRefreshing(false);
     }
@@ -196,7 +204,7 @@ export default function LibraryScreen() {
       navigation.navigate('BookDetails', { bookId: book.id });
     } catch (error) {
       logger.error('Failed to open book details:', error);
-      Alert.alert('Error', 'Failed to open book');
+      Alert.alert('Error', t('library.openBookError'));
     }
   };
 
@@ -204,28 +212,26 @@ export default function LibraryScreen() {
     <View style={styles.container}>
       <FlatList
         data={rows}
+        extraData={books.length}
         keyExtractor={(item) => item.key}
         numColumns={1}
         keyboardShouldPersistTaps="always"
         ListHeaderComponent={
           <LibraryHeader
-            title="Library"
+            title={t('library.library')}
             search={search}
             onChangeSearch={setSearch}
             language={sourceLang}
-            author={authorFilter}
-            subject={subjectFilter}
-            onApplyFilters={({ language, author, subject }) => {
+            subjects={subjectFilters}
+            onApplyFilters={({ language, subjects }) => {
               setSourceLang(language);
-              setAuthorFilter(author);
-              setSubjectFilter(subject);
-              loadBooks(true, { runCleanup: true, override: { language, author, subject } });
+              setSubjectFilters(subjects);
+              loadBooks(true, { runCleanup: true, override: { search, language, subjects } });
             }}
             onResetFilters={() => {
               setSourceLang('');
-              setAuthorFilter('');
-              setSubjectFilter('');
-              loadBooks(true, { runCleanup: true, override: { language: '', author: '', subject: '' } });
+              setSubjectFilters([]);
+              loadBooks(true, { runCleanup: true, override: { search, language: '', subjects: [] } });
             }}
           />
         }
@@ -235,7 +241,7 @@ export default function LibraryScreen() {
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
-            <EmptyState message="No books match your filters" />
+            <EmptyState message={t('library.noBooksMatchFilters')} />
           )
         }
         ListFooterComponent={

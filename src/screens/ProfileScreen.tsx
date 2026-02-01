@@ -18,6 +18,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
+import { useTranslation } from '@/i18n/useTranslation';
 import { fetchUserSettings, upsertUserSettings, checkIsAdmin } from '@/supabase/queries';
 import { supabase } from '@/supabase/client';
 import { colors, spacing, typography } from '@/theme';
@@ -47,8 +48,8 @@ function getUserDisplayName(user: any): string {
   if (firstName && lastName) return `${firstName} ${lastName}`;
   if (firstName) return firstName;
   
-  // For Apple users without a name, show "Apple User"
-  if (isAppleUser) return 'Apple User';
+  // For Apple users without a name, show "Apple User" (caller passes translated string)
+  if (isAppleUser) return 'APPLE_USER_PLACEHOLDER';
   
   // For Google or other providers, show email
   return email;
@@ -60,6 +61,7 @@ export default function ProfileScreen() {
   const signOut = useAuthStore((state) => state.signOut);
   const isGuest = useAuthStore((state) => state.isGuest);
   const { targetLang, setTargetLang } = useSettingsStore();
+  const t = useTranslation();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,7 +102,7 @@ export default function ProfileScreen() {
       setIsAdmin(adminStatus);
     } catch (error) {
       logger.error('Failed to load settings:', error);
-      Alert.alert('Error', 'Failed to load profile settings');
+      Alert.alert(t('common.error'), t('profile.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -119,10 +121,10 @@ export default function ProfileScreen() {
         goal_langs: goalLangs,
       });
 
-      Alert.alert('Success', 'Profile updated successfully');
+      setSnackbar({ visible: true, message: t('profile.profileUpdated'), type: 'success' });
     } catch (error) {
       logger.error('Failed to save settings:', error);
-      Alert.alert('Error', 'Failed to save profile');
+      Alert.alert(t('common.error'), t('profile.saveProfileFailed'));
     } finally {
       setSaving(false);
     }
@@ -146,12 +148,12 @@ export default function ProfileScreen() {
 
   const handleDeleteAccount = () => {
     Alert.alert(
-      'Delete Account',
-      'Are you sure? This will permanently delete your account and all your data. This action cannot be undone.',
+      t('profile.deleteAccount'),
+      t('profile.deleteAccountConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('study.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('study.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -181,10 +183,10 @@ export default function ProfileScreen() {
   const handleSignOut = async () => {
     try {
       await signOut();
-      setSnackbar({ visible: true, message: 'Signed out successfully', type: 'success' });
+      setSnackbar({ visible: true, message: t('profile.signedOutSuccess'), type: 'success' });
     } catch (error) {
       logger.error('Sign out failed:', error);
-      setSnackbar({ visible: true, message: 'Failed to sign out', type: 'error' });
+      setSnackbar({ visible: true, message: t('profile.signOutFailed'), type: 'error' });
     }
   };
 
@@ -199,12 +201,12 @@ export default function ProfileScreen() {
   if (!user) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Profile</Text>
+        <Text style={styles.title}>{t('profile.title')}</Text>
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account</Text>
-          <Text style={styles.sectionDescription}>Sign in to sync your progress across devices.</Text>
+          <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+          <Text style={styles.sectionDescription}>{t('profile.signInPrompt')}</Text>
           <Button
-            label="Sign in / Create account"
+            label={t('profile.signInCreateAccount')}
             variant="primary"
             style={styles.rectButton}
             onPress={() => navigation.navigate('Auth')}
@@ -216,14 +218,16 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Profile</Text>
+      <Text style={styles.title}>{t('profile.title')}</Text>
       
       <View style={styles.section}>
         <View style={styles.emailRow}>
-          <Text style={styles.email}>{isGuest ? 'Guest' : getUserDisplayName(user)}</Text>
+          <Text style={styles.email}>
+            {isGuest ? t('profile.guest') : (getUserDisplayName(user) === 'APPLE_USER_PLACEHOLDER' ? t('profile.appleUser') : getUserDisplayName(user))}
+          </Text>
           {isAdmin && (
             <View style={styles.adminChip}>
-              <Text style={styles.adminChipText}>Admin</Text>
+              <Text style={styles.adminChipText}>{t('profile.admin')}</Text>
             </View>
           )}
         </View>
@@ -231,8 +235,8 @@ export default function ProfileScreen() {
 
       {/* Native Language */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Native Language</Text>
-        <Text style={styles.sectionDescription}>Your first language</Text>
+        <Text style={styles.sectionTitle}>{t('profile.nativeLang')}</Text>
+        <Text style={styles.sectionDescription}>{t('profile.nativeLangDesc')}</Text>
         <View style={styles.languageGrid}>
           {LANGUAGES.map((lang) => (
             <TouchableOpacity
@@ -249,7 +253,7 @@ export default function ProfileScreen() {
                   nativeLang === lang.code && styles.languageButtonTextSelected,
                 ]}
               >
-                {lang.name}
+                {t('language.' + lang.code)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -258,8 +262,8 @@ export default function ProfileScreen() {
 
       {/* Known Languages */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Known Languages</Text>
-        <Text style={styles.sectionDescription}>Languages you can read</Text>
+        <Text style={styles.sectionTitle}>{t('profile.knownLangs')}</Text>
+        <Text style={styles.sectionDescription}>{t('profile.knownLangsDesc')}</Text>
         <View style={styles.languageGrid}>
           {LANGUAGES.map((lang) => (
             <TouchableOpacity
@@ -276,7 +280,7 @@ export default function ProfileScreen() {
                   knownLangs.includes(lang.code) && styles.languageButtonTextSelected,
                 ]}
               >
-                {lang.name}
+                {t('language.' + lang.code)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -285,8 +289,8 @@ export default function ProfileScreen() {
 
       {/* Goal Languages */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Goal Languages</Text>
-        <Text style={styles.sectionDescription}>Languages you want to learn</Text>
+        <Text style={styles.sectionTitle}>{t('profile.goalLangs')}</Text>
+        <Text style={styles.sectionDescription}>{t('profile.goalLangsDesc')}</Text>
         <View style={styles.languageGrid}>
           {LANGUAGES.map((lang) => (
             <TouchableOpacity
@@ -303,7 +307,7 @@ export default function ProfileScreen() {
                   goalLangs.includes(lang.code) && styles.languageButtonTextSelected,
                 ]}
               >
-                {lang.name}
+                {t('language.' + lang.code)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -312,8 +316,8 @@ export default function ProfileScreen() {
 
       {/* Current Target Language */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Current Translation Target</Text>
-        <Text style={styles.sectionDescription}>Language for translations while reading</Text>
+        <Text style={styles.sectionTitle}>{t('profile.targetLangTitle')}</Text>
+        <Text style={styles.sectionDescription}>{t('profile.targetLangDesc')}</Text>
         <View style={styles.languageGrid}>
           {LANGUAGES.map((lang) => (
             <TouchableOpacity
@@ -330,7 +334,7 @@ export default function ProfileScreen() {
                   targetLang === lang.code && styles.languageButtonTextSelected,
                 ]}
               >
-                {lang.name}
+                {t('language.' + lang.code)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -347,7 +351,7 @@ export default function ProfileScreen() {
         {saving ? (
           <ActivityIndicator color={colors.background} />
         ) : (
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+          <Text style={styles.saveButtonText}>{t('profile.saveChanges')}</Text>
         )}
       </TouchableOpacity>
 
@@ -356,14 +360,14 @@ export default function ProfileScreen() {
         style={styles.settingsButton}
         onPress={() => navigation.navigate('Settings')}
       >
-        <Text style={styles.settingsButtonText}>⚙️ Settings</Text>
+        <Text style={styles.settingsButtonText}>{t('nav.settings')}</Text>
       </TouchableOpacity>
       </View>
 
       {/* Sign Out */}
       {isGuest ? (
         <Button 
-          label="Sign in / Create account" 
+          label={t('profile.signInCreateAccount')} 
           variant="primary" 
           style={styles.rectButton} 
           onPress={() => navigation.navigate('Auth')} 
@@ -371,7 +375,7 @@ export default function ProfileScreen() {
         />
       ) : (
         <Button 
-          label="Sign out" 
+          label={t('profile.signOut')} 
           variant="primary" 
           style={styles.rectButton} 
           onPress={handleSignOut} 
@@ -381,7 +385,7 @@ export default function ProfileScreen() {
 
       {/* Delete Account */}
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
-        <Text style={styles.deleteButtonText}>Delete Account</Text>
+        <Text style={styles.deleteButtonText}>{t('profile.deleteAccount')}</Text>
       </TouchableOpacity>
 
       <View style={styles.spacer} />

@@ -9,6 +9,7 @@ import type {
   Book,
   Highlight,
   StudyWord,
+  StudyWordReview,
   UserSettings,
   TranslationRequest,
   TranslationResponse,
@@ -20,10 +21,12 @@ import type {
 
 // Books
 export interface BookFilters {
+  /** Title/author search (used in History; Library uses main app search) */
   search?: string;
   author?: string;
   language?: string;
-  subject?: string;
+  /** Array of subject values (multiselect); books matching any are returned */
+  subjects?: string[];
   source?: string;
   limit?: number;
   offset?: number;
@@ -34,7 +37,6 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
 
   const search = filters?.search?.trim();
   if (search) {
-    // Search across title + author (simple, fast MVP)
     query = query.or(`title.ilike.%${search}%,author.ilike.%${search}%`);
   }
 
@@ -48,10 +50,12 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
     query = query.eq('source_lang', language);
   }
 
-  const subject = filters?.subject?.trim();
-  if (subject) {
-    // We store a flattened string for flexible "contains" matching (avoids array operator UX issues)
-    query = query.ilike('subjects_text', `%${subject}%`);
+  const subjects = filters?.subjects;
+  if (subjects && Array.isArray(subjects) && subjects.length > 0) {
+    const trimmed = subjects.map((s) => String(s).trim()).filter(Boolean);
+    if (trimmed.length > 0) {
+      query = query.overlaps('subjects', trimmed);
+    }
   }
 
   const source = filters?.source?.trim();
@@ -73,6 +77,15 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];
+}
+
+export async function fetchBookSubjects(): Promise<string[]> {
+  const { data, error } = await supabase.rpc('get_distinct_book_subjects');
+  if (error) {
+    logger.warn('Failed to fetch book subjects', error);
+    return [];
+  }
+  return Array.isArray(data) ? data.map((r) => (r?.subject ?? '')).filter(Boolean) : [];
 }
 
 export async function fetchBook(id: string): Promise<Book> {
@@ -143,6 +156,190 @@ export async function deleteHighlight(id: string): Promise<void> {
 }
 
 // Study Words
+export type FlashcardRating = 'again' | 'hard' | 'good' | 'easy';
+
+export interface FlashcardIntervalSettings {
+  againCards: number;
+  intervalHardMin: number;
+  intervalGoodMin: number;
+  intervalEasyMin: number;
+  multiplier: number;
+}
+
+export interface FlashcardStats {
+  unseen: number;
+  learning: number;
+  learned: number;
+}
+
+function buildFlashcardQueue(wordList: StudyWord[], reviewByWordId: Map<string, string>): StudyWord[] {
+  const now = new Date().toISOString();
+  const due: StudyWord[] = [];
+  const notDue: StudyWord[] = [];
+  for (const word of wordList) {
+    const nextReview = reviewByWordId.get(word.id) ?? null;
+    if (!nextReview || nextReview <= now) {
+      due.push(word);
+    } else {
+      notDue.push(word);
+    }
+  }
+  return [...due, ...notDue];
+}
+
+function computeFlashcardStats(
+  wordIds: string[],
+  reviewByWordId: Map<string, string>
+): FlashcardStats {
+  const now = new Date().toISOString();
+  let unseen = 0;
+  let learning = 0;
+  let learned = 0;
+  for (const id of wordIds) {
+    const nextReview = reviewByWordId.get(id) ?? null;
+    if (!nextReview) {
+      unseen++;
+    } else if (nextReview <= now) {
+      learning++;
+    } else {
+      learned++;
+    }
+  }
+  return { unseen, learning, learned };
+}
+
+export async function fetchFlashcardQueue(userId: string, listId: string): Promise<StudyWord[]> {
+  const { data: words, error } = await supabase
+    .from('study_words')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('list_id', listId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  const wordList = (words ?? []) as StudyWord[];
+  if (wordList.length === 0) return [];
+
+  const wordIds = wordList.map((w) => w.id);
+  const { data: reviews } = await supabase
+    .from('study_word_reviews')
+    .select('study_word_id, next_review_at')
+    .in('study_word_id', wordIds);
+
+  const reviewByWordId = new Map<string, string>();
+  for (const r of reviews ?? []) {
+    reviewByWordId.set(r.study_word_id, r.next_review_at);
+  }
+  return buildFlashcardQueue(wordList, reviewByWordId);
+}
+
+export async function fetchFlashcardStats(
+  userId: string,
+  listId: string | null
+): Promise<FlashcardStats> {
+  const query = supabase
+    .from('study_words')
+    .select('id')
+    .eq('user_id', userId);
+  if (listId) {
+    query.eq('list_id', listId);
+  }
+  const { data: words, error } = await query;
+  if (error) throw error;
+  const wordList = words ?? [];
+  if (wordList.length === 0) return { unseen: 0, learning: 0, learned: 0 };
+
+  const wordIds = wordList.map((w) => w.id);
+  const { data: reviews } = await supabase
+    .from('study_word_reviews')
+    .select('study_word_id, next_review_at')
+    .in('study_word_id', wordIds);
+
+  const reviewByWordId = new Map<string, string>();
+  for (const r of reviews ?? []) {
+    reviewByWordId.set(r.study_word_id, r.next_review_at);
+  }
+  return computeFlashcardStats(wordIds, reviewByWordId);
+}
+
+export async function fetchFlashcardQueueAll(userId: string): Promise<StudyWord[]> {
+  const { data: words, error } = await supabase
+    .from('study_words')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  const wordList = (words ?? []) as StudyWord[];
+  if (wordList.length === 0) return [];
+
+  const wordIds = wordList.map((w) => w.id);
+  const { data: reviews } = await supabase
+    .from('study_word_reviews')
+    .select('study_word_id, next_review_at')
+    .in('study_word_id', wordIds);
+
+  const reviewByWordId = new Map<string, string>();
+  for (const r of reviews ?? []) {
+    reviewByWordId.set(r.study_word_id, r.next_review_at);
+  }
+  return buildFlashcardQueue(wordList, reviewByWordId);
+}
+
+export async function upsertStudyWordReview(
+  studyWordId: string,
+  rating: FlashcardRating,
+  settings: FlashcardIntervalSettings
+): Promise<void> {
+  const now = new Date().toISOString();
+  let intervalMinutes: number;
+  let nextReviewAt: string;
+
+  const { data: existing } = await supabase
+    .from('study_word_reviews')
+    .select('review_count, interval_minutes')
+    .eq('study_word_id', studyWordId)
+    .maybeSingle();
+
+  const prevInterval = (existing as { interval_minutes?: number } | null)?.interval_minutes ?? 0;
+  const reviewCount = ((existing as { review_count?: number })?.review_count ?? 0) + 1;
+
+  if (rating === 'again') {
+    intervalMinutes = 0;
+    nextReviewAt = now;
+  } else if (rating === 'hard') {
+    intervalMinutes = settings.intervalHardMin;
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  } else if (rating === 'good') {
+    if (prevInterval >= settings.intervalGoodMin) {
+      intervalMinutes = Math.round(prevInterval * settings.multiplier);
+    } else {
+      intervalMinutes = settings.intervalGoodMin;
+    }
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  } else {
+    if (prevInterval >= settings.intervalEasyMin) {
+      intervalMinutes = Math.round(prevInterval * settings.multiplier);
+    } else {
+      intervalMinutes = settings.intervalEasyMin;
+    }
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  }
+
+  const { error } = await supabase.from('study_word_reviews').upsert(
+    {
+      study_word_id: studyWordId,
+      next_review_at: nextReviewAt,
+      interval_minutes: intervalMinutes,
+      last_rating: rating,
+      review_count: reviewCount,
+      updated_at: now,
+    },
+    { onConflict: 'study_word_id' }
+  );
+  if (error) throw error;
+}
+
 export async function fetchStudyWords(userId: string, listId?: string | null): Promise<StudyWord[]> {
   let query = supabase
     .from('study_words')
@@ -513,9 +710,12 @@ export async function fetchHistoryBooks(userId: string, filters?: BookFilters): 
     query = query.eq('source_lang', language);
   }
 
-  const subject = filters?.subject?.trim();
-  if (subject) {
-    query = query.ilike('subjects_text', `%${subject}%`);
+  const subjects = filters?.subjects;
+  if (subjects && Array.isArray(subjects) && subjects.length > 0) {
+    const trimmed = subjects.map((s) => String(s).trim()).filter(Boolean);
+    if (trimmed.length > 0) {
+      query = query.overlaps('subjects', trimmed);
+    }
   }
 
   const source = filters?.source?.trim();

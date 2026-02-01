@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { useNavigation } from '@react-navigation/native';
@@ -383,7 +384,10 @@ export default function AdminScreen() {
           {uploading ? (
             <ActivityIndicator color={colors.background} />
           ) : (
-            <Text style={styles.uploadButtonText}>📚 Upload Book</Text>
+            <View style={styles.uploadButtonContent}>
+              <Feather name="upload-cloud" size={18} color={colors.background} />
+              <Text style={styles.uploadButtonText}>Upload Book</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -531,6 +535,11 @@ const styles = StyleSheet.create({
   },
   uploadButtonDisabled: {
     opacity: 0.6,
+  },
+  uploadButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   uploadButtonText: {
     ...typography.body,

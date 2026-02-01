@@ -31,6 +31,10 @@ export const READER_INJECTED_JAVASCRIPT = `
           ::selection {
             background: rgba(180, 215, 255, 0.4) !important;
           }
+          [ref="epubjs-hl"], .epubjs-hl {
+            mix-blend-mode: multiply !important;
+            pointer-events: auto !important;
+          }
         \`;
         (doc.head || doc.documentElement).appendChild(style);
         
@@ -264,6 +268,9 @@ export const READER_INJECTED_JAVASCRIPT = `
             if (doc && !doc.__llSelectionDebug) {
               attachSelectionDebug(doc);
             }
+            if (doc && !doc.__llHighlightClick) {
+              attachHighlightClick(doc);
+            }
           } catch (e) {
             if (!iframe.__listener) {
               iframe.addEventListener('load', () => {
@@ -272,6 +279,7 @@ export const READER_INJECTED_JAVASCRIPT = `
                   if (doc) {
                     applyCSS(doc);
                     attachSelectionDebug(doc);
+                    attachHighlightClick(doc);
                   }
                 } catch (e2) {}
               });
@@ -290,24 +298,28 @@ export const READER_INJECTED_JAVASCRIPT = `
         if (++count > 100) clearInterval(interval);
       }, 100);
 
-      // Detect clicks on highlights (epub.js adds data-epubcfi attribute to highlight elements)
-      document.addEventListener('click', function(e) {
-        try {
-          var target = e.target;
-          // Walk up the DOM to find a highlight element
-          for (var i = 0; i < 5 && target; i++) {
-            if (target.dataset && target.dataset.epubcfi) {
-              var cfi = target.dataset.epubcfi;
-              var highlightId = target.dataset.id || null;
-              postToRN({ type: 'llHighlightClicked', cfi: cfi, highlightId: highlightId });
-              e.stopPropagation();
-              e.preventDefault();
-              return;
+      // Detect tap/long-press on highlights (must run in iframe docs where EPUB content lives)
+      function attachHighlightClick(doc) {
+        if (doc.__llHighlightClick) return;
+        function handleHighlightTap(e) {
+          try {
+            var target = e.target;
+            for (var i = 0; i < 8 && target; i++) {
+              if (target.dataset && target.dataset.epubcfi) {
+                postToRN({ type: 'llHighlightClicked', cfi: target.dataset.epubcfi, highlightId: target.dataset.id || null });
+                e.stopPropagation();
+                e.preventDefault();
+                return;
+              }
+              target = target.parentElement;
             }
-            target = target.parentElement;
-          }
-        } catch (err) {}
-      }, true);
+          } catch (err) {}
+        }
+        doc.addEventListener('click', handleHighlightTap, true);
+        doc.addEventListener('touchend', handleHighlightTap, true);
+        doc.__llHighlightClick = true;
+      }
+      attachHighlightClick(document);
       
       console.log('✅ LingoLeaf JS initialized');
     })();

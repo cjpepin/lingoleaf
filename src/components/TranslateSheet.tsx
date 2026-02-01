@@ -17,6 +17,7 @@ import {
   Alert,
 } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
+import { useTranslation } from '@/i18n/useTranslation';
 import type { VocabList } from '@/supabase/types';
 
 interface Props {
@@ -54,6 +55,7 @@ export function TranslateSheet({
   onSave,
   onClose,
 }: Props) {
+  const t = useTranslation();
   const [showNewListInput, setShowNewListInput] = useState(false);
   const [newListName, setNewListName] = useState('');
   return (
@@ -73,30 +75,30 @@ export function TranslateSheet({
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color={colors.primary} />
-              <Text style={styles.loadingText}>Translating...</Text>
+              <Text style={styles.loadingText}>{t('translate.translating')}</Text>
             </View>
           ) : error ? (
             <View style={styles.errorContainer}>
               <Text style={styles.errorText}>{error}</Text>
               <TouchableOpacity style={styles.button} onPress={onClose}>
-                <Text style={styles.buttonText}>Close</Text>
+                <Text style={styles.buttonText}>{t('translate.close')}</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
               <View style={styles.content}>
-                <Text style={styles.label}>Original</Text>
+                <Text style={styles.label}>{t('translate.original')}</Text>
                 <Text style={styles.term}>{term}</Text>
                 
-                <Text style={styles.label}>Translation</Text>
+                <Text style={styles.label}>{t('translate.translation')}</Text>
                 <Text style={styles.translation}>{translation}</Text>
 
                 {onSelectList ? (
                   <>
-                    <Text style={styles.label}>List</Text>
+                    <Text style={styles.label}>{t('translate.list')}</Text>
                     <TouchableOpacity style={styles.listButton} onPress={onSelectList}>
                       <Text style={styles.listButtonText} numberOfLines={1}>
-                        {selectedListName || 'Select list'}
+                        {selectedListName || t('translate.selectList')}
                       </Text>
                       <Text style={styles.listButtonChevron}>›</Text>
                     </TouchableOpacity>
@@ -110,7 +112,7 @@ export function TranslateSheet({
                   onPress={onSave}
                 >
                   <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
-                    Save to Study List
+                    {t('translate.saveToList')}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.button} onPress={onClose}>
@@ -125,7 +127,7 @@ export function TranslateSheet({
             <View style={styles.pickerOverlay} pointerEvents="box-none">
               <Pressable style={StyleSheet.absoluteFill} onPress={onCloseListPicker} />
               <View style={styles.pickerCard}>
-                <Text style={styles.pickerTitle}>Choose a list</Text>
+                <Text style={styles.pickerTitle}>{t('translate.chooseList')}</Text>
                 <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent}>
                   {lists.map((l) => {
                     const selected = l.id === selectedListId;
@@ -147,7 +149,7 @@ export function TranslateSheet({
                     <View style={styles.newListInput}>
                       <TextInput
                         style={styles.newListTextInput}
-                        placeholder="List name"
+                        placeholder={t('translate.listName')}
                         placeholderTextColor={colors.textTertiary}
                         value={newListName}
                         onChangeText={setNewListName}
@@ -158,7 +160,7 @@ export function TranslateSheet({
                           style={[styles.newListButton, styles.newListButtonCreate]}
                           onPress={() => {
                             if (!newListName.trim()) {
-                              Alert.alert('Error', 'Please enter a list name');
+                              Alert.alert(t('translate.error'), t('translate.pleaseEnterListName'));
                               return;
                             }
                             onCreateNewList?.(newListName.trim());
@@ -167,7 +169,7 @@ export function TranslateSheet({
                             onCloseListPicker();
                           }}
                         >
-                          <Text style={styles.newListButtonTextCreate}>Create</Text>
+                          <Text style={styles.newListButtonTextCreate}>{t('translate.create')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={styles.newListButton}
@@ -176,7 +178,7 @@ export function TranslateSheet({
                             setShowNewListInput(false);
                           }}
                         >
-                          <Text style={styles.newListButtonText}>Cancel</Text>
+                          <Text style={styles.newListButtonText}>{t('study.cancel')}</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -185,12 +187,12 @@ export function TranslateSheet({
                       style={[styles.pickerRow, styles.newListRow]}
                       onPress={() => setShowNewListInput(true)}
                     >
-                      <Text style={styles.newListText}>+ Create New List</Text>
+                      <Text style={styles.newListText}>{t('translate.createNewList')}</Text>
                     </TouchableOpacity>
                   )}
                 </ScrollView>
                 <TouchableOpacity style={styles.pickerCloseButton} onPress={onCloseListPicker}>
-                  <Text style={styles.pickerCloseText}>Close</Text>
+                  <Text style={styles.pickerCloseText}>{t('translate.close')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

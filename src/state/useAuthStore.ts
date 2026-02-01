@@ -16,8 +16,8 @@ interface AuthStore {
   setUser: (user: User | null) => void;
   setSession: (session: Session | null) => void;
   ensureGuestSession: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<Session | null>;
+  signUp: (email: string, password: string) => Promise<Session | null>;
   signOut: () => Promise<void>;
   initialize: () => Promise<void>;
 }
@@ -30,6 +30,18 @@ function isAnonymousUser(user: User | null): boolean {
 function isAnonymousDisabledError(error: unknown): boolean {
   const message = (error as any)?.message as string | undefined;
   return typeof message === 'string' && message.toLowerCase().includes('anonymous sign-ins are disabled');
+}
+
+function isNetworkError(error: unknown): boolean {
+  const message = (error as any)?.message as string | undefined;
+  const name = (error as any)?.name as string | undefined;
+  if (typeof message === 'string' && message.toLowerCase().includes('network')) return true;
+  if (typeof name === 'string' && name.toLowerCase().includes('fetch')) return true;
+  return false;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -78,6 +90,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     });
     if (error) throw error;
     set({ session: data.session, user: data.user });
+    return data.session;
   },
 
   signUp: async (email, password) => {
@@ -97,6 +110,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (needsEmailConfirmation) {
       throw new Error('EMAIL_CONFIRMATION_REQUIRED');
     }
+    return data.session;
   },
 
 
@@ -126,48 +140,67 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   initialize: async () => {
-    try {
-      // Ensure we always have a user session (guest-first).
+    set({ loading: true, authError: null });
+    const maxRetries = 3;
+    const baseDelayMs = 1000;
+
+    const attemptInit = async (): Promise<void> => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         set({ session, user: session.user, isGuest: isAnonymousUser(session.user), loading: false, authError: null });
-      } else {
-        const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
-        if (anonError) {
-          if (isAnonymousDisabledError(anonError)) {
-            console.warn(
-              'Anonymous sign-ins are disabled in Supabase. Enable Auth → Providers → Anonymous to use guest mode.'
-            );
-            set({
-              session: null,
-              user: null,
-              isGuest: false,
-              loading: false,
-              authError:
-                'Anonymous sign-ins are disabled in Supabase. Enable Auth → Providers → Anonymous to use guest mode.',
-            });
-          } else {
-            throw anonError;
-          }
-        } else {
+        return;
+      }
+      const { data: anonData, error: anonError } = await supabase.auth.signInAnonymously();
+      if (anonError) {
+        if (isAnonymousDisabledError(anonError)) {
           set({
-            session: anonData.session,
-            user: anonData.user,
-            isGuest: isAnonymousUser(anonData.user),
+            session: null,
+            user: null,
+            isGuest: false,
             loading: false,
-            authError: null,
+            authError:
+              'Anonymous sign-ins are disabled in Supabase. Enable Auth → Providers → Anonymous to use guest mode.',
           });
+          return;
+        }
+        throw anonError;
+      }
+      set({
+        session: anonData.session,
+        user: anonData.user,
+        isGuest: isAnonymousUser(anonData.user),
+        loading: false,
+        authError: null,
+      });
+    };
+
+    try {
+      let lastError: unknown;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          await attemptInit();
+          supabase.auth.onAuthStateChange((_event, session) => {
+            const user = session?.user ?? null;
+            set({ session, user, isGuest: isAnonymousUser(user), authError: null });
+          });
+          return;
+        } catch (error) {
+          lastError = error;
+          if (attempt < maxRetries && isNetworkError(error)) {
+            const delay = baseDelayMs * Math.pow(2, attempt);
+            await sleep(delay);
+          } else {
+            throw error;
+          }
         }
       }
-
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange((_event, session) => {
-        const user = session?.user ?? null;
-        set({ session, user, isGuest: isAnonymousUser(user), authError: null });
-      });
+      throw lastError;
     } catch (error) {
       console.error('Failed to initialize auth:', error);
-      set({ loading: false, authError: (error as any)?.message ?? 'Failed to initialize auth' });
+      const message = isNetworkError(error)
+        ? 'Network request failed. Check your connection and try again.'
+        : ((error as any)?.message ?? 'Failed to initialize auth');
+      set({ loading: false, authError: message });
     }
   },
 }));

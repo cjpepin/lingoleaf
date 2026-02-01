@@ -107,51 +107,21 @@ export default function AuthScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [googleResponse]);
 
-  const handlePostAuthMigration = async (fromUserId: string | null): Promise<void> => {
-    if (!fromUserId) {
-      logger.info('No fromUserId provided, skipping migration');
+  const handlePostAuthMigration = async (
+    fromUserId: string | null,
+    session: { user: { id: string }; access_token: string } | null
+  ): Promise<void> => {
+    if (!fromUserId || !session?.user?.id || !session?.access_token) {
+      logger.info('Skipping migration: missing fromUserId or session', { hasFrom: Boolean(fromUserId), hasSession: Boolean(session) });
       return;
     }
-    
-    logger.info('Starting post-auth migration process', { fromUserId, isGuest });
-    
-    // Wait for session to be established with retry logic
-    let attempts = 0;
-    const maxAttempts = 10;
-    let nextId: string | null = null;
-    
-    while (attempts < maxAttempts) {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.session?.user?.id) {
-        nextId = sessionData.session.user.id;
-        logger.info('Session established for migration', { 
-          fromUserId, 
-          nextId, 
-          attempts,
-          sameUser: fromUserId === nextId,
-        });
-        break;
-      }
-      
-      attempts++;
-      if (attempts < maxAttempts) {
-        // Wait 100ms between attempts
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    
-    if (!nextId) {
-      logger.warn('Failed to establish session after sign-in, skipping migration');
-      return;
-    }
-    
-    if (fromUserId === nextId) {
+    const toUserId = session.user.id;
+    if (fromUserId === toUserId) {
       logger.info('Same user ID after auth, no migration needed');
       return;
     }
-    
-    logger.info('Different user IDs detected, proceeding with migration', { fromUserId, nextId });
-    await migrateUserDataIfNeeded(fromUserId, nextId);
+    logger.info('Different user IDs detected, migrating with session from sign-in response', { fromUserId, toUserId });
+    await migrateUserDataIfNeeded(fromUserId, toUserId, session.access_token);
   };
 
   const handleAppleSignIn = async (): Promise<void> => {
@@ -172,8 +142,9 @@ export default function AuthScreen() {
         setSnackbar({ visible: true, message: 'Apple sign-in failed', type: 'error' });
         return;
       }
-      await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
-      await handlePostAuthMigration(fromUserId);
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
+      if (error) throw error;
+      await handlePostAuthMigration(fromUserId, data?.session ?? null);
       setSnackbar({ visible: true, message: 'Signed in successfully!', type: 'success' });
       setTimeout(() => navigation.goBack(), 1000);
     } catch (e: any) {
@@ -189,8 +160,9 @@ export default function AuthScreen() {
     const fromUserId = isGuest ? user?.id ?? null : null;
     setLoading(true);
     try {
-      await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
-      await handlePostAuthMigration(fromUserId);
+      const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      if (error) throw error;
+      await handlePostAuthMigration(fromUserId, data?.session ?? null);
       setSnackbar({ visible: true, message: 'Signed in successfully!', type: 'success' });
       setTimeout(() => navigation.goBack(), 1000);
     } catch (e: any) {
@@ -234,20 +206,17 @@ export default function AuthScreen() {
 
     setLoading(true);
     try {
+      let session: { user: { id: string }; access_token: string } | null = null;
       if (effectiveIsSignUp) {
         // Always use signUp for new accounts (sends proper welcome email)
-        await signUp(email, password);
-        // If user was a guest, migrate their data to the new account
-        if (fromUserId) {
-          await handlePostAuthMigration(fromUserId);
-        }
+        session = (await signUp(email, password)) ?? null;
       } else {
         // Sign in to existing account
-        await signIn(email, password);
-        // If user was a guest, migrate their data to the existing account
-        if (fromUserId) {
-          await handlePostAuthMigration(fromUserId);
-        }
+        session = (await signIn(email, password)) ?? null;
+      }
+      // If user was a guest, migrate their data using the session we just received
+      if (fromUserId && session) {
+        await handlePostAuthMigration(fromUserId, session);
       }
       setSnackbar({ visible: true, message: effectiveIsSignUp ? 'Account created!' : 'Signed in successfully!', type: 'success' });
       setTimeout(() => navigation.goBack(), 1000);

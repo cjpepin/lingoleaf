@@ -1,30 +1,31 @@
 /**
  * LibraryHeader
  *
- * Lightweight search + filter inputs for the Library screen.
- * Filters are applied by the parent (server-side via Supabase query).
+ * Title/author search in main window; filters modal for language and subject/genre.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { OverlayModal } from '@/components/ui/OverlayModal';
 import { Button } from '@/components/ui/Button';
 import { LANGUAGES } from '@/constants/languages';
+import { fetchBookSubjects } from '@/supabase/queries';
+import { useTranslation } from '@/i18n/useTranslation';
+import { translateLanguageCodeToName, translateLanguageNameToCode } from '@/i18n/translations';
 
-interface Filters {
+export interface LibraryFilters {
   language: string;
-  author: string;
-  subject: string;
+  subjects: string[];
 }
 
 interface Props {
   title: string;
+  /** Title/author search - always shown in main window */
   search: string;
   onChangeSearch: (next: string) => void;
   language: string;
-  author: string;
-  subject: string;
-  onApplyFilters: (filters: Filters) => void;
+  subjects: string[];
+  onApplyFilters: (filters: LibraryFilters) => void;
   onResetFilters: () => void;
   ctaLabel?: string;
   onPressCta?: () => void;
@@ -35,46 +36,70 @@ export function LibraryHeader({
   search,
   onChangeSearch,
   language,
-  author,
-  subject,
+  subjects,
   onApplyFilters,
   onResetFilters,
   ctaLabel,
   onPressCta,
 }: Props) {
+  const t = useTranslation();
   const [filtersVisible, setFiltersVisible] = useState(false);
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
+  const [subjectPickerVisible, setSubjectPickerVisible] = useState(false);
+  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [draftLanguage, setDraftLanguage] = useState(language);
-  const [draftAuthor, setDraftAuthor] = useState(author);
-  const [draftSubject, setDraftSubject] = useState(subject);
+  const [draftSubjects, setDraftSubjects] = useState<string[]>(subjects);
   const [languageSearch, setLanguageSearch] = useState('');
+  const [subjectSearch, setSubjectSearch] = useState('');
 
   const handleReset = useCallback(() => {
     setDraftLanguage('');
-    setDraftAuthor('');
-    setDraftSubject('');
+    setDraftSubjects([]);
     onResetFilters();
   }, [onResetFilters]);
 
   const activeFilterCount = useMemo(() => {
-    return (
-      (language.trim().length > 0 ? 1 : 0) +
-      (author.trim().length > 0 ? 1 : 0) +
-      (subject.trim().length > 0 ? 1 : 0)
-    );
-  }, [author, language, subject]);
+    return (language.trim().length > 0 ? 1 : 0) + (subjects.length > 0 ? 1 : 0);
+  }, [language, subjects]);
 
   useEffect(() => {
     if (!filtersVisible) return;
     setDraftLanguage(language);
-    setDraftAuthor(author);
-    setDraftSubject(subject);
-  }, [author, filtersVisible, language, subject]);
+    setDraftSubjects(subjects);
+  }, [filtersVisible, language, subjects]);
+
+  useEffect(() => {
+    if (subjectPickerVisible && availableSubjects.length === 0) {
+      setSubjectsLoading(true);
+      fetchBookSubjects()
+        .then(setAvailableSubjects)
+        .finally(() => setSubjectsLoading(false));
+    }
+  }, [subjectPickerVisible, availableSubjects.length]);
 
   const handleApply = useCallback(() => {
-    onApplyFilters({ language: draftLanguage, author: draftAuthor, subject: draftSubject });
+    onApplyFilters({ language: draftLanguage, subjects: draftSubjects });
     setFiltersVisible(false);
-  }, [draftAuthor, draftLanguage, draftSubject, onApplyFilters]);
+  }, [draftLanguage, draftSubjects, onApplyFilters]);
+
+  const filteredSubjects = useMemo(() => {
+    if (!subjectSearch.trim()) return availableSubjects;
+    const s = subjectSearch.toLowerCase();
+    return availableSubjects.filter((subj) => subj.toLowerCase().includes(s));
+  }, [availableSubjects, subjectSearch]);
+
+  const selectedSubjectNames = useMemo(() => {
+    if (draftSubjects.length === 0) return t('library.subjectFiltersPlaceholder');
+    if (draftSubjects.length === 1) return draftSubjects[0];
+    return `${draftSubjects.length} ${t('library.selected')}`;
+  }, [draftSubjects]);
+
+  const toggleSubject = useCallback((subject: string) => {
+    setDraftSubjects((prev) =>
+      prev.includes(subject) ? prev.filter((s) => s !== subject) : [...prev, subject].sort()
+    );
+  }, []);
 
   const filteredLanguages = useMemo(() => {
     if (!languageSearch.trim()) return LANGUAGES;
@@ -86,7 +111,7 @@ export function LibraryHeader({
   }, [languageSearch]);
 
   const selectedLanguageName = useMemo(() => {
-    if (!draftLanguage) return 'Select language';
+    if (!draftLanguage) return t('library.languageFiltersPlaceholder');
     const lang = LANGUAGES.find((l) => l.code === draftLanguage);
     return lang ? lang.name : draftLanguage;
   }, [draftLanguage]);
@@ -107,7 +132,7 @@ export function LibraryHeader({
           <TextInput
             value={search}
             onChangeText={onChangeSearch}
-            placeholder="Title or Author"
+            placeholder={t('library.searchPlaceholder')}
             placeholderTextColor={colors.textSecondary}
             style={styles.input}
             autoCapitalize="none"
@@ -115,137 +140,179 @@ export function LibraryHeader({
             returnKeyType="search"
           />
         </View>
-
         <Pressable style={styles.filtersButton} onPress={() => setFiltersVisible(true)}>
-          <Text style={styles.filtersText}>{activeFilterCount > 0 ? `Filters (${activeFilterCount})` : 'Filters'}</Text>
+          <Text style={styles.filtersText}>{activeFilterCount > 0 ? `${t('library.filters')} (${activeFilterCount})` : t('library.filters')}</Text>
         </Pressable>
       </View>
 
-      <OverlayModal 
-        visible={filtersVisible} 
+      <OverlayModal
+        visible={filtersVisible || languagePickerVisible || subjectPickerVisible}
         onClose={() => {
           setFiltersVisible(false);
           setLanguagePickerVisible(false);
+          setSubjectPickerVisible(false);
           setLanguageSearch('');
-        }} 
-        cardStyle={styles.modalCard}
+          setSubjectSearch('');
+        }}
+        cardStyle={
+          languagePickerVisible || subjectPickerVisible ? styles.languagePickerCard : styles.modalCard
+        }
       >
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Filters</Text>
-          <Pressable onPress={() => setFiltersVisible(false)}>
-            <Text style={styles.modalClose}>Cancel</Text>
-          </Pressable>
-        </View>
-
-        <Text style={styles.label}>Language</Text>
-        <Pressable
-          style={styles.languagePickerButton}
-          onPress={() => setLanguagePickerVisible(true)}
-        >
-          <Text style={[styles.languagePickerText, !draftLanguage && styles.languagePickerPlaceholder]}>
-            {selectedLanguageName}
-          </Text>
-          <Text style={styles.languagePickerChevron}>›</Text>
-        </Pressable>
-
-        <Text style={styles.label}>Author</Text>
-        <TextInput
-          value={draftAuthor}
-          onChangeText={setDraftAuthor}
-          placeholder="e.g., Tolstoy"
-          placeholderTextColor={colors.textSecondary}
-          style={styles.input}
-          autoCapitalize="words"
-          autoCorrect={false}
-        />
-
-        <Text style={styles.label}>Subject / genre</Text>
-        <TextInput
-          value={draftSubject}
-          onChangeText={setDraftSubject}
-          placeholder="e.g., Fiction, Poetry"
-          placeholderTextColor={colors.textSecondary}
-          style={styles.input}
-          autoCapitalize="words"
-          autoCorrect={false}
-        />
-
-        <View style={styles.modalActions}>
-          <Button label="Reset" onPress={handleReset} variant="surface" size="sm" />
-          <Button label="Done" onPress={handleApply} variant="primary" size="sm" />
-        </View>
-      </OverlayModal>
-
-      {/* Language Picker Modal - Separate from filters modal */}
-      {languagePickerVisible && (
-        <OverlayModal
-          visible={languagePickerVisible}
-          onClose={() => {
-            setLanguagePickerVisible(false);
-            setLanguageSearch('');
-          }}
-          cardStyle={styles.languagePickerCard}
-        >
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Select Language</Text>
-          <Pressable
-            onPress={() => {
-              setLanguagePickerVisible(false);
-              setLanguageSearch('');
-            }}
-          >
-            <Text style={styles.modalClose}>Cancel</Text>
-          </Pressable>
-        </View>
-
-        <TextInput
-          value={languageSearch}
-          onChangeText={setLanguageSearch}
-          placeholder="Search languages..."
-          placeholderTextColor={colors.textSecondary}
-          style={styles.input}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
-          {/* Clear selection option */}
-          <TouchableOpacity
-            style={[styles.languageOption, !draftLanguage && styles.languageOptionSelected]}
-            onPress={() => {
-              setDraftLanguage('');
-              setLanguagePickerVisible(false);
-              setLanguageSearch('');
-            }}
-          >
-            <Text style={[styles.languageOptionText, !draftLanguage && styles.languageOptionTextSelected]}>
-              All Languages
-            </Text>
-            {!draftLanguage && <Text style={styles.languageCheck}>✓</Text>}
-          </TouchableOpacity>
-
-          {filteredLanguages.map((lang) => {
-            const selected = draftLanguage === lang.code;
-            return (
-              <TouchableOpacity
-                key={lang.code}
-                style={[styles.languageOption, selected && styles.languageOptionSelected]}
+        {subjectPickerVisible ? (
+          <>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('library.subjectFilters')}</Text>
+              <Pressable
                 onPress={() => {
-                  setDraftLanguage(lang.code);
+                  setSubjectPickerVisible(false);
+                  setSubjectSearch('');
+                }}
+              >
+                <Text style={styles.modalClose}>{t('library.back')}</Text>
+              </Pressable>
+            </View>
+
+            <TextInput
+              value={subjectSearch}
+              onChangeText={setSubjectSearch}
+              placeholder={t('library.subjectFiltersPlaceholder')}
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            {subjectsLoading ? (
+              <View style={styles.subjectLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : (
+              <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
+                {filteredSubjects.map((subj) => {
+                  const selected = draftSubjects.includes(subj);
+                  return (
+                    <TouchableOpacity
+                      key={subj}
+                      style={[styles.languageOption, selected && styles.languageOptionSelected]}
+                      onPress={() => toggleSubject(subj)}
+                    >
+                      <Text style={[styles.languageOptionText, selected && styles.languageOptionTextSelected]}>
+                        {subj}
+                      </Text>
+                      {selected && <Text style={styles.languageCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </>
+        ) : languagePickerVisible ? (
+          <>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('library.languageFilters')}</Text>
+              <Pressable
+                onPress={() => {
                   setLanguagePickerVisible(false);
                   setLanguageSearch('');
                 }}
               >
-                <Text style={[styles.languageOptionText, selected && styles.languageOptionTextSelected]}>
-                  {lang.name}
+                <Text style={styles.modalClose}>{t('library.back')}</Text>
+              </Pressable>
+            </View>
+
+            <TextInput
+              value={languageSearch}
+              onChangeText={setLanguageSearch}
+              placeholder={t('library.languageFiltersPlaceholder')}
+              placeholderTextColor={colors.textSecondary}
+              style={styles.input}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
+              <TouchableOpacity
+                style={[styles.languageOption, !draftLanguage && styles.languageOptionSelected]}
+                onPress={() => {
+                  setDraftLanguage('');
+                  setLanguagePickerVisible(false);
+                  setLanguageSearch('');
+                }}
+              >
+                <Text style={[styles.languageOptionText, !draftLanguage && styles.languageOptionTextSelected]}>
+                  {t('library.allLanguages')}
                 </Text>
-                {selected && <Text style={styles.languageCheck}>✓</Text>}
+                {!draftLanguage && <Text style={styles.languageCheck}>✓</Text>}
               </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-        </OverlayModal>
-      )}
+
+              {filteredLanguages.map((lang) => {
+                const selected = draftLanguage === lang.code;
+                return (
+                  <TouchableOpacity
+                    key={lang.code}
+                    style={[styles.languageOption, selected && styles.languageOptionSelected]}
+                    onPress={() => {
+                      setDraftLanguage(lang.code);
+                      setLanguagePickerVisible(false);
+                      setLanguageSearch('');
+                    }}
+                  >
+                    <Text style={[styles.languageOptionText, selected && styles.languageOptionTextSelected]}>
+                      {t('language.' + lang.code)}
+                    </Text>
+                    {selected && <Text style={styles.languageCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        ) : (
+          <>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('library.filters')}</Text>
+              <Pressable onPress={() => setFiltersVisible(false)}>
+                <Text style={styles.modalClose}>{t('library.cancel')}</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.label}>{t('library.languageFilters')}</Text>
+            <TouchableOpacity
+              style={styles.languagePickerButton}
+              onPress={() => setLanguagePickerVisible(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text style={[styles.languagePickerText, !draftLanguage && styles.languagePickerPlaceholder]}>
+                {t('language.' + translateLanguageCodeToName(draftLanguage))}
+              </Text>
+              <Text style={styles.languagePickerChevron}>›</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.label}>{t('library.subjectFilters')}</Text>
+            <TouchableOpacity
+              style={styles.languagePickerButton}
+              onPress={() => setSubjectPickerVisible(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Text
+                style={[
+                  styles.languagePickerText,
+                  draftSubjects.length === 0 && styles.languagePickerPlaceholder,
+                ]}
+              >
+                {selectedSubjectNames}
+              </Text>
+              <Text style={styles.languagePickerChevron}>›</Text>
+            </TouchableOpacity>
+
+            <View style={styles.modalActions}>
+              <Button label={t('library.reset')} onPress={handleReset} variant="surface" size="sm" />
+              <Button label={t('library.done')} onPress={handleApply} variant="primary" size="sm" />
+            </View>
+          </>
+        )}
+      </OverlayModal>
     </View>
   );
 }
@@ -355,6 +422,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    minHeight: 44,
   },
   languagePickerText: {
     ...typography.body,
@@ -409,6 +477,10 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.primary,
     fontWeight: '700',
+  },
+  subjectLoading: {
+    paddingVertical: spacing.xl,
+    alignItems: 'center',
   },
 });
 

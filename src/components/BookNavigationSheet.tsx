@@ -21,6 +21,7 @@ import {
 import { colors, spacing, typography } from '@/theme';
 import { OverlayModal } from '@/components/ui/OverlayModal';
 import { Button } from '@/components/ui/Button';
+import { useTranslation } from '@/i18n/useTranslation';
 import type { UserBookHighlight } from '@/supabase/types';
 
 interface TocItem {
@@ -61,6 +62,7 @@ export function BookNavigationSheet({
   onJumpToHighlight,
   onDeleteHighlight,
 }: Props) {
+  const t = useTranslation();
   const [tab, setTab] = useState<TabKey>('navigate');
   const [pageInput, setPageInput] = useState('');
 
@@ -86,9 +88,9 @@ export function BookNavigationSheet({
   return (
     <OverlayModal visible={visible} onClose={onClose} cardStyle={styles.card}>
       <View style={styles.header}>
-        <Text style={styles.title}>Navigate</Text>
+        <Text style={styles.title}>{t('navModal.title')}</Text>
         <TouchableOpacity onPress={onClose}>
-          <Text style={styles.close}>Close</Text>
+          <Text style={styles.close}>{t('navModal.close')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -97,14 +99,14 @@ export function BookNavigationSheet({
           style={[styles.tab, tab === 'navigate' ? styles.tabActive : null]}
           onPress={() => setTab('navigate')}
         >
-          <Text style={[styles.tabText, tab === 'navigate' ? styles.tabTextActive : null]}>Chapters</Text>
+          <Text style={[styles.tabText, tab === 'navigate' ? styles.tabTextActive : null]}>{t('navModal.chapters')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === 'highlights' ? styles.tabActive : null]}
           onPress={() => setTab('highlights')}
         >
           <Text style={[styles.tabText, tab === 'highlights' ? styles.tabTextActive : null]}>
-            Highlights ({highlights.length})
+            {t('navModal.highlightsCount', { count: highlights.length })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -113,28 +115,30 @@ export function BookNavigationSheet({
         <>
           {canGoBack && onGoBack ? (
             <>
-              <Button label="Go back to previous spot" onPress={() => { onGoBack(); onClose(); }} variant="outline" />
+              <Button label={t('navModal.goBack')} onPress={() => { onGoBack(); onClose(); }} variant="outline" />
               <View style={styles.sectionSpacer} />
             </>
           ) : null}
 
           <Text style={styles.meta}>
-            {totalPages > 0 && currentPage > 0 ? `Page ${currentPage} / ${totalPages}` : 'Pages loading…'}
+            {totalPages > 0 && currentPage > 0
+              ? t('navModal.pageOf', { current: currentPage, total: totalPages })
+              : t('navModal.pagesLoading')}
           </Text>
 
-          <Text style={styles.label}>Go to page</Text>
+          <Text style={styles.label}>{t('navModal.goToPage')}</Text>
           <View style={styles.inputRow}>
             <TextInput
               value={pageInput}
               onChangeText={setPageInput}
-              placeholder={totalPages > 0 ? `1–${totalPages}` : 'Waiting…'}
+              placeholder={totalPages > 0 ? t('navModal.pageRange', { max: totalPages }) : t('navModal.waiting')}
               placeholderTextColor={colors.textSecondary}
               keyboardType="number-pad"
               style={styles.input}
               editable={totalPages > 0}
             />
             <Button
-              label="Go"
+              label={t('navModal.go')}
               onPress={handleGoToPage}
               disabled={totalPages <= 0}
               variant="primary"
@@ -145,10 +149,10 @@ export function BookNavigationSheet({
 
           <View style={styles.sectionSpacer} />
 
-          <Text style={styles.label}>Chapters</Text>
+          <Text style={styles.label}>{t('navModal.chapters')}</Text>
           <ScrollView contentContainerStyle={styles.chapterList}>
             {tocItems.length === 0 ? (
-              <Text style={styles.empty}>No chapters available.</Text>
+              <Text style={styles.empty}>{t('navModal.noChapters')}</Text>
             ) : (
               tocItems.map((c) => (
                 <TouchableOpacity
@@ -160,7 +164,7 @@ export function BookNavigationSheet({
                   }}
                 >
                   <Text style={styles.chapterText} numberOfLines={2}>
-                    {c.label || 'Chapter'}
+                    {c.label || t('navModal.chapterFallback')}
                   </Text>
                 </TouchableOpacity>
               ))
@@ -170,7 +174,7 @@ export function BookNavigationSheet({
       ) : (
         <ScrollView contentContainerStyle={styles.chapterList}>
           {highlights.length === 0 ? (
-            <Text style={styles.empty}>No highlights yet.</Text>
+            <Text style={styles.empty}>{t('navModal.noHighlights')}</Text>
           ) : (
             highlights
               .slice()
@@ -189,7 +193,7 @@ export function BookNavigationSheet({
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.highlightDelete} onPress={() => onDeleteHighlight?.(h)}>
-                    <Text style={styles.highlightDeleteText}>Delete</Text>
+                    <Text style={styles.highlightDeleteText}>{t('common.delete')}</Text>
                   </TouchableOpacity>
                 </View>
               ))

@@ -36,6 +36,7 @@ import {
 } from '@/supabase/queries';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useStudyStore } from '@/state/useStudyStore';
+import { useTranslation } from '@/i18n/useTranslation';
 import { EmptyState } from '@/components/EmptyState';
 import { VocabListPickerModal } from '@/components/VocabListPickerModal';
 import { colors, spacing, typography } from '@/theme';
@@ -50,6 +51,7 @@ export default function StudyScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { user } = useAuthStore();
   const studyStore = useStudyStore();
+  const t = useTranslation();
 
   const [mode, setMode] = useState<ViewMode>('lists');
   const [activeListId, setActiveListId] = useState<string | null>(null);
@@ -162,28 +164,28 @@ export default function StudyScreen() {
   const handleStudyList = useCallback(
     (listId: string, listName: string, listCount: number) => {
       if (listCount === 0) {
-        Alert.alert('No words', 'This list has no words yet.');
+        Alert.alert(t('study.noWordsYet'), t('study.noWordsYet'));
         return;
       }
       touchVocabList(listId).catch(() => {});
       navigation.navigate('Flashcards', { listId, listName });
     },
-    [navigation]
+    [navigation, t]
   );
 
   const handleStudyAll = useCallback(() => {
     if (allCount === 0) {
-      Alert.alert('No words', 'You have no saved words yet.');
+      Alert.alert(t('study.noWordsYet'), t('study.noWordsAll'));
       return;
     }
-    navigation.navigate('Flashcards', { listId: null, listName: 'All words' });
-  }, [allCount, navigation]);
+    navigation.navigate('Flashcards', { listId: null, listName: t('study.allWords') });
+  }, [allCount, navigation, t]);
 
   const handleDeleteWord = useCallback((word: StudyWord) => {
-    Alert.alert('Delete Word', `Remove "${word.term}" from this list?`, [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('study.deleteWord'), t('study.deleteWordConfirm', { term: word.term }), [
+      { text: t('study.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('study.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -196,12 +198,12 @@ export default function StudyScreen() {
             studyStore.adjustAllCount(-1);
           } catch (e) {
             logger.error('Failed to delete word', e);
-            Alert.alert('Error', 'Failed to delete word');
+            Alert.alert(t('common.error'), t('msg.failedToSave'));
           }
         },
       },
     ]);
-  }, [activeListId, studyStore]);
+  }, [activeListId, studyStore, t]);
 
   const handleMoveWord = useCallback(
     async (word: StudyWord, toListId: string) => {
@@ -225,7 +227,7 @@ export default function StudyScreen() {
         Alert.alert('Error', 'Failed to move word');
       }
     },
-    [activeListId, studyStore]
+    [activeListId, studyStore, t]
   );
 
   const handleCreateList = useCallback(async () => {
@@ -237,9 +239,9 @@ export default function StudyScreen() {
       studyStore.addListToCache(created);
       setCreateName('');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to create list');
+      Alert.alert(t('common.error'), e?.message || t('profile.saveFailed'));
     }
-  }, [createName, studyStore, user]);
+  }, [createName, studyStore, user, t]);
 
   const handleRenameList = useCallback(async () => {
     if (!renameTarget) return;
@@ -251,14 +253,14 @@ export default function StudyScreen() {
       setRenameTarget(null);
       setRenameName('');
     } catch (e: any) {
-      Alert.alert('Error', e?.message || 'Failed to rename list');
+      Alert.alert(t('common.error'), e?.message || t('profile.saveFailed'));
     }
-  }, [renameName, renameTarget, studyStore]);
+  }, [renameName, renameTarget, studyStore, t]);
 
   const handleConfirmDeleteList = useCallback(async () => {
     if (!deleteTarget) return;
     if (deleteConfirm.trim() !== deleteTarget.name) {
-      Alert.alert('Name Mismatch', 'Please type the list name exactly to confirm deletion.');
+      Alert.alert(t('study.nameMismatch'), t('study.nameMismatch'));
       return;
     }
     try {
@@ -274,21 +276,21 @@ export default function StudyScreen() {
       }
     } catch (e) {
       logger.error('Failed to delete list', e);
-      Alert.alert('Error', 'Failed to delete list');
+      Alert.alert(t('common.error'), t('profile.saveFailed'));
     }
-  }, [activeListId, deleteConfirm, deleteTarget, loadListsAndCounts, studyStore]);
+  }, [activeListId, deleteConfirm, deleteTarget, loadListsAndCounts, studyStore, t]);
 
   const manageModals = (
     <>
       <Modal visible={Boolean(renameTarget)} transparent animationType="fade" onRequestClose={() => setRenameTarget(null)}>
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Rename List</Text>
+            <Text style={styles.confirmTitle}>{t('study.renameList')}</Text>
             <TextInput
               style={styles.confirmInput}
               value={renameName}
               onChangeText={setRenameName}
-              placeholder="List name"
+              placeholder={t('translate.listName')}
               placeholderTextColor={colors.textSecondary}
             />
             <TouchableOpacity
@@ -301,14 +303,14 @@ export default function StudyScreen() {
               }}
             >
               <Feather name="trash-2" size={16} color={colors.error} />
-              <Text style={styles.inlineDangerText}>Delete list</Text>
+              <Text style={styles.inlineDangerText}>{t('study.deleteList')}</Text>
             </TouchableOpacity>
             <View style={styles.confirmActions}>
               <TouchableOpacity style={styles.confirmButton} onPress={() => setRenameTarget(null)}>
-                <Text style={styles.confirmButtonText}>Cancel</Text>
+                <Text style={styles.confirmButtonText}>{t('study.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.confirmButton, styles.confirmPrimary]} onPress={handleRenameList}>
-                <Text style={[styles.confirmButtonText, styles.confirmPrimaryText]}>Save</Text>
+                <Text style={[styles.confirmButtonText, styles.confirmPrimaryText]}>{t('study.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -318,23 +320,23 @@ export default function StudyScreen() {
       <Modal visible={Boolean(deleteTarget)} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Delete List</Text>
+            <Text style={styles.confirmTitle}>{t('study.deleteList')}</Text>
             <Text style={styles.confirmBody}>
-              Type <Text style={styles.confirmBold}>{deleteTarget?.name}</Text> to confirm. This deletes all words inside.
+              {t('study.deleteListConfirm', { name: deleteTarget?.name ?? '' })}
             </Text>
             <TextInput
               style={styles.confirmInput}
               value={deleteConfirm}
               onChangeText={setDeleteConfirm}
-              placeholder="List name"
+              placeholder={t('translate.listName')}
               placeholderTextColor={colors.textSecondary}
             />
             <View style={styles.confirmActions}>
               <TouchableOpacity style={styles.confirmButton} onPress={() => setDeleteTarget(null)}>
-                <Text style={styles.confirmButtonText}>Cancel</Text>
+                <Text style={styles.confirmButtonText}>{t('study.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.confirmButton, styles.confirmDanger]} onPress={handleConfirmDeleteList}>
-                <Text style={[styles.confirmButtonText, styles.confirmDangerText]}>Delete</Text>
+                <Text style={[styles.confirmButtonText, styles.confirmDangerText]}>{t('study.delete')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -343,7 +345,7 @@ export default function StudyScreen() {
 
       <VocabListPickerModal
         visible={Boolean(moveTarget)}
-        title="Move to list"
+        title={t('study.moveToList')}
         lists={lists}
         selectedListId={moveTarget?.list_id ?? null}
         onSelect={(listId: string) => {
@@ -366,9 +368,9 @@ export default function StudyScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
-        <EmptyState message="Sign in to view and sync your vocab lists." />
+        <EmptyState message={t('study.signInPrompt')} />
         <View style={styles.footerCta}>
-          <Button label="Sign in" variant="primary" onPress={() => navigation.navigate('Auth', { mode: 'signin' })} />
+          <Button label={t('common.signIn')} variant="primary" onPress={() => navigation.navigate('Auth', { mode: 'signin' })} />
         </View>
       </View>
     );
@@ -378,14 +380,14 @@ export default function StudyScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Study</Text>
+          <Text style={styles.headerTitle}>{t('study.title')}</Text>
 
             <TouchableOpacity
                 style={[styles.studyAllButtonCompact, allCount === 0 && styles.disabled]}
                 onPress={handleStudyAll}
                 disabled={allCount === 0}
             >
-                <Text style={styles.studyAllTextCompact}>Study all</Text>
+                <Text style={styles.studyAllTextCompact}>{t('study.studyAll')}</Text>
                 <Text style={styles.studyAllMetaCompact}>{allCount}</Text>
             </TouchableOpacity>
         </View>
@@ -395,7 +397,7 @@ export default function StudyScreen() {
             style={styles.createInput}
             value={createName}
             onChangeText={setCreateName}
-            placeholder={lists.length >= 5 ? 'List limit reached (max 5)' : 'New List Name'}
+            placeholder={lists.length >= 5 ? t('study.listLimitReached') : t('study.newListName')}
             placeholderTextColor={colors.textSecondary}
             editable={lists.length < 5}
           />
@@ -404,7 +406,7 @@ export default function StudyScreen() {
             onPress={handleCreateList}
             disabled={lists.length >= 5 || createName.trim().length === 0}
           >
-            <Text style={styles.createButtonText}>Add</Text>
+            <Text style={styles.createButtonText}>{t('study.add')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -413,7 +415,7 @@ export default function StudyScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-          ListEmptyComponent={<EmptyState message="No lists yet. Create a list to start saving words." />}
+          ListEmptyComponent={<EmptyState message={t('study.noLists')} />}
           renderItem={({ item }) => {
             const c = counts[item.id] ?? 0;
             return (
@@ -422,7 +424,7 @@ export default function StudyScreen() {
                   <Text style={styles.listName} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <Text style={styles.listCount}>{c} words</Text>
+                  <Text style={styles.listCount}>{c} {t('study.words')}</Text>
                 </TouchableOpacity>
                 <View style={styles.listRowRight}>
                   <TouchableOpacity
@@ -439,7 +441,7 @@ export default function StudyScreen() {
                     onPress={() => handleStudyList(item.id, item.name, c)}
                     disabled={c === 0}
                   >
-                    <Text style={styles.inlineStudyText}>Study</Text>
+                    <Text style={styles.inlineStudyText}>{t('study.study')}</Text>
                   </TouchableOpacity>
                   <Text style={styles.chevron}>›</Text>
                 </View>
@@ -465,7 +467,7 @@ export default function StudyScreen() {
             setWords([]);
           }}
         >
-          <Text style={styles.headerButtonText}>‹ Lists</Text>
+          <Text style={styles.headerButtonText}>‹ {t('study.lists')}</Text>
         </TouchableOpacity>
         <Text style={styles.detailTitle} numberOfLines={1}>
           {activeListName}
@@ -478,7 +480,7 @@ export default function StudyScreen() {
           }}
           disabled={wordsRef.current.length === 0}
         >
-          <Text style={styles.inlineStudyText}>Study</Text>
+          <Text style={styles.inlineStudyText}>{t('study.study')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -487,7 +489,7 @@ export default function StudyScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
-        ListEmptyComponent={<EmptyState message="No words in this list yet. Start reading and save words!" />}
+        ListEmptyComponent={<EmptyState message={t('study.noWords')} />}
         renderItem={({ item }) => (
           <View style={styles.wordCard}>
             <View style={styles.wordContent}>
@@ -501,7 +503,7 @@ export default function StudyScreen() {
             </View>
             <View style={styles.actionsCol}>
               <TouchableOpacity style={styles.actionButton} onPress={() => setMoveTarget(item)}>
-                <Text style={styles.actionButtonText}>Move</Text>
+                <Text style={styles.actionButtonText}>{t('study.move')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteButton} onPress={() => handleDeleteWord(item)}>
                 <Text style={styles.deleteButtonText}>×</Text>

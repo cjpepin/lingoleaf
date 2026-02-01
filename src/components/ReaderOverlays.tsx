@@ -8,6 +8,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
+import { useTranslation } from '@/i18n/useTranslation';
 
 interface Props {
   currentPage: number;
@@ -24,6 +25,7 @@ export function ReaderOverlays({
   chapterLeftPct = null,
   onPressNavigate,
 }: Props) {
+  const t = useTranslation();
   return (
     <>
       <View style={styles.pageIndicator}>
@@ -53,7 +55,7 @@ export function ReaderOverlays({
       </View>
 
       <Pressable style={styles.navButton} onPress={onPressNavigate}>
-        <Text style={styles.navButtonText}>Navigate</Text>
+        <Text style={styles.navButtonText}>{t('reader.navigate')}</Text>
       </Pressable>
     </>
   );

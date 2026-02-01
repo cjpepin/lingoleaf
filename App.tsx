@@ -10,6 +10,7 @@ import { View, Text, StyleSheet, Alert } from 'react-native';
 import { ReaderProvider } from '@epubjs-react-native/core';
 import { RootNavigator } from './src/navigation';
 import { useAuthStore } from './src/state/useAuthStore';
+import { useAppLangStore } from './src/state/useAppLangStore';
 import { OnboardingWrapper } from './src/components/OnboardingWrapper';
 import mobileAds from 'react-native-google-mobile-ads';
 import { logger } from './src/utils/logger';
@@ -19,6 +20,10 @@ import * as Linking from 'expo-linking';
 
 export default function App() {
   const initialize = useAuthStore((state) => state.initialize);
+
+  useEffect(() => {
+    useAppLangStore.getState().hydrateFromStorage();
+  }, []);
 
   useEffect(() => {
     if (!supabaseConfigured) {

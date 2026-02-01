@@ -13,8 +13,10 @@ import {
   ScrollView,
   Pressable,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { LANGUAGES } from '@/constants/languages';
+import { useTranslation } from '@/i18n/useTranslation';
 
 interface Props {
   visible: boolean;
@@ -26,6 +28,7 @@ interface Props {
 }
 
 export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
+  const t = useTranslation();
   const [step, setStep] = useState(1);
   const [nativeLang, setNativeLang] = useState('en');
   const [goalLangs, setGoalLangs] = useState<string[]>([]);
@@ -73,7 +76,9 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
           {step === 1 && (
             <View style={styles.stepContent}>
-              <Text style={styles.emoji}>📚</Text>
+              <View style={styles.iconWrapper}>
+                <Feather name="book-open" size={48} color={colors.primary} />
+              </View>
               <Text style={styles.title}>Welcome to LingoLeaf!</Text>
               <Text style={styles.description}>
                 Your personal language learning companion. Read books in foreign languages, translate words
@@ -84,7 +89,9 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
 
           {step === 2 && (
             <View style={styles.stepContent}>
-              <Text style={styles.emoji}>🌍</Text>
+              <View style={styles.iconWrapper}>
+                <Feather name="globe" size={48} color={colors.primary} />
+              </View>
               <Text style={styles.title}>What's your native language?</Text>
               <Text style={styles.description}>
                 We'll use this to provide better translations and learning recommendations.
@@ -105,7 +112,7 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                         nativeLang === lang.code && styles.languageButtonTextSelected,
                       ]}
                     >
-                      {lang.name}
+                      {t('language.' + lang.code)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -115,8 +122,10 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
 
           {step === 3 && (
             <View style={styles.stepContent}>
-              <Text style={styles.emoji}>🎯</Text>
-              <Text style={styles.title}>What languages do you want to learn?</Text>
+              <View style={styles.iconWrapper}>
+                <Feather name="target" size={48} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>What language(s) do you want to learn?</Text>
               <Text style={styles.description}>
                 Select one or more languages. You can always change this later.
               </Text>
@@ -136,7 +145,7 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                         goalLangs.includes(lang.code) && styles.languageButtonTextSelected,
                       ]}
                     >
-                      {lang.name}
+                      {t('language.' + lang.code)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -146,14 +155,18 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
 
           {step === 4 && (
             <View style={styles.stepContent}>
-              <Text style={styles.emoji}>✨</Text>
+              <View style={styles.iconWrapper}>
+                <Feather name="check-circle" size={48} color={colors.primary} />
+              </View>
               <Text style={styles.title}>You're all set!</Text>
               <Text style={styles.description}>
                 Here's what you can do in LingoLeaf:
               </Text>
               <View style={styles.featureList}>
                 <View style={styles.featureItem}>
-                  <Text style={styles.featureIcon}>📖</Text>
+                  <View style={styles.featureIcon}>
+                    <Feather name="book-open" size={24} color={colors.primary} />
+                  </View>
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>Browse Library</Text>
                     <Text style={styles.featureDescription}>
@@ -162,7 +175,9 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                   </View>
                 </View>
                 <View style={styles.featureItem}>
-                  <Text style={styles.featureIcon}>💬</Text>
+                  <View style={styles.featureIcon}>
+                    <Feather name="globe" size={24} color={colors.primary} />
+                  </View>
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>Instant Translation</Text>
                     <Text style={styles.featureDescription}>
@@ -171,7 +186,9 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                   </View>
                 </View>
                 <View style={styles.featureItem}>
-                  <Text style={styles.featureIcon}>📝</Text>
+                  <View style={styles.featureIcon}>
+                    <Feather name="edit-3" size={24} color={colors.primary} />
+                  </View>
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>Build Vocabulary</Text>
                     <Text style={styles.featureDescription}>
@@ -180,7 +197,9 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                   </View>
                 </View>
                 <View style={styles.featureItem}>
-                  <Text style={styles.featureIcon}>👤</Text>
+                  <View style={styles.featureIcon}>
+                    <Feather name="user" size={24} color={colors.primary} />
+                  </View>
                   <View style={styles.featureText}>
                     <Text style={styles.featureTitle}>Manage Profile</Text>
                     <Text style={styles.featureDescription}>
@@ -250,8 +269,7 @@ const styles = StyleSheet.create({
   stepContent: {
     alignItems: 'center',
   },
-  emoji: {
-    fontSize: 72,
+  iconWrapper: {
     marginBottom: spacing.lg,
   },
   title: {
@@ -302,7 +320,9 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   featureIcon: {
-    fontSize: 32,
+    width: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   featureText: {
     flex: 1,

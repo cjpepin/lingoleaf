@@ -3,15 +3,18 @@
  * Bottom tabs with stack navigation for Reader
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { RootStackParamList, TabParamList } from './types';
 import { useAuthStore } from '@/state/useAuthStore';
+import { useSettingsStore } from '@/state/useSettingsStore';
+import { useTranslation } from '@/i18n/useTranslation';
 import { colors } from '@/theme';
-import { hasReadingHistory } from '@/supabase/queries';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { AuthErrorScreen } from '@/components/AuthErrorScreen';
 
 // Screens
 import AuthScreen from '@/screens/AuthScreen';
@@ -29,31 +32,10 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 function MainTabs() {
-  const { user } = useAuthStore();
-  const [initialTab, setInitialTab] = useState<keyof TabParamList | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!user) return;
-      try {
-        const hasHistory = await hasReadingHistory(user.id);
-        if (!cancelled) setInitialTab(hasHistory ? 'History' : 'Library');
-      } catch {
-        if (!cancelled) setInitialTab('Library');
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-
-  if (!initialTab) return null;
-
+  const t = useTranslation();
   return (
     <Tab.Navigator
-      key={initialTab}
-      initialRouteName={initialTab}
+      initialRouteName="Library"
       screenOptions={{
         headerStyle: {
           backgroundColor: colors.surface,
@@ -73,8 +55,8 @@ function MainTabs() {
         name="Library"
         component={LibraryScreen}
         options={{
-          title: 'LingoLeaf',
-          tabBarLabel: 'Library',
+          title: t('app.title'),
+          tabBarLabel: t('nav.library'),
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <Feather name="book-open" size={size} color={color} />
           ),
@@ -84,8 +66,8 @@ function MainTabs() {
         name="History"
         component={HistoryScreen}
         options={{
-          title: 'History',
-          tabBarLabel: 'History',
+          title: t('nav.history'),
+          tabBarLabel: t('nav.history'),
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <Feather name="clock" size={size} color={color} />
           ),
@@ -95,8 +77,8 @@ function MainTabs() {
         name="Study"
         component={StudyScreen}
         options={{
-          title: 'Study Words',
-          tabBarLabel: 'Study',
+          title: t('nav.studyWords'),
+          tabBarLabel: t('nav.study'),
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <Feather name="bookmark" size={size} color={color} />
           ),
@@ -106,8 +88,8 @@ function MainTabs() {
         name="Profile"
         component={ProfileScreen}
         options={{
-          title: 'Profile',
-          tabBarLabel: 'Profile',
+          title: t('nav.profile'),
+          tabBarLabel: t('nav.profile'),
           tabBarIcon: ({ color, size }: { color: string; size: number }) => (
             <Feather name="user" size={size} color={color} />
           ),
@@ -118,10 +100,20 @@ function MainTabs() {
 }
 
 export function RootNavigator() {
-  const { loading } = useAuthStore();
+  const { loading, authError, user } = useAuthStore();
+  const loadSettings = useSettingsStore((s) => s.loadSettings);
+  const t = useTranslation();
+
+  useEffect(() => {
+    if (user) loadSettings(user.id);
+  }, [user, loadSettings]);
 
   if (loading) {
-    return null; // TODO: Add splash screen
+    return <AppLoadingSplash />;
+  }
+
+  if (authError && !user) {
+    return <AuthErrorScreen />;
   }
 
   return (
@@ -140,27 +132,27 @@ export function RootNavigator() {
         <Stack.Screen
           name="Auth"
           component={AuthScreen}
-          options={{ title: 'Account', presentation: 'modal' }}
+          options={{ title: t('nav.account'), presentation: 'modal' }}
         />
         <Stack.Screen
           name="Reader"
           component={ReaderScreen}
           options={{
             title: '',
-            headerBackTitle: 'Library',
+            headerBackTitle: t('nav.library'),
           }}
         />
         <Stack.Screen
           name="BookDetails"
           component={BookDetailsScreen}
           options={{
-            title: 'Book',
+            title: t('nav.book'),
             presentation: 'modal',
           }}
         />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
-        <Stack.Screen name="Admin" component={AdminScreen} options={{ title: 'Admin Panel' }} />
-        <Stack.Screen name="Flashcards" component={FlashcardsScreen} options={{ title: 'Flashcards' }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
+        <Stack.Screen name="Admin" component={AdminScreen} options={{ title: t('nav.adminPanel') }} />
+        <Stack.Screen name="Flashcards" component={FlashcardsScreen} options={{ title: t('nav.flashcards') }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

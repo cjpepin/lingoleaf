@@ -5,12 +5,14 @@
 
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TOOLBAR_WIDTH = 240;
 const TOOLBAR_HEIGHT = 44;
-const BUFFER = 4;
+const GAP_ABOVE_SELECTION = 10;
+const HORIZONTAL_PADDING = 8;
 const ARROW_SIZE = 8;
 
 interface Props {
@@ -18,12 +20,13 @@ interface Props {
   onTranslate: () => void;
   onClose: () => void;
   selectionBounds?: { x: number; y: number; width: number; height: number };
+  /** Offset to add to selection coords (e.g. reader area's top-left in container) */
+  readerOffset?: { x: number; y: number };
 }
 
-export function SelectionToolbar({ onHighlight, onTranslate, onClose, selectionBounds }: Props) {
+export function SelectionToolbar({ onHighlight, onTranslate, onClose, selectionBounds, readerOffset }: Props) {
   const position = useMemo(() => {
     if (!selectionBounds) {
-      // Default to center-top if no selection bounds
       return {
         top: 100,
         left: SCREEN_WIDTH / 2 - TOOLBAR_WIDTH / 2,
@@ -31,47 +34,55 @@ export function SelectionToolbar({ onHighlight, onTranslate, onClose, selectionB
       };
     }
 
+    const ox = readerOffset?.x ?? 0;
+    const oy = readerOffset?.y ?? 0;
     const { x, y, width, height } = selectionBounds;
-    const selectionCenterX = x + width / 2;
-    const selectionBottom = y + height;
-    const selectionTop = y;
+    const selectionCenterX = ox + x + width / 2;
+    const selectionBottom = oy + y + height;
+    const selectionTop = oy + y;
 
-    let top = 0;
+    // Center toolbar horizontally on selection
     let left = selectionCenterX - TOOLBAR_WIDTH / 2;
+    // Clamp to keep on screen
+    left = Math.max(HORIZONTAL_PADDING, Math.min(left, SCREEN_WIDTH - TOOLBAR_WIDTH - HORIZONTAL_PADDING));
+
+    // Prefer above selection, 10px gap. Toolbar + arrow sits above selection.
+    const spaceAbove = selectionTop;
+    const spaceBelow = SCREEN_HEIGHT - selectionBottom;
+    const toolbarWithArrow = TOOLBAR_HEIGHT + ARROW_SIZE + GAP_ABOVE_SELECTION;
+
+    let top: number;
     let arrowPosition: 'top' | 'bottom' = 'bottom';
 
-    // Try to position above selection
-    if (selectionTop - TOOLBAR_HEIGHT - ARROW_SIZE - BUFFER > 0) {
-      top = selectionTop - TOOLBAR_HEIGHT - ARROW_SIZE - BUFFER;
+    if (spaceAbove >= toolbarWithArrow) {
+      // Position above: bottom of arrow is 10px above selection top
+      top = selectionTop - TOOLBAR_HEIGHT - ARROW_SIZE - GAP_ABOVE_SELECTION;
       arrowPosition = 'bottom';
-    }
-    // Otherwise position below selection
-    else if (selectionBottom + TOOLBAR_HEIGHT + ARROW_SIZE + BUFFER < SCREEN_HEIGHT) {
-      top = selectionBottom + ARROW_SIZE + BUFFER;
+    } else if (spaceBelow >= toolbarWithArrow) {
+      // Position below: top of toolbar is 10px below selection bottom
+      top = selectionBottom + GAP_ABOVE_SELECTION + ARROW_SIZE;
       arrowPosition = 'top';
-    }
-    // Fallback: position above with minimal spacing
-    else {
-      top = Math.max(BUFFER, selectionTop - TOOLBAR_HEIGHT - ARROW_SIZE);
+    } else {
+      // Fallback: above with minimal clearance
+      top = Math.max(HORIZONTAL_PADDING, selectionTop - TOOLBAR_HEIGHT - ARROW_SIZE - GAP_ABOVE_SELECTION);
       arrowPosition = 'bottom';
     }
-
-    // Ensure toolbar stays within horizontal bounds
-    left = Math.max(BUFFER, Math.min(left, SCREEN_WIDTH - TOOLBAR_WIDTH - BUFFER));
 
     return { top, left, arrowPosition };
-  }, [selectionBounds]);
+  }, [selectionBounds, readerOffset]);
 
   return (
     <View style={[styles.container, { top: position.top, left: position.left }]}>
       {position.arrowPosition === 'top' && <View style={styles.arrowTop} />}
       <View style={styles.content}>
         <TouchableOpacity style={styles.button} onPress={onHighlight}>
-          <Text style={styles.buttonText}>💡 Highlight</Text>
+          <Feather name="edit-3" size={16} color={colors.text} style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Highlight</Text>
         </TouchableOpacity>
         <View style={styles.divider} />
         <TouchableOpacity style={styles.button} onPress={onTranslate}>
-          <Text style={styles.buttonText}>🌐 Translate</Text>
+          <Feather name="globe" size={16} color={colors.text} style={styles.buttonIcon} />
+          <Text style={styles.buttonText}>Translate</Text>
         </TouchableOpacity>
       </View>
       {position.arrowPosition === 'bottom' && <View style={styles.arrowBottom} />}
@@ -127,11 +138,16 @@ const styles = StyleSheet.create({
     height: TOOLBAR_HEIGHT,
   },
   button: {
+    flexDirection: 'row',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
+    gap: spacing.sm,
+  },
+  buttonIcon: {
+    opacity: 0.9,
   },
   buttonText: {
     ...typography.body,

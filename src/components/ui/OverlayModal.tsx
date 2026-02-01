@@ -37,7 +37,9 @@ export function OverlayModal({
       onRequestClose={onClose}
     >
       <View style={[styles.overlay, overlayStyle]}>
-        {dismissOnBackdropPress ? <Pressable style={StyleSheet.absoluteFill} onPress={onClose} /> : null}
+        {dismissOnBackdropPress ? (
+          <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={onClose} />
+        ) : null}
         <View style={[styles.card, cardStyle]}>{children}</View>
       </View>
     </Modal>
@@ -51,6 +53,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.lg,
   },
+  backdrop: {
+    zIndex: 0,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 12,
@@ -58,6 +63,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
     maxHeight: '85%',
+    zIndex: 1,
+    elevation: 1,
   },
 });
 

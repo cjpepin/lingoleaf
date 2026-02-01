@@ -21,6 +21,8 @@ import { logger } from '@/utils/logger';
 import { ensureBookCoverFromCache } from '@/utils/epubCover';
 import { CenteredLoader } from '@/components/ui/CenteredLoader';
 import { Button } from '@/components/ui/Button';
+import { AdBanner } from '@/components/ads/AdBanner';
+import { useTranslation } from '@/i18n/useTranslation';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -28,6 +30,7 @@ export default function BookDetailsScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<any>();
   const bookId: string = route.params?.bookId;
+  const t = useTranslation();
 
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,13 +156,17 @@ export default function BookDetailsScreen() {
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
-          <Text style={styles.body}>{description ?? 'No description available yet.'}</Text>
+          <Text style={styles.sectionTitle}>{t('bookDetails.about')}</Text>
+          <Text style={styles.body}>{description ?? t('bookDetails.noDescription')}</Text>
+        </View>
+
+        <View style={styles.adSection}>
+          <AdBanner />
         </View>
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Button label={opening ? 'Opening…' : 'Read now'} onPress={handleReadNow} disabled={opening} variant="primary" />
+        <Button label={opening ? t('bookDetails.opening') : t('bookDetails.readNow')} onPress={handleReadNow} disabled={opening} variant="primary" />
       </View>
     </View>
   );
@@ -223,6 +230,9 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.text,
     lineHeight: 22,
+  },
+  adSection: {
+    marginTop: spacing.xl,
   },
   bottomBar: {
     borderTopWidth: 1,

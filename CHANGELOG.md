@@ -4,6 +4,24 @@ All notable changes to LingoLeaf will be documented in this file.
 
 Format: `[Date] [Type] Description (Files affected)`
 
+## 2026-01-28
+
+- [2026-01-28] [FEAT] Flashcards: 3-category progress (unseen/learning/learned), completion modal when all learned with options: continue free studying, come back tomorrow, add words by reading; i18n for new strings (`src/screens/FlashcardsScreen.tsx`, `src/supabase/queries.ts`, `src/i18n/translations.ts`)
+- [2026-01-28] [FEAT] Reader i18n: ReaderScreen alerts/snackbars, BookNavigationSheet, ReaderSettingsModal (fonts, highlight colors) in English/Spanish (`src/screens/ReaderScreen.tsx`, `src/components/BookNavigationSheet.tsx`, `src/components/ReaderSettingsModal.tsx`, `src/i18n/translations.ts`)
+- [2026-01-28] [FEAT] App language: English/Spanish i18n, toggle in Settings (`src/i18n/translations.ts`, `src/state/useAppLangStore.ts`, `supabase/migrations/020_app_language.sql`)
+- [2026-01-28] [FEAT] Study all: Anki-style rating system for "Study all" (fetchFlashcardQueueAll, session key __all__)
+- [2026-01-28] [FEAT] Flashcard interval settings: Again (within N cards), Hard/Good/Easy (user-configurable), increase-on-repeat multiplier (`src/state/useFlashcardSettingsStore.ts`, `src/components/FlashcardSettingsModal.tsx`, `src/supabase/queries.ts`, `supabase/migrations/019_flashcard_interval_settings.sql`)
+- [2026-01-28] [FEAT] Anki-style flashcard retention: flip → rate (Again/Hard/Good/Easy) → next; spaced repetition with DB storage; resume/restart on quit (`src/screens/FlashcardsScreen.tsx`, `src/components/FlashcardSettingsModal.tsx`, `src/supabase/queries.ts`, `src/utils/flashcardSessionStorage.ts`, `supabase/migrations/018_study_word_reviews.sql`)
+- [2026-01-28] [FEAT] Flashcard 3-dots settings: term/translation first (`src/components/FlashcardSettingsModal.tsx`)
+- [2026-01-28] [FEAT] Reader settings: 3-dot menu with highlight-on-translate toggle, font size, font, highlight color (`src/components/ReaderSettingsModal.tsx`, `src/state/useReaderSettingsStore.ts`, `supabase/migrations/016_reader_settings.sql`)
+- [2026-01-28] [FEAT] Auto-highlight when translating (toggle in Reader Settings)
+- [2026-01-28] [FIX] SelectionToolbar: center on selection with reader offset, 10px gap above
+- [2026-01-28] [FIX] Edge selection: remove overlay, detect quick tap vs long-press in WebView (tap=page turn, long-press=select)
+- [2026-01-28] [FEAT] App loading splash: centered icon with soft shadow and spinner during auth init (`src/components/AppLoadingSplash.tsx`, `src/navigation/index.tsx`)
+- [2026-01-28] [FIX] Library/History loading flicker: single initial load, skip useFocusEffect/search effect on mount (`src/screens/LibraryScreen.tsx`, `src/screens/HistoryScreen.tsx`)
+- [2026-01-28] [FIX] MainTabs: default to Library tab immediately, remove async hasReadingHistory delay (`src/navigation/index.tsx`)
+- [2026-01-28] [FIX] Auth network error: retry with backoff, show AuthErrorScreen with Retry when connection fails (`src/state/useAuthStore.ts`, `src/components/AuthErrorScreen.tsx`)
+
 ## 2026-01-09
 
 ### Latest Updates

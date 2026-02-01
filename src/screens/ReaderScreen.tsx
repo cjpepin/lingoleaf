@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, Alert } from 'react-native';
+import { View, StyleSheet, Alert, Pressable } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
@@ -47,6 +47,10 @@ import { getCachedLastCfi, setCachedLastCfi, setCachedLastPosition } from '@/uti
 import { READER_INJECTED_JAVASCRIPT } from '@/reader/readerInjectedJavascript';
 import { READER_THEME } from '@/reader/readerTheme';
 import { useReaderStore } from '@/state/useReaderStore';
+import { useReaderSettingsStore } from '@/state/useReaderSettingsStore';
+import { ReaderSettingsModal } from '@/components/ReaderSettingsModal';
+import { Feather } from '@expo/vector-icons';
+import { useTranslation } from '@/i18n/useTranslation';
 
 type ReaderRouteProp = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -58,11 +62,12 @@ interface Selection {
 }
 
 export default function ReaderScreen() {
+  const t = useTranslation();
   const route = useRoute<ReaderRouteProp>();
   const navigation = useNavigation();
   const { bookId, localPath } = route.params;
   const { user, isGuest } = useAuthStore();
-  const { targetLang } = useSettingsStore();
+  const { targetLang, loadSettings } = useSettingsStore();
   const { currentPage, totalPages, pageLoading, chapterLeftPct, setCurrentPage, setTotalPages, setPageLoading, setChapterLeftPct } = useReaderStore();
   const upgradePrompt = useUpgradePromptStore();
   const studyStore = useStudyStore();
@@ -71,6 +76,7 @@ export default function ReaderScreen() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [showTranslateSheet, setShowTranslateSheet] = useState(false);
   const [translation, setTranslation] = useState<string | null>(null);
+  const [sameLanguage, setSameLanguage] = useState(false);
   const [translating, setTranslating] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [vocabLists, setVocabLists] = useState<VocabList[]>([]);
@@ -85,6 +91,8 @@ export default function ReaderScreen() {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [readingProgressEnabled, setReadingProgressEnabled] = useState(true);
   const [readerReady, setReaderReady] = useState(false);
+  const [readerLayout, setReaderLayout] = useState<{ x: number; y: number } | null>(null);
+  const [readerSettingsVisible, setReaderSettingsVisible] = useState(false);
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     visible: false,
     message: '',
@@ -104,6 +112,8 @@ export default function ReaderScreen() {
     goPrevious,
     atStart,
     atEnd,
+    changeFontSize,
+    changeFontFamily,
   } = useReader();
 
   const tocItems = useMemo(() => {
@@ -172,6 +182,10 @@ export default function ReaderScreen() {
   }, [bookId]);
 
   useEffect(() => {
+    if (user) loadSettings(user.id);
+  }, [user, loadSettings]);
+
+  useEffect(() => {
     logger.info('🔵 ReaderScreen mounted', { bookId, localPath });
     
     // Verify file exists
@@ -181,7 +195,7 @@ export default function ReaderScreen() {
         logger.info('File info:', info);
         if (!info.exists) {
           logger.error('❌ File does not exist at path:', localPath);
-          Alert.alert('Error', 'Book file not found');
+          Alert.alert(t('common.error'), t('reader.bookNotFound'));
         }
       } catch (error) {
         logger.error('Failed to verify file:', error);
@@ -190,7 +204,7 @@ export default function ReaderScreen() {
     
     verifyFile();
     loadBookData();
-  }, [bookId]);
+  }, [bookId, t]);
 
   // Engagement tracking for guest upgrade prompt
   useEffect(() => {
@@ -249,7 +263,7 @@ export default function ReaderScreen() {
       resumeGuardRef.current = {
         expectedCfi: local.cfi,
         expectedIndex0: hasIndex ? Math.floor(local.locationIndex0 as number) : null,
-        expiresAt: Date.now() + 5000,
+        expiresAt: Date.now() + 1500,
       };
 
       // If we have both page + total cached, we can render immediately without a loading state.
@@ -295,7 +309,7 @@ export default function ReaderScreen() {
           resumeGuardRef.current = {
             expectedCfi: remoteCfi,
             expectedIndex0: null,
-            expiresAt: Date.now() + 5000,
+            expiresAt: Date.now() + 1500,
           };
         }
       } else if (!local?.cfi) {
@@ -433,7 +447,20 @@ export default function ReaderScreen() {
     try {
       const bookData = await fetchBook(bookId);
       setBook(bookData);
-      navigation.setOptions({ title: bookData.title });
+      navigation.setOptions({
+        title: bookData.title,
+        headerRight: () => (
+          <View style={{ marginRight: spacing.md }}>
+            <Pressable
+              onPress={() => setReaderSettingsVisible(true)}
+              hitSlop={8}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Feather name="more-vertical" size={24} color={colors.primary} />
+            </Pressable>
+          </View>
+        ),
+      });
     } catch (error) {
       logger.error('Failed to load book data:', error);
       Alert.alert('Error', 'Failed to load book');
@@ -447,8 +474,9 @@ export default function ReaderScreen() {
     highlights.forEach((h) => {
       if (!h?.cfi_range) return;
       try {
+        const hex = h.color === 'yellow' ? colors.highlightYellow : h.color === 'pink' ? colors.highlightPink : colors.highlightMint;
         removeAnnotationByCfi(h.cfi_range);
-        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: colors.primary, opacity: 0.25 });
+        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: hex, opacity: 0.4 });
       } catch (e) {
         // Best-effort; CFI can fail if section not yet rendered
       }
@@ -464,7 +492,7 @@ export default function ReaderScreen() {
     lastSelectionSource.current = 'epubjs';
     
     if (!validateSelectionLength(text, MAX_SELECTION_LENGTH)) {
-      Alert.alert('Selection Too Long', `Please select ${MAX_SELECTION_LENGTH} characters or less`);
+      Alert.alert(t('reader.selectionTooLongTitle'), t('reader.selectionTooLong', { max: MAX_SELECTION_LENGTH }));
       return;
     }
 
@@ -489,7 +517,7 @@ export default function ReaderScreen() {
     setTimeout(() => {
       selectionJustMade.current = false;
     }, 300);
-  }, [lastTouchPosition]);
+  }, [lastTouchPosition, t]);
 
   const handleHighlight = useCallback(async () => {
     if (!selection || !user || !book) return;
@@ -497,28 +525,30 @@ export default function ReaderScreen() {
       logger.warn('Highlight requested without cfiRange (fallback selection)', {
         textPreview: selection.text.substring(0, 80),
       });
-      Alert.alert('Highlight Unavailable', 'Please try selecting again (highlight anchor not detected).');
+      Alert.alert(t('reader.highlightUnavailableTitle'), t('reader.highlightUnavailable'));
       return;
     }
     if (!highlightsEnabled) {
-      Alert.alert('Highlights Unavailable', 'Please apply the DB migration to enable persistent highlights.');
+      Alert.alert(t('reader.highlightsUnavailableTitle'), t('reader.highlightsUnavailable'));
       return;
     }
 
     try {
+      const highlightColor = useReaderSettingsStore.getState().highlightColor;
       const now = new Date().toISOString();
       const newHighlight: UserBookHighlight = {
         id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         cfi_range: selection.cfiRange,
         selected_text: selection.text,
         created_at: now,
-        color: 'mint',
+        color: highlightColor,
       };
 
       // Apply immediately in the reader (best-effort)
       try {
         removeAnnotationByCfi?.(newHighlight.cfi_range);
-        addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: colors.primary, opacity: 0.25 });
+        const hex = highlightColor === 'yellow' ? colors.highlightYellow : highlightColor === 'pink' ? colors.highlightPink : colors.highlightMint;
+          addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: hex, opacity: 0.4 });
       } catch (e) {}
 
       setHighlights((prev) => [...prev, newHighlight]);
@@ -533,9 +563,9 @@ export default function ReaderScreen() {
       setSelection(null);
     } catch (error) {
       logger.error('Failed to save highlight:', error);
-      Alert.alert('Error', 'Failed to save highlight');
+      Alert.alert(t('common.error'), t('reader.failedToSaveHighlight'));
     }
-  }, [addAnnotation, addUserBookHighlight, book, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, upgradePrompt, user]);
+  }, [addAnnotation, addUserBookHighlight, book, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, t, upgradePrompt, user]);
 
   const handleJumpToHighlight = useCallback((cfiRange: string) => {
     if (!cfiRange) return;
@@ -547,10 +577,10 @@ export default function ReaderScreen() {
 
   const handleDeleteHighlight = useCallback(async (h: UserBookHighlight) => {
     if (!user || !book) return;
-    Alert.alert('Delete Highlight', 'Remove this highlight?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('reader.deleteHighlightTitle'), t('reader.deleteHighlightMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -559,12 +589,12 @@ export default function ReaderScreen() {
             await deleteUserBookHighlight(user.id, book.id, h.id);
           } catch (error) {
             logger.error('Failed to delete highlight:', error);
-            Alert.alert('Error', 'Failed to delete highlight');
+            Alert.alert(t('common.error'), t('reader.failedToDeleteHighlight'));
           }
         },
       },
     ]);
-  }, [book, deleteUserBookHighlight, removeAnnotationByCfi, user]);
+  }, [book, deleteUserBookHighlight, removeAnnotationByCfi, t, user]);
 
   const handleTranslate = useCallback(async () => {
     if (!selection || !book?.source_lang) return;
@@ -573,6 +603,7 @@ export default function ReaderScreen() {
     setTranslating(true);
     setTranslateError(null);
     setTranslation(null);
+    setSameLanguage(false);
 
     try {
       logger.info('🌐 Translating selection', {
@@ -592,8 +623,10 @@ export default function ReaderScreen() {
       // Handle same-language case
       if (response.same_language) {
         logger.info('Same language detected, showing original text');
-        setTranslation(`"${selection.text}" is already in ${targetLang.toUpperCase()}`);
+        setSameLanguage(true);
+        setTranslation(t('reader.alreadyInLang', { text: selection.text, lang: t('language.' + targetLang) }));
       } else {
+        setSameLanguage(false);
         setTranslation(response.translation);
       }
       
@@ -603,20 +636,46 @@ export default function ReaderScreen() {
       }
     } catch (error: any) {
       logger.error('Translation failed:', error);
-      setTranslateError(error.message || 'Translation failed');
+      setTranslateError(error.message || t('msg.translationFailed'));
     } finally {
       setTranslating(false);
     }
-  }, [selection, book, targetLang]);
+  }, [selection, book, targetLang, t]);
+
+  const highlightOnTranslate = useReaderSettingsStore((s) => s.highlightOnTranslate);
 
   const handleSaveStudyWord = useCallback(async () => {
     if (!selection || !translation || !user || !book?.source_lang) return;
     if (!selectedListId) {
-      setSnackbar({ visible: true, message: 'Please choose a list to save this word to', type: 'error' });
+      setSnackbar({ visible: true, message: t('msg.chooseList'), type: 'error' });
       return;
     }
 
     try {
+      // Auto-highlight when translating (if enabled in settings)
+      if (highlightOnTranslate && selection.cfiRange && highlightsEnabled) {
+        try {
+          const readerHighlightColor = useReaderSettingsStore.getState().highlightColor;
+          const highlightHex = readerHighlightColor === 'yellow' ? colors.highlightYellow
+            : readerHighlightColor === 'pink' ? colors.highlightPink
+            : colors.highlightMint;
+          const now = new Date().toISOString();
+          const newHighlight: UserBookHighlight = {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            cfi_range: selection.cfiRange,
+            selected_text: selection.text,
+            created_at: now,
+            color: readerHighlightColor,
+          };
+          addAnnotation?.('highlight', selection.cfiRange, { id: newHighlight.id }, { color: highlightHex, opacity: 0.4 });
+          setHighlights((prev) => [...prev, newHighlight]);
+          await addUserBookHighlight(user.id, book.id, newHighlight);
+        } catch (e) {
+          logger.warn('Auto-highlight on translate failed', e);
+        }
+      }
+
+      const translationToSave = sameLanguage ? selection.text : translation;
       const newWord = await createStudyWord({
         user_id: user.id,
         book_id: book.id,
@@ -625,7 +684,7 @@ export default function ReaderScreen() {
         target_lang: targetLang,
         term: selection.text,
         term_normalized: normalizeText(selection.text),
-        translation,
+        translation: translationToSave,
         context_snippet: selection.context ?? null,
       });
 
@@ -635,7 +694,7 @@ export default function ReaderScreen() {
       studyStore.adjustAllCount(1);
 
       touchVocabList(selectedListId).catch(() => {});
-      setSnackbar({ visible: true, message: 'Added to study list!', type: 'success' });
+      setSnackbar({ visible: true, message: t('msg.addedToList'), type: 'success' });
       countAllStudyWords(user.id)
         .then((c) => {
           if (c >= 10) {
@@ -647,13 +706,24 @@ export default function ReaderScreen() {
       setSelection(null);
     } catch (error) {
       logger.error('Failed to save study word:', error);
-      setSnackbar({ visible: true, message: 'Failed to save word', type: 'error' });
+      setSnackbar({ visible: true, message: t('msg.failedToSave'), type: 'error' });
     }
-  }, [book, isGuest, selectedListId, selection, studyStore, targetLang, translation, upgradePrompt, user]);
+  }, [addAnnotation, book, highlightOnTranslate, highlightsEnabled, isGuest, sameLanguage, selectedListId, selection, studyStore, t, targetLang, translation, upgradePrompt, user]);
 
   const handleCloseToolbar = useCallback(() => {
     setSelection(null);
   }, []);
+
+  const handlePressAnnotation = useCallback((annotation: { cfiRange?: string; data?: { id?: string }; cfiRangeText?: string }) => {
+    if (!annotation?.cfiRange) return;
+    const highlight = highlights.find((h) => h.id === annotation.data?.id || h.cfi_range === annotation.cfiRange);
+    if (highlight) {
+      Alert.alert(t('reader.highlights'), highlight.selected_text, [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('reader.removeHighlight'), style: 'destructive', onPress: () => handleDeleteHighlight(highlight) },
+      ]);
+    }
+  }, [highlights, handleDeleteHighlight, t]);
 
   const handleCreateNewList = useCallback(async (listName: string) => {
     if (!user) return;
@@ -661,12 +731,12 @@ export default function ReaderScreen() {
       const newList = await createVocabList(user.id, listName);
       setVocabLists((prev) => [...prev, newList]);
       setSelectedListId(newList.id);
-      setSnackbar({ visible: true, message: `Created list "${listName}"`, type: 'success' });
+      setSnackbar({ visible: true, message: t('msg.listCreated', { name: listName }), type: 'success' });
     } catch (error) {
       logger.error('Failed to create list:', error);
-      setSnackbar({ visible: true, message: 'Failed to create list', type: 'error' });
+      setSnackbar({ visible: true, message: t('msg.failedToCreateList'), type: 'error' });
     }
-  }, [user]);
+  }, [t, user]);
 
   const handleCloseSheet = useCallback(() => {
     logger.info('Closing TranslateSheet', { listPickerVisible });
@@ -674,6 +744,32 @@ export default function ReaderScreen() {
     setListPickerVisible(false);
     setSelection(null);
   }, [listPickerVisible]);
+
+  const handleTapLeftEdge = useCallback(() => {
+    if (selection || showTranslateSheet || selectionJustMade.current) return;
+    if (navVisible) return;
+    if (atStart) return;
+    tapNavJustMade.current = true;
+    setTimeout(() => {
+      tapNavJustMade.current = false;
+    }, 250);
+    logger.info('👈 Tap left edge');
+    if (totalPages > 0) setPageLoading(false);
+    goPrevious?.();
+  }, [atStart, goPrevious, navVisible, selection, setPageLoading, showTranslateSheet, totalPages]);
+
+  const handleTapRightEdge = useCallback(() => {
+    if (selection || showTranslateSheet || selectionJustMade.current) return;
+    if (navVisible) return;
+    if (atEnd) return;
+    tapNavJustMade.current = true;
+    setTimeout(() => {
+      tapNavJustMade.current = false;
+    }, 250);
+    logger.info('👉 Tap right edge');
+    if (totalPages > 0) setPageLoading(false);
+    goNext?.();
+  }, [atEnd, goNext, navVisible, selection, setPageLoading, showTranslateSheet, totalPages]);
 
   const handleReaderWebViewMessage = useCallback((event: any) => {
     // This only receives NON-internal events from the epubjs webview template.
@@ -695,20 +791,14 @@ export default function ReaderScreen() {
         return;
       }
       if (type === 'llHighlightClicked') {
-        logger.info('💡 Highlight clicked', { cfi: event?.cfi, highlightId: event?.highlightId });
+        const cfi = event?.cfi;
         const highlightId = event?.highlightId;
-        if (highlightId) {
-          const highlight = highlights.find((h) => h.id === highlightId);
-          if (highlight) {
-            Alert.alert('Highlight', highlight.selected_text, [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete',
-                style: 'destructive',
-                onPress: () => handleDeleteHighlight(highlight),
-              },
-            ]);
-          }
+        const highlight = highlights.find((h) => h.id === highlightId || h.cfi_range === cfi);
+        if (highlight) {
+          Alert.alert(t('reader.highlights'), highlight.selected_text, [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('reader.removeHighlight'), style: 'destructive', onPress: () => handleDeleteHighlight(highlight) },
+          ]);
         }
         return;
       }
@@ -755,41 +845,7 @@ export default function ReaderScreen() {
     } catch (error) {
       logger.error('Failed handling onWebViewMessage', error);
     }
-  }, [handleDeleteHighlight, highlights, lastTouchPosition, selection]);
-
-  const handleTapLeftEdge = useCallback(() => {
-    if (selection || showTranslateSheet || selectionJustMade.current) return;
-    if (navVisible) return;
-    if (atStart) return;
-    tapNavJustMade.current = true;
-    setTimeout(() => {
-      tapNavJustMade.current = false;
-    }, 250);
-    logger.info('👈 Tap left edge');
-    // Optimistic UI update: location events can lag briefly on resume.
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-      if (totalPages > 0) setPageLoading(false);
-    }
-    goPrevious?.();
-  }, [atStart, currentPage, goPrevious, navVisible, selection, setCurrentPage, setPageLoading, showTranslateSheet, totalPages]);
-
-  const handleTapRightEdge = useCallback(() => {
-    if (selection || showTranslateSheet || selectionJustMade.current) return;
-    if (navVisible) return;
-    if (atEnd) return;
-    tapNavJustMade.current = true;
-    setTimeout(() => {
-      tapNavJustMade.current = false;
-    }, 250);
-    logger.info('👉 Tap right edge');
-    // Optimistic UI update: location events can lag briefly on resume.
-    if (currentPage > 0 && (totalPages <= 0 || currentPage < totalPages)) {
-      setCurrentPage(currentPage + 1);
-      if (totalPages > 0) setPageLoading(false);
-    }
-    goNext?.();
-  }, [atEnd, currentPage, goNext, navVisible, selection, setCurrentPage, setPageLoading, showTranslateSheet, totalPages]);
+  }, [handleDeleteHighlight, highlights, lastTouchPosition, selection, t]);
 
   const readerTheme = READER_THEME;
   const injectedJavascript = READER_INJECTED_JAVASCRIPT;
@@ -811,8 +867,8 @@ export default function ReaderScreen() {
 
   const handleReaderError = useCallback((error: string) => {
     logger.error('❌ Reader display error:', error);
-    Alert.alert('Reader Error', 'Failed to display book');
-  }, []);
+    Alert.alert(t('reader.readerErrorTitle'), t('reader.failedToDisplayBook'));
+  }, [t]);
 
   const handleReaderPress = useCallback(() => {
     // Don't clear if selection was just made (prevents race condition)
@@ -867,6 +923,14 @@ export default function ReaderScreen() {
 
     setReaderReady(true);
 
+    // Resolve loading state: we're on first page when reader is ready. Locations may generate async.
+    const total = typeof readyTotalLocations === 'number' && Number.isFinite(readyTotalLocations) && readyTotalLocations > 0
+      ? Math.floor(readyTotalLocations) : 0;
+    const pageFromIdx = typeof idx === 'number' && Number.isFinite(idx) && idx >= 0 ? Math.floor(idx) + 1 : 1;
+    setCurrentPage(pageFromIdx);
+    if (total > 0) setTotalPages(total);
+    setPageLoading(false);
+
     if (cfi) {
       // Save immediately on ready (covers cases where user opens and closes quickly)
       scheduleSaveReadingProgress(cfi);
@@ -908,30 +972,24 @@ export default function ReaderScreen() {
     logger.info('Location displayed', { displayedPage, displayedTotal });
 
     // Update page counter from the reader's generated location index (0-based).
-    const idx0 = loc?.start?.location;
-    const hasTotalLocs = typeof totalLocs === 'number' && Number.isFinite(totalLocs) && totalLocs > 0;
-
-    // Avoid "correct page → 1/total → correct" flicker during resume by ignoring early relocations.
-    const guard = resumeGuardRef.current;
-    if (
-      guard &&
-      Date.now() < guard.expiresAt &&
-      typeof idx0 === 'number' &&
-      Number.isFinite(idx0) &&
-      idx0 >= 0 &&
-      guard.expectedIndex0 !== null
-    ) {
-      const expected = guard.expectedIndex0;
-      if (expected !== null && idx0 < expected - 2 && cfi && cfi !== guard.expectedCfi) {
-        return;
-      }
-      if (expected !== null && idx0 >= expected - 2) {
-        resumeGuardRef.current = null;
+    let idx0: number | undefined = loc?.start?.location;
+    if (typeof idx0 !== 'number' || !Number.isFinite(idx0) || idx0 < 0) {
+      const disp = loc?.start?.displayed;
+      if (disp && typeof disp.page === 'number' && typeof disp.total === 'number' && disp.total > 0) {
+        idx0 = Math.max(0, disp.page - 1);
+      } else if (typeof progress === 'number' && Number.isFinite(progress) && progress >= 0) {
+        const total = typeof totalLocs === 'number' && totalLocs > 0 ? totalLocs : 1;
+        idx0 = Math.min(total - 1, Math.floor((progress / 100) * total));
       }
     }
-    // IMPORTANT: don't clear the guard just because the CFI matches if locations aren't ready yet.
-    // Some books report idx0=0 with the resume CFI before locations are generated (totalLocs=0).
-    if (guard && Date.now() < guard.expiresAt && cfi && cfi === guard.expectedCfi && hasTotalLocs) {
+    const hasTotalLocs = typeof totalLocs === 'number' && Number.isFinite(totalLocs) && totalLocs > 0;
+
+    const guard = resumeGuardRef.current;
+    if (guard && Date.now() < guard.expiresAt && guard.expectedIndex0 !== null) {
+      const expected = guard.expectedIndex0;
+      if (typeof idx0 === 'number' && idx0 < Math.max(0, expected - 2) && cfi && cfi !== guard.expectedCfi) {
+        return;
+      }
       resumeGuardRef.current = null;
     }
 
@@ -939,17 +997,15 @@ export default function ReaderScreen() {
       setTotalPages(Math.floor(totalLocs));
     }
     if (typeof idx0 === 'number' && Number.isFinite(idx0) && idx0 >= 0) {
-      // If locations aren't ready yet, don't overwrite an already-known page (from cache/remote) with idx0=0/1.
-      // This is the root cause of "correct page → 1/total → correct after a couple turns".
       if (!hasTotalLocs && currentPage > 0) {
-        // Still allow saving CFI remotely, but don't touch the numeric counter.
         if (cfi) scheduleSaveReadingProgress(cfi);
         return;
       }
-
-      logger.info('🔄 Location change', { idx0 });
-      logger.info('setCurrentPage 4');
-      setCurrentPage(Math.floor(idx0) + 1);
+      const newPage = Math.floor(idx0) + 1;
+      const displayedPage = useReaderStore.getState().currentPage;
+      if (newPage !== displayedPage) {
+        setCurrentPage(newPage);
+      }
       setPageLoading(false);
       setChapterLeftPct(null);
 
@@ -973,7 +1029,7 @@ export default function ReaderScreen() {
       sectionHref: currentSection?.href ?? null,
       displayed: loc?.start?.displayed,
     });
-  }, [bookId, scheduleSaveReadingProgress, setChapterLeftPct, setCurrentPage, setPageLoading, setTotalPages, user?.id]);
+  }, [bookId, currentPage, scheduleSaveReadingProgress, setChapterLeftPct, setCurrentPage, setPageLoading, setTotalPages, user?.id]);
 
   const handleGoToHref = useCallback(
     (href: string) => {
@@ -1153,7 +1209,7 @@ export default function ReaderScreen() {
       // Optimistic UI + guard against early bogus relocations.
       setCurrentPage(page);
       setPageLoading(true);
-      resumeGuardRef.current = { expectedCfi: '', expectedIndex0: idx0, expiresAt: Date.now() + 5000 };
+      resumeGuardRef.current = { expectedCfi: '', expectedIndex0: idx0, expiresAt: Date.now() + 1500 };
 
       // Prefer a WebView-side jump that doesn't require pulling the huge `locations[]` array into RN memory.
       // This works as soon as book.locations are generated (which is also what sets totalPages).
@@ -1182,6 +1238,16 @@ export default function ReaderScreen() {
     [currentLocation?.start?.cfi, currentPage, injectJavascript, setCurrentPage, setPageLoading, totalPages]
   );
 
+  // Apply reader font settings when ready or when they change.
+  // Font changes apply instantly; no spinner — epub.js locations regenerate in background and we update when ready.
+  const readerFontSize = useReaderSettingsStore((s) => s.fontSize);
+  const readerFontFamily = useReaderSettingsStore((s) => s.fontFamily);
+  useEffect(() => {
+    if (!readerReady || !changeFontSize || !changeFontFamily) return;
+    changeFontSize(readerFontSize);
+    changeFontFamily(readerFontFamily);
+  }, [readerReady, readerFontSize, readerFontFamily, changeFontSize, changeFontFamily]);
+
   useEffect(() => {
     if (!readerReady) return;
     const pending = pendingRemoteCfiRef.current;
@@ -1195,9 +1261,19 @@ export default function ReaderScreen() {
     return <View style={styles.container} />;
   }
 
+  const readerOffset = readerLayout
+    ? { x: readerLayout.x, y: readerLayout.y + spacing.lg }
+    : { x: 0, y: spacing.lg };
+
   return (
     <View style={styles.container}>
-      <View style={styles.readerWrapper}>
+      <View
+        style={styles.readerWrapper}
+        onLayout={(e) => {
+          const { x, y } = e.nativeEvent.layout;
+          setReaderLayout({ x, y });
+        }}
+      >
         <Reader
           src={localPath}
           fileSystem={useFileSystem}
@@ -1213,6 +1289,7 @@ export default function ReaderScreen() {
           initialLocation={initialLocation}
           menuItems={[]}
           onSelected={handleReaderSelected}
+          onPressAnnotation={handlePressAnnotation}
           onStarted={handleReaderStarted}
           onReady={handleReaderReady}
           onRendered={handleReaderRendered}
@@ -1249,6 +1326,7 @@ export default function ReaderScreen() {
           onTranslate={handleTranslate}
           onClose={handleCloseToolbar}
           selectionBounds={selection.position}
+          readerOffset={readerOffset}
         />
       )}
       <TranslateSheet
@@ -1298,6 +1376,10 @@ export default function ReaderScreen() {
         onNotNow={() => {
           if (user) upgradePrompt.dismiss(user.id).catch(() => {});
         }}
+      />
+      <ReaderSettingsModal
+        visible={readerSettingsVisible}
+        onClose={() => setReaderSettingsVisible(false)}
       />
       <Snackbar
         visible={snackbar.visible}

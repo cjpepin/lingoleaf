@@ -48,6 +48,16 @@ export interface StudyWord {
   created_at: string;
 }
 
+export interface StudyWordReview {
+  study_word_id: string;
+  next_review_at: string;
+  interval_minutes: number;
+  last_rating: string | null;
+  review_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface TranslationCache {
   source_lang: string;
   target_lang: string;
@@ -62,6 +72,16 @@ export interface UserSettings {
   native_lang: string;
   known_langs: string[];
   goal_langs: string[];
+  reader_highlight_on_translate?: boolean;
+  reader_font_size?: string;
+  reader_font_family?: string;
+  reader_highlight_color?: string;
+  flashcard_again_cards?: number;
+  flashcard_interval_hard_min?: number;
+  flashcard_interval_good_min?: number;
+  flashcard_interval_easy_min?: number;
+  flashcard_interval_multiplier?: number;
+  app_lang?: string;
   created_at: string;
   updated_at: string;
 }
