@@ -32,8 +32,12 @@ export const READER_INJECTED_JAVASCRIPT = `
             background: rgba(180, 215, 255, 0.4) !important;
           }
           [ref="epubjs-hl"], .epubjs-hl {
-            mix-blend-mode: multiply !important;
+            isolation: isolate !important;
             pointer-events: auto !important;
+            /* Darker text so it stays readable on top of highlight */
+            color: rgba(0,0,0,0.92) !important;
+            -webkit-text-fill-color: rgba(0,0,0,0.92) !important;
+            text-shadow: 0 0 1px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.6), 0 1px 1px rgba(255,255,255,0.5) !important;
           }
         \`;
         (doc.head || doc.documentElement).appendChild(style);

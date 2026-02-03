@@ -79,8 +79,10 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
   return data ?? [];
 }
 
-export async function fetchBookSubjects(): Promise<string[]> {
-  const { data, error } = await supabase.rpc('get_distinct_book_subjects');
+/** Fetches distinct subject/genre values for filter. When language is set, only subjects for books in that language. */
+export async function fetchBookSubjects(language?: string): Promise<string[]> {
+  const pLang = language?.trim() ? language.trim() : null;
+  const { data, error } = await supabase.rpc('get_distinct_book_subjects', { p_lang: pLang });
   if (error) {
     logger.warn('Failed to fetch book subjects', error);
     return [];

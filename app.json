@@ -16,7 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.lingoleaf.app",
-      "associatedDomains": ["applinks:lingoleafapp.com"],
+      "associatedDomains": [
+        "applinks:lingoleafapp.com"
+      ],
       "infoPlist": {
         "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511",
         "ITSAppUsesNonExemptEncryption": false
@@ -39,7 +41,10 @@
               "pathPrefix": "/auth"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -51,8 +56,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "cdf11764-8f6b-4595-bef0-94920ee02faa"
+        "projectId": "f1c630d3-9a4e-4cda-931e-9584583cc514"
       }
-    }
+    },
+    "owner": "cjpepin"
   }
 }

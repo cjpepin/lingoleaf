@@ -16,7 +16,7 @@ import { SelectionToolbar } from '@/components/SelectionToolbar';
 import { TranslateSheet } from '@/components/TranslateSheet';
 import { BookNavigationSheet } from '@/components/BookNavigationSheet';
 import { ReaderOverlays } from '@/components/ReaderOverlays';
-import { ReaderEdgeTapOverlay } from '@/components/ReaderEdgeTapOverlay';
+import { ReaderEdgeTapOverlay, READER_EDGE_WIDTH } from '@/components/ReaderEdgeTapOverlay';
 import { UpgradeAccountPrompt } from '@/components/UpgradeAccountPrompt';
 import { Snackbar } from '@/components/Snackbar';
 import { useAuthStore } from '@/state/useAuthStore';
@@ -151,6 +151,7 @@ export default function ReaderScreen() {
   const pendingRemoteCfiRef = useRef<string | null>(null);
   const resumeGuardRef = useRef<{ expectedCfi: string; expectedIndex0: number | null; expiresAt: number } | null>(null);
   const previousNavRef = useRef<{ cfi: string; page: number | null } | null>(null);
+  const appliedInitialCfiRef = useRef<string | null>(null);
 
   // Reset per-book reader state so we never show stale page totals from the previous book.
   useEffect(() => {
@@ -173,6 +174,7 @@ export default function ReaderScreen() {
     setInitialLocation(undefined);
     setReaderReady(false);
     setProgressLoaded(false);
+    appliedInitialCfiRef.current = null;
 
     // Reset overlay/progress UI (page counter)
     setCurrentPage(0);
@@ -185,10 +187,11 @@ export default function ReaderScreen() {
     if (user) loadSettings(user.id);
   }, [user, loadSettings]);
 
+  // Run once per book: verify file and load book data. Do not depend on t (useTranslation) or
+  // the effect re-runs every render and triggers loadBookData -> setOptions -> re-render loop.
   useEffect(() => {
     logger.info('🔵 ReaderScreen mounted', { bookId, localPath });
-    
-    // Verify file exists
+
     const verifyFile = async () => {
       try {
         const info = await FileSystem.getInfoAsync(localPath);
@@ -201,10 +204,11 @@ export default function ReaderScreen() {
         logger.error('Failed to verify file:', error);
       }
     };
-    
+
     verifyFile();
     loadBookData();
-  }, [bookId, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t omitted to avoid re-run every render
+  }, [bookId, localPath]);
 
   // Engagement tracking for guest upgrade prompt
   useEffect(() => {
@@ -476,7 +480,7 @@ export default function ReaderScreen() {
       try {
         const hex = h.color === 'yellow' ? colors.highlightYellow : h.color === 'pink' ? colors.highlightPink : colors.highlightMint;
         removeAnnotationByCfi(h.cfi_range);
-        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: hex, opacity: 0.4 });
+        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: hex, opacity: 0.7 });
       } catch (e) {
         // Best-effort; CFI can fail if section not yet rendered
       }
@@ -519,6 +523,12 @@ export default function ReaderScreen() {
     }, 300);
   }, [lastTouchPosition, t]);
 
+  const clearWebViewSelection = useCallback(() => {
+    injectJavascript?.(
+      `(function(){try{var d=document;if(d.getSelection){d.getSelection().removeAllRanges();}d.querySelectorAll('iframe').forEach(function(f){try{var id=f.contentDocument||f.contentWindow?.document;if(id&&id.getSelection){id.getSelection().removeAllRanges();}}catch(e){}});}catch(e){}}());true;`
+    );
+  }, [injectJavascript]);
+
   const handleHighlight = useCallback(async () => {
     if (!selection || !user || !book) return;
     if (!selection.cfiRange) {
@@ -548,7 +558,7 @@ export default function ReaderScreen() {
       try {
         removeAnnotationByCfi?.(newHighlight.cfi_range);
         const hex = highlightColor === 'yellow' ? colors.highlightYellow : highlightColor === 'pink' ? colors.highlightPink : colors.highlightMint;
-          addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: hex, opacity: 0.4 });
+          addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: hex, opacity: 0.7 });
       } catch (e) {}
 
       setHighlights((prev) => [...prev, newHighlight]);
@@ -561,11 +571,12 @@ export default function ReaderScreen() {
         })
         .catch(() => {});
       setSelection(null);
+      clearWebViewSelection();
     } catch (error) {
       logger.error('Failed to save highlight:', error);
       Alert.alert(t('common.error'), t('reader.failedToSaveHighlight'));
     }
-  }, [addAnnotation, addUserBookHighlight, book, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, t, upgradePrompt, user]);
+  }, [addAnnotation, addUserBookHighlight, book, clearWebViewSelection, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, t, upgradePrompt, user]);
 
   const handleJumpToHighlight = useCallback((cfiRange: string) => {
     if (!cfiRange) return;
@@ -667,7 +678,7 @@ export default function ReaderScreen() {
             created_at: now,
             color: readerHighlightColor,
           };
-          addAnnotation?.('highlight', selection.cfiRange, { id: newHighlight.id }, { color: highlightHex, opacity: 0.4 });
+          addAnnotation?.('highlight', selection.cfiRange, { id: newHighlight.id }, { color: highlightHex, opacity: 0.7 });
           setHighlights((prev) => [...prev, newHighlight]);
           await addUserBookHighlight(user.id, book.id, newHighlight);
         } catch (e) {
@@ -704,15 +715,17 @@ export default function ReaderScreen() {
         .catch(() => {});
       setShowTranslateSheet(false);
       setSelection(null);
+      clearWebViewSelection();
     } catch (error) {
       logger.error('Failed to save study word:', error);
       setSnackbar({ visible: true, message: t('msg.failedToSave'), type: 'error' });
     }
-  }, [addAnnotation, book, highlightOnTranslate, highlightsEnabled, isGuest, sameLanguage, selectedListId, selection, studyStore, t, targetLang, translation, upgradePrompt, user]);
+  }, [addAnnotation, book, clearWebViewSelection, highlightOnTranslate, highlightsEnabled, isGuest, sameLanguage, selectedListId, selection, studyStore, t, targetLang, translation, upgradePrompt, user]);
 
   const handleCloseToolbar = useCallback(() => {
     setSelection(null);
-  }, []);
+    clearWebViewSelection();
+  }, [clearWebViewSelection]);
 
   const handlePressAnnotation = useCallback((annotation: { cfiRange?: string; data?: { id?: string }; cfiRangeText?: string }) => {
     if (!annotation?.cfiRange) return;
@@ -743,7 +756,8 @@ export default function ReaderScreen() {
     setShowTranslateSheet(false);
     setListPickerVisible(false);
     setSelection(null);
-  }, [listPickerVisible]);
+    clearWebViewSelection();
+  }, [clearWebViewSelection, listPickerVisible]);
 
   const handleTapLeftEdge = useCallback(() => {
     if (selection || showTranslateSheet || selectionJustMade.current) return;
@@ -1256,14 +1270,29 @@ export default function ReaderScreen() {
     goToLocation(pending);
   }, [goToLocation, readerReady]);
 
+  // Force displayed page to match cached initialLocation when reader is ready (fixes page counter correct but content on cover).
+  useEffect(() => {
+    if (!readerReady || !initialLocation || !goToLocation) return;
+    if (appliedInitialCfiRef.current === initialLocation) return;
+    appliedInitialCfiRef.current = initialLocation;
+    const t = setTimeout(() => {
+      try {
+        goToLocation(initialLocation);
+      } catch (e) {
+        appliedInitialCfiRef.current = null;
+      }
+    }, 100);
+    return () => clearTimeout(t);
+  }, [goToLocation, initialLocation, readerReady]);
+
   // Ensure we've checked local resume state before mounting the Reader.
   if (!progressLoaded) {
     return <View style={styles.container} />;
   }
 
   const readerOffset = readerLayout
-    ? { x: readerLayout.x, y: readerLayout.y + spacing.lg }
-    : { x: 0, y: spacing.lg };
+    ? { x: readerLayout.x + READER_EDGE_WIDTH, y: readerLayout.y + spacing.lg }
+    : { x: READER_EDGE_WIDTH, y: spacing.lg };
 
   return (
     <View style={styles.container}>
@@ -1274,40 +1303,39 @@ export default function ReaderScreen() {
           setReaderLayout({ x, y });
         }}
       >
-        <Reader
-          src={localPath}
-          fileSystem={useFileSystem}
-          defaultTheme={readerTheme}
-          injectedJavascript={injectedJavascript}
-          manager="default"
-          flow="paginated"
-          snap={true}
-          enableSwipe={true}
-          enableSelection={true}
-          allowPopups={false}
-          allowScriptedContent={true}
-          initialLocation={initialLocation}
-          menuItems={[]}
-          onSelected={handleReaderSelected}
-          onPressAnnotation={handlePressAnnotation}
-          onStarted={handleReaderStarted}
-          onReady={handleReaderReady}
-          onRendered={handleReaderRendered}
-          onDisplayError={handleReaderError}
-          onPress={handleReaderPress}
-          onSingleTap={handleReaderSingleTap}
-          onLongPress={handleReaderLongPress}
-          onLocationChange={handleLocationChange}
-             onLocationsReady={(epubKey, locs) => {
-               // Locations list can be huge; we only use its length for the total.
-               if (Array.isArray(locs) && locs.length > 0) {
-                 setTotalPages(locs.length);
-                 if (currentPage > 0) setPageLoading(false);
-               }
-             }}
-          onWebViewMessage={handleReaderWebViewMessage}
-        />
-        <ReaderEdgeTapOverlay onTapLeft={handleTapLeftEdge} onTapRight={handleTapRightEdge} />
+        <ReaderEdgeTapOverlay onTapLeft={handleTapLeftEdge} onTapRight={handleTapRightEdge}>
+          <Reader
+            src={localPath}
+            fileSystem={useFileSystem}
+            defaultTheme={readerTheme}
+            injectedJavascript={injectedJavascript}
+            manager="default"
+            flow="paginated"
+            snap={true}
+            enableSwipe={true}
+            enableSelection={true}
+            allowPopups={false}
+            allowScriptedContent={true}
+            initialLocation={initialLocation}
+            onSelected={handleReaderSelected}
+            onPressAnnotation={handlePressAnnotation}
+            onStarted={handleReaderStarted}
+            onReady={handleReaderReady}
+            onRendered={handleReaderRendered}
+            onDisplayError={handleReaderError}
+            onPress={handleReaderPress}
+            onSingleTap={handleReaderSingleTap}
+            onLongPress={handleReaderLongPress}
+            onLocationChange={handleLocationChange}
+            onLocationsReady={(epubKey, locs) => {
+              if (Array.isArray(locs) && locs.length > 0) {
+                setTotalPages(locs.length);
+                if (currentPage > 0) setPageLoading(false);
+              }
+            }}
+            onWebViewMessage={handleReaderWebViewMessage}
+          />
+        </ReaderEdgeTapOverlay>
       </View>
       <ReaderOverlays
         currentPage={currentPage}
@@ -1385,7 +1413,8 @@ export default function ReaderScreen() {
         visible={snackbar.visible}
         message={snackbar.message}
         type={snackbar.type}
-        onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
+        onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
+        passThrough
       />
     </View>
   );

@@ -4,6 +4,22 @@ All notable changes to LingoLeaf will be documented in this file.
 
 Format: `[Date] [Type] Description (Files affected)`
 
+## 2026-02-01
+
+- [2026-02-01] [FIX] Snackbar: passThrough prop so reader page turns work while "Saved to list" is visible (`src/components/Snackbar.tsx`, `src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] TranslateSheet list picker: scroll to new-list input when shown, higher KeyboardAvoidingView offset, keyboardShouldPersistTaps (`src/components/TranslateSheet.tsx`)
+- [2026-02-01] [FIX] Reader highlights: darker text and stronger text-shadow so text is readable on top of highlight (`src/reader/readerInjectedJavascript.ts`)
+- [2026-02-01] [FEAT] Flashcards: refresh unseen/learning/learned after each rating; completion modal "Congrats you learned X words!" with Continue free studying, Reset and start over, Go back to reading (History) (`src/screens/FlashcardsScreen.tsx`, `src/i18n/translations.ts`)
+- [2026-02-01] [FEAT] Library/History: genre/category filter options prefilled by selected language (subjects only for books in that language) (`src/components/LibraryHeader.tsx`, `src/supabase/queries.ts`, `supabase/migrations/021_book_subjects_by_language.sql`)
+- [2026-02-01] [FIX] Reader: no native popup on text highlight (stop passing menuItems so WebView gets nil; existing patch suppresses menu) (`src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] Reader: clear WebView selection after highlight/translate/close so user can select other text (`src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] Reader: make highlights more visible (opacity 0.4 → 0.7) (`src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] Snackbar: auto-dismiss after duration (use ref for onDismiss so parent re-renders don’t clear timeout) (`src/components/Snackbar.tsx`)
+- [2026-02-01] [FIX] Flashcards: rating row no longer flashes and disappears — remove unstable `t` from load deps so effect does not re-run every render and reset flipped (`src/screens/FlashcardsScreen.tsx`)
+- [2026-02-01] [FIX] ReaderScreen: stop infinite reload loop — remove unstable `t` from mount effect deps so it runs once per book (`src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] Reader: edge tap/long-press — put tap strips beside reader (not on top) so full reader area is selectable; words at left/right margin can be selected on long-press (`src/components/ReaderEdgeTapOverlay.tsx`, `src/screens/ReaderScreen.tsx`)
+- [2026-02-01] [FIX] Reader: force displayed page to match cached initialLocation when ready (fixes page counter correct but content on cover) (`src/screens/ReaderScreen.tsx`)
+
 ## 2026-01-28
 
 - [2026-01-28] [FEAT] Flashcards: 3-category progress (unseen/learning/learned), completion modal when all learned with options: continue free studying, come back tomorrow, add words by reading; i18n for new strings (`src/screens/FlashcardsScreen.tsx`, `src/supabase/queries.ts`, `src/i18n/translations.ts`)

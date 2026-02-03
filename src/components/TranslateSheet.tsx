@@ -3,7 +3,7 @@
  * Bottom sheet displaying translation with save option
  */
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -58,6 +60,17 @@ export function TranslateSheet({
   const t = useTranslation();
   const [showNewListInput, setShowNewListInput] = useState(false);
   const [newListName, setNewListName] = useState('');
+  const pickerScrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    if (showNewListInput) {
+      const t = setTimeout(() => {
+        pickerScrollRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [showNewListInput]);
+
   return (
     <Modal
       visible={visible}
@@ -126,9 +139,19 @@ export function TranslateSheet({
           {listPickerVisible && lists && onPickList && onCloseListPicker ? (
             <View style={styles.pickerOverlay} pointerEvents="box-none">
               <Pressable style={StyleSheet.absoluteFill} onPress={onCloseListPicker} />
+              <KeyboardAvoidingView
+                style={styles.pickerAvoid}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+              >
               <View style={styles.pickerCard}>
                 <Text style={styles.pickerTitle}>{t('translate.chooseList')}</Text>
-                <ScrollView style={styles.pickerList} contentContainerStyle={styles.pickerListContent}>
+                <ScrollView
+                  ref={pickerScrollRef}
+                  style={styles.pickerList}
+                  contentContainerStyle={styles.pickerListContent}
+                  keyboardShouldPersistTaps="handled"
+                >
                   {lists.map((l) => {
                     const selected = l.id === selectedListId;
                     return (
@@ -195,6 +218,7 @@ export function TranslateSheet({
                   <Text style={styles.pickerCloseText}>{t('translate.close')}</Text>
                 </TouchableOpacity>
               </View>
+              </KeyboardAvoidingView>
             </View>
           ) : null}
         </View>
@@ -268,8 +292,14 @@ const styles = StyleSheet.create({
   },
   pickerOverlay: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    padding: spacing.lg,
+    justifyContent: 'flex-start',
+    paddingTop: spacing.xl * 2,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  pickerAvoid: {
+    flex: 1,
+    maxHeight: '85%',
   },
   pickerCard: {
     backgroundColor: colors.surface,
@@ -277,7 +307,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
-    maxHeight: '80%',
+    flex: 1,
+    maxHeight: '100%',
   },
   pickerTitle: {
     ...typography.h3,
@@ -285,6 +316,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   pickerList: {
+    flex: 1,
+    minHeight: 120,
     marginBottom: spacing.md,
   },
   pickerListContent: {

@@ -70,13 +70,12 @@ export function LibraryHeader({
   }, [filtersVisible, language, subjects]);
 
   useEffect(() => {
-    if (subjectPickerVisible && availableSubjects.length === 0) {
-      setSubjectsLoading(true);
-      fetchBookSubjects()
-        .then(setAvailableSubjects)
-        .finally(() => setSubjectsLoading(false));
-    }
-  }, [subjectPickerVisible, availableSubjects.length]);
+    if (!subjectPickerVisible) return;
+    setSubjectsLoading(true);
+    fetchBookSubjects(draftLanguage?.trim() || undefined)
+      .then(setAvailableSubjects)
+      .finally(() => setSubjectsLoading(false));
+  }, [subjectPickerVisible, draftLanguage]);
 
   const handleApply = useCallback(() => {
     onApplyFilters({ language: draftLanguage, subjects: draftSubjects });
@@ -113,7 +112,7 @@ export function LibraryHeader({
   const selectedLanguageName = useMemo(() => {
     if (!draftLanguage) return t('library.languageFiltersPlaceholder');
     const lang = LANGUAGES.find((l) => l.code === draftLanguage);
-    return lang ? lang.name : draftLanguage;
+    return lang ? t('language.' + translateLanguageCodeToName(lang.code)) : draftLanguage;
   }, [draftLanguage]);
 
   return (
@@ -283,7 +282,7 @@ export function LibraryHeader({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Text style={[styles.languagePickerText, !draftLanguage && styles.languagePickerPlaceholder]}>
-                {t('language.' + translateLanguageCodeToName(draftLanguage))}
+                {selectedLanguageName}
               </Text>
               <Text style={styles.languagePickerChevron}>›</Text>
             </TouchableOpacity>

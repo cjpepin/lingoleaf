@@ -89,6 +89,7 @@ export default function FlashcardsScreen() {
   const [saving, setSaving] = useState(false);
   const [stats, setStats] = useState<FlashcardStats | null>(null);
   const [completionVisible, setCompletionVisible] = useState(false);
+  const [sessionWordsLearned, setSessionWordsLearned] = useState(0);
 
   const flipAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -152,6 +153,8 @@ export default function FlashcardsScreen() {
     }
   }, [listId, studyStore, user]);
 
+  // Omit t from deps so load is stable; otherwise t (new ref every render) causes this effect to
+  // re-run every render, calling loadQueue() and resetting flipped/index (rating row disappears).
   const load = useCallback(async () => {
     if (!user) {
       setLoading(false);
@@ -182,7 +185,8 @@ export default function FlashcardsScreen() {
     } finally {
       setLoading(false);
     }
-  }, [listId, loadBrowse, loadQueue, t, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t omitted to avoid re-run every render
+  }, [listId, loadBrowse, loadQueue, user]);
 
   useEffect(() => {
     load();
@@ -302,6 +306,8 @@ export default function FlashcardsScreen() {
             ? await fetchFlashcardQueue(user.id, listId)
             : await fetchFlashcardQueueAll(user.id);
           setQueue(fresh);
+          setSessionWordsLearned(displayWords.length);
+          setCompletionVisible(true);
           advanceWithAnimation(0);
         } else {
           const sessionKey = listId ?? FLASHCARD_ALL_KEY;
@@ -315,6 +321,7 @@ export default function FlashcardsScreen() {
           setQueue(nextQueue);
           advanceWithAnimation(nextIdx);
         }
+        await refreshStats();
       } catch (e) {
         logger.error('Failed to save review', e);
         Alert.alert('Error', 'Failed to save review');
@@ -322,7 +329,7 @@ export default function FlashcardsScreen() {
         setSaving(false);
       }
     },
-    [current, displayWords, index, listId, listName, user, getFlashcardSettings, advanceWithAnimation, refreshStats, t],
+    [current, displayWords, index, listId, listName, user, getFlashcardSettings, advanceWithAnimation, refreshStats],
   );
 
   const handlePrev = useCallback(() => {
@@ -400,8 +407,10 @@ export default function FlashcardsScreen() {
     return (
       <View style={styles.container}>
         <OverlayModal visible={completionVisible} onClose={() => {}} dismissOnBackdropPress={false}>
-          <Text style={styles.completionTitle}>{t('flashcards.allLearnedTitle')}</Text>
-          <Text style={styles.completionSubtitle}>{t('flashcards.allLearnedSubtitle')}</Text>
+          <Text style={styles.completionTitle}>{t('flashcards.congratsTitle')}</Text>
+          <Text style={styles.completionSubtitle}>
+            {t('flashcards.congratsSubtitle', { count: sessionWordsLearned })}
+          </Text>
           <View style={styles.completionButtons}>
             <Button
               label={t('flashcards.continueFreeStudying')}
@@ -414,20 +423,32 @@ export default function FlashcardsScreen() {
               style={styles.completionButton}
             />
             <Button
-              label={t('flashcards.comeBackTomorrow')}
+              label={t('flashcards.resetAndStartOver')}
               variant="surface"
-              onPress={() => {
+              onPress={async () => {
                 setCompletionVisible(false);
-                (navigation as any).goBack();
+                await clearFlashcardSession(listId ?? FLASHCARD_ALL_KEY);
+                setLoading(true);
+                try {
+                  if (listId) {
+                    await loadBrowse();
+                    setMode('browse');
+                  } else {
+                    await loadQueue();
+                    setMode('spaced');
+                  }
+                } finally {
+                  setLoading(false);
+                }
               }}
               style={styles.completionButton}
             />
             <Button
-              label={t('flashcards.addWordsByReading')}
+              label={t('flashcards.goBackToReading')}
               variant="outline"
               onPress={() => {
                 setCompletionVisible(false);
-                (navigation as any).navigate('MainTabs', { screen: 'Library' });
+                (navigation as any).navigate('MainTabs', { screen: 'History' });
               }}
               style={styles.completionButton}
             />
@@ -506,9 +527,9 @@ export default function FlashcardsScreen() {
             <Text style={styles.cardLabel}>{backLabel}</Text>
             <Text style={styles.cardText}>{backText}</Text>
             {mode === 'spaced' ? (
-              <Text style={styles.cardHint}>How well did you know this?</Text>
+              <Text style={styles.cardHint}>{t('flashcards.howWell')}</Text>
             ) : (
-              <Text style={styles.cardHint}>Tap to flip</Text>
+              <Text style={styles.cardHint}>{t('flashcards.tapToFlip')}</Text>
             )}
           </Animated.View>
         </TouchableOpacity>

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Text, StyleSheet, Animated, Dimensions, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Modal, Pressable } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,16 +16,20 @@ interface Props {
   type?: 'success' | 'error' | 'info';
   duration?: number;
   onDismiss?: () => void;
+  /** When true, render without Modal so touches pass through to content below (e.g. turn pages while snackbar visible) */
+  passThrough?: boolean;
 }
 
-export function Snackbar({ visible, message, type = 'info', duration = 3000, onDismiss }: Props) {
+export function Snackbar({ visible, message, type = 'info', duration = 3000, onDismiss, passThrough = false }: Props) {
   const translateY = useRef(new Animated.Value(100)).current;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onDismissRef = useRef(onDismiss);
   const insets = useSafeAreaInsets();
+
+  onDismissRef.current = onDismiss;
 
   useEffect(() => {
     if (visible) {
-      // Slide up
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
@@ -33,13 +37,11 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
         friction: 10,
       }).start();
 
-      // Auto-dismiss after duration
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       timeoutRef.current = setTimeout(() => {
-        onDismiss?.();
+        onDismissRef.current?.();
       }, duration);
     } else {
-      // Slide down
       Animated.timing(translateY, {
         toValue: 100,
         duration: 200,
@@ -50,35 +52,47 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
-  }, [visible, duration, onDismiss, translateY]);
+  }, [visible, duration, translateY]);
 
   if (!visible) return null;
 
   const backgroundColor =
     type === 'success' ? colors.success : type === 'error' ? colors.error : colors.surface;
-  
   const textColor = type === 'info' ? colors.text : '#FFFFFF';
+  const bottomInset = Math.max(insets.bottom, spacing.md) + spacing.xl;
 
-  return (
-    <Modal transparent visible={visible} animationType="none" pointerEvents="box-none">
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onDismiss}
-      >
+  if (passThrough) {
+    return (
+      <View style={styles.overlayPassThrough} pointerEvents="box-none">
         <Animated.View
           style={[
             styles.container,
-            { 
-              backgroundColor, 
-              transform: [{ translateY }],
-              bottom: Math.max(insets.bottom, spacing.md) + spacing.xl,
-            },
+            { backgroundColor, bottom: bottomInset, transform: [{ translateY }] },
+          ]}
+          pointerEvents="auto"
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+            <Text style={[styles.message, { color: textColor }]}>{message}</Text>
+          </Pressable>
+        </Animated.View>
+      </View>
+    );
+  }
+
+  return (
+    <Modal transparent visible={visible} animationType="none" pointerEvents="box-none">
+      <View style={styles.overlay} pointerEvents="box-none">
+        <Animated.View
+          style={[
+            styles.container,
+            { backgroundColor, bottom: bottomInset, transform: [{ translateY }] },
           ]}
         >
-          <Text style={[styles.message, { color: textColor }]}>{message}</Text>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+            <Text style={[styles.message, { color: textColor }]}>{message}</Text>
+          </Pressable>
         </Animated.View>
-      </TouchableOpacity>
+      </View>
     </Modal>
   );
 }
@@ -89,6 +103,11 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     alignItems: 'center',
     pointerEvents: 'box-none',
+  },
+  overlayPassThrough: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
   },
   container: {
     position: 'absolute',
