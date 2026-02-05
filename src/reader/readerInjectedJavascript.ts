@@ -23,6 +23,9 @@ export const READER_INJECTED_JAVASCRIPT = `
         
         const style = doc.createElement('style');
         style.textContent = \`
+          html, body {
+            overscroll-behavior-y: none !important;
+          }
           * {
             -webkit-touch-callout: none !important;
             -webkit-user-select: text !important;
@@ -55,88 +58,105 @@ export const READER_INJECTED_JAVASCRIPT = `
       function attachSelectionDebug(doc) {
         if (doc.__llSelectionDebug) return;
         try {
-          const handler = () => {
+          // Find iframe offset if this doc is inside an iframe
+          function getIframeOffset() {
+            try {
+              if (doc === window.document) return { x: 0, y: 0 };
+              // Find the iframe element that contains this doc
+              const iframes = window.document.querySelectorAll('iframe');
+              for (let i = 0; i < iframes.length; i++) {
+                try {
+                  if (iframes[i].contentDocument === doc || iframes[i].contentWindow?.document === doc) {
+                    const iframeRect = iframes[i].getBoundingClientRect();
+                    return { x: iframeRect.x, y: iframeRect.y };
+                  }
+                } catch (e) {}
+              }
+            } catch (e) {}
+            return { x: 0, y: 0 };
+          }
+
+          function getSelectionPayload() {
+            const sel = doc.getSelection ? doc.getSelection() : null;
+            const text = sel ? (sel.toString() || '').trim() : '';
+            if (!text) return null;
+            let rect = null;
+            let context = null;
+            try {
+              if (sel && sel.rangeCount > 0) {
+                const range = sel.getRangeAt(0);
+                const r = range.getBoundingClientRect();
+                // Add iframe offset so coords are relative to main window
+                const iframeOffset = getIframeOffset();
+                rect = { x: r.x + iframeOffset.x, y: r.y + iframeOffset.y, width: r.width, height: r.height };
+                try {
+                  const sc = range.startContainer;
+                  const ec = range.endContainer;
+                  if (sc && ec && sc === ec && sc.nodeType === 3) {
+                    const full = (sc.textContent || '');
+                    const start = range.startOffset;
+                    const end = range.endOffset;
+                    const isWs = (ch) => ch === ' ' || ch === '\\n' || ch === '\\t' || ch === '\\r';
+                    let left = start;
+                    while (left > 0 && isWs(full[left - 1])) left--;
+                    while (left > 0 && !isWs(full[left - 1])) left--;
+                    while (left > 0 && isWs(full[left - 1])) left--;
+                    while (left > 0 && !isWs(full[left - 1])) left--;
+                    let right = end;
+                    while (right < full.length && isWs(full[right])) right++;
+                    while (right < full.length && !isWs(full[right])) right++;
+                    const slice = full.slice(left, right).trim();
+                    if (slice && slice !== text) context = slice;
+                  }
+                } catch (e) {}
+              }
+            } catch (e) {}
+            return { text: text.length > 400 ? text.slice(0, 400) : text, context, rect };
+          }
+
+          doc.addEventListener('selectionchange', function() {
             try {
               const sel = doc.getSelection ? doc.getSelection() : null;
               const text = sel ? (sel.toString() || '').trim() : '';
               const href = doc.location?.href || null;
-
-              // Emit "selection cleared" once when transitioning from non-empty -> empty
               if (!text) {
                 if (doc.__llHadSelection) {
                   doc.__llHadSelection = false;
-                  doc.__llLastSelectionText = '';
-                  postToRN({
-                    type: 'llSelectionCleared',
-                    sourceHref: href,
-                  });
+                  postToRN({ type: 'llSelectionCleared', sourceHref: href });
                 }
-                return;
+              } else {
+                doc.__llHadSelection = true;
               }
+            } catch (e) {}
+          }, { passive: true });
 
-              // De-dupe repeated events (selectionchange can spam)
-              if (doc.__llLastSelectionText === text) return;
-              doc.__llLastSelectionText = text;
-              doc.__llHadSelection = true;
-
-              let rect = null;
-              let context = null;
-              try {
-                if (sel && sel.rangeCount > 0) {
-                  const range = sel.getRangeAt(0);
-                  const r = range.getBoundingClientRect();
-                  rect = { x: r.x, y: r.y, width: r.width, height: r.height };
-
-                  // Context: 1 word before + 1 word after, best-effort (works reliably for single text node selections)
-                  try {
-                    const sc = range.startContainer;
-                    const ec = range.endContainer;
-                    if (sc && ec && sc === ec && sc.nodeType === 3) {
-                      const full = (sc.textContent || '');
-                      const start = range.startOffset;
-                      const end = range.endOffset;
-
-                      const isWs = (ch) => ch === ' ' || ch === '\\n' || ch === '\\t' || ch === '\\r';
-
-                      let left = start;
-                      // Skip whitespace immediately before selection
-                      while (left > 0 && isWs(full[left - 1])) left--;
-                      // Consume one word before
-                      while (left > 0 && !isWs(full[left - 1])) left--;
-                      // Optional: also include any whitespace between word and selection
-                      while (left > 0 && isWs(full[left - 1])) left--;
-                      while (left > 0 && !isWs(full[left - 1])) left--;
-
-                      let right = end;
-                      // Skip whitespace immediately after selection
-                      while (right < full.length && isWs(full[right])) right++;
-                      // Consume one word after
-                      while (right < full.length && !isWs(full[right])) right++;
-
-                      const slice = full.slice(left, right).trim();
-                      if (slice && slice !== text) context = slice;
-                    }
-                  } catch (e) {}
-                }
-              } catch (e) {}
-
+          function commitSelection() {
+            try {
+              const payload = getSelectionPayload();
+              if (!payload || !payload.rect) return;
+              const now = Date.now();
+              if (doc.__llLastCommitTime != null && now - doc.__llLastCommitTime < 300) return;
+              doc.__llLastCommitTime = now;
               postToRN({
-                type: 'llSelectionDebug',
-                sourceHref: href,
-                text: text.length > 400 ? text.slice(0, 400) : text,
-                context,
-                rect,
+                type: 'llSelectionCommitted',
+                sourceHref: doc.location?.href || null,
+                text: payload.text,
+                context: payload.context,
+                rect: payload.rect,
               });
             } catch (e) {}
-          };
+          }
 
-          doc.addEventListener('selectionchange', handler, { passive: true });
-          doc.addEventListener('mouseup', handler, { passive: true });
-          doc.addEventListener('touchend', handler, { passive: true });
+          doc.addEventListener('touchend', function() {
+            setTimeout(commitSelection, 0);
+          }, { passive: true });
+          doc.addEventListener('mouseup', function() {
+            setTimeout(commitSelection, 0);
+          }, { passive: true });
+
           doc.__llHadSelection = false;
-          doc.__llLastSelectionText = '';
           doc.__llSelectionDebug = true;
-          console.log('✅ Selection debug attached to', doc.location?.href || 'document');
+          console.log('✅ Selection committed on touchend/mouseup attached to', doc.location?.href || 'document');
         } catch (e) {}
       }
 

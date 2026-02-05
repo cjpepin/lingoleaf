@@ -68,6 +68,10 @@ export function SelectionToolbar({ onHighlight, onTranslate, onClose, selectionB
       arrowPosition = 'bottom';
     }
 
+    // Clamp vertically so toolbar never overflows off screen
+    const toolbarTotalHeight = TOOLBAR_HEIGHT + ARROW_SIZE;
+    top = Math.max(HORIZONTAL_PADDING, Math.min(top, SCREEN_HEIGHT - toolbarTotalHeight - HORIZONTAL_PADDING));
+
     return { top, left, arrowPosition };
   }, [selectionBounds, readerOffset]);
 

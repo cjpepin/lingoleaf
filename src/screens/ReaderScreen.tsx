@@ -59,6 +59,8 @@ interface Selection {
   cfiRange: string;
   position?: { x: number; y: number; width: number; height: number };
   context?: string | null;
+  /** True once user lifts finger (touchend/mouseup). Toolbar only shows when committed. */
+  committed?: boolean;
 }
 
 export default function ReaderScreen() {
@@ -494,34 +496,23 @@ export default function ReaderScreen() {
   const handleTextSelected = useCallback((cfiRange: string, text: string) => {
     logger.info('📝 Text selected:', { cfiRange, text: text.substring(0, 50) });
     lastSelectionSource.current = 'epubjs';
-    
-    if (!validateSelectionLength(text, MAX_SELECTION_LENGTH)) {
-      Alert.alert(t('reader.selectionTooLongTitle'), t('reader.selectionTooLong', { max: MAX_SELECTION_LENGTH }));
-      return;
-    }
 
-    // Use last touch position to estimate selection location
-    let position: { x: number; y: number; width: number; height: number } | undefined;
-    
-    if (lastTouchPosition) {
-      position = {
-        x: lastTouchPosition.x, // Center around touch point
-        y: lastTouchPosition.y,
-        width: 100, // Approximate selection width
-        height: 40, // Approximate selection height
-      };
-      logger.info('📍 Using touch position for selection:', position);
-    }
-
-    setSelection({ text: text.trim(), cfiRange, position });
-    logger.info('✅ Selection state updated, toolbar should appear');
-    
-    // Mark that selection just happened to prevent immediate clearing
+    // Toolbar only shows after commit (llSelectionCommitted). Here we just store cfiRange.
+    // If selection already exists (committed), add the cfiRange. Otherwise store uncommitted.
+    setSelection(prev => {
+      const trimmed = text.trim();
+      if (prev && prev.committed && prev.text === trimmed) {
+        // Already committed with same text - just add cfiRange
+        return { ...prev, cfiRange };
+      }
+      // Store text/cfiRange but uncommitted (toolbar won't show yet)
+      return { text: trimmed, cfiRange, committed: false, context: prev?.context ?? null };
+    });
     selectionJustMade.current = true;
     setTimeout(() => {
       selectionJustMade.current = false;
     }, 300);
-  }, [lastTouchPosition, t]);
+  }, []);
 
   const clearWebViewSelection = useCallback(() => {
     injectJavascript?.(
@@ -531,6 +522,10 @@ export default function ReaderScreen() {
 
   const handleHighlight = useCallback(async () => {
     if (!selection || !user || !book) return;
+    if (!validateSelectionLength(selection.text, MAX_SELECTION_LENGTH)) {
+      Alert.alert(t('reader.selectionTooLongTitle'), t('reader.selectionTooLong', { max: MAX_SELECTION_LENGTH }));
+      return;
+    }
     if (!selection.cfiRange) {
       logger.warn('Highlight requested without cfiRange (fallback selection)', {
         textPreview: selection.text.substring(0, 80),
@@ -609,6 +604,10 @@ export default function ReaderScreen() {
 
   const handleTranslate = useCallback(async () => {
     if (!selection || !book?.source_lang) return;
+    if (!validateSelectionLength(selection.text, MAX_SELECTION_LENGTH)) {
+      Alert.alert(t('reader.selectionTooLongTitle'), t('reader.selectionTooLong', { max: MAX_SELECTION_LENGTH }));
+      return;
+    }
 
     setShowTranslateSheet(true);
     setTranslating(true);
@@ -817,49 +816,38 @@ export default function ReaderScreen() {
         return;
       }
 
-      if (type !== 'llSelectionDebug') {
-        logger.debug('🌐 Reader onWebViewMessage', event);
+      if (type === 'llSelectionCommitted') {
+        const text = typeof event?.text === 'string' ? event.text.trim() : '';
+        const context = typeof event?.context === 'string' ? event.context.trim() : '';
+        const rect = event?.rect;
+        if (!text || !rect) return;
+        lastSelectionSource.current = 'fallback';
+        // Commit selection with proper rect. Preserve cfiRange if epubjs already set it.
+        setSelection(prev => ({
+          text,
+          cfiRange: prev && prev.text === text ? (prev.cfiRange || '') : '',
+          position: {
+            x: rect.x ?? 0,
+            y: rect.y ?? 0,
+            width: rect.width ?? 100,
+            height: rect.height ?? 40,
+          },
+          context: context || prev?.context || null,
+          committed: true,
+        }));
+        setLastTouchPosition({ x: rect.x ?? 0, y: rect.y ?? 0 });
+        selectionJustMade.current = true;
+        setTimeout(() => {
+          selectionJustMade.current = false;
+        }, 300);
         return;
       }
 
-      const text = typeof event?.text === 'string' ? event.text.trim() : '';
-      const context = typeof event?.context === 'string' ? event.context.trim() : '';
-      if (!text) return;
-
-      logger.info('🧪 llSelectionDebug (web)', {
-        sourceHref: event?.sourceHref,
-        length: text.length,
-        preview: text.substring(0, 80),
-        contextPreview: context ? context.substring(0, 120) : null,
-        rect: event?.rect,
-      });
-
-      // Fallback: if epubjs onSelected isn't firing, at least show the toolbar for translate.
-      // We intentionally do NOT set cfiRange here.
-      if (!selection) {
-        lastSelectionSource.current = 'fallback';
-        setSelection({
-          text,
-          cfiRange: '',
-          position: event?.rect
-            ? {
-                x: event.rect.x ?? 0,
-                y: event.rect.y ?? 0,
-                width: event.rect.width ?? 100,
-                height: event.rect.height ?? 40,
-              }
-            : undefined,
-          context: context || null,
-        });
-        setLastTouchPosition({ x: event?.rect?.x ?? 0, y: event?.rect?.y ?? 0 });
-      } else if (selection.text === text && context) {
-        // Enrich existing selection (e.g. epubjs onSelected fired) with context from the web layer.
-        setSelection(prev => (prev ? { ...prev, context, position: event?.rect ? { x: event.rect.x ?? prev?.position?.x ?? 0, y: event.rect.y ?? prev?.position?.y ?? 0, width: event.rect.width ?? prev?.position?.width ?? 100, height: event.rect.height ?? prev?.position?.height ?? 40 } : prev?.position } : prev));
-      }
+      logger.debug('🌐 Reader onWebViewMessage', event);
     } catch (error) {
       logger.error('Failed handling onWebViewMessage', error);
     }
-  }, [handleDeleteHighlight, highlights, lastTouchPosition, selection, t]);
+  }, [handleDeleteHighlight, highlights, t]);
 
   const readerTheme = READER_THEME;
   const injectedJavascript = READER_INJECTED_JAVASCRIPT;
@@ -1347,8 +1335,8 @@ export default function ReaderScreen() {
           setNavVisible(true);
         }}
       />
-      {/* Custom Selection Toolbar */}
-      {selection && !showTranslateSheet && (
+      {/* Custom Selection Toolbar - only show after selection is committed (user lifted finger) */}
+      {selection?.committed && !showTranslateSheet && (
         <SelectionToolbar
           onHighlight={handleHighlight}
           onTranslate={handleTranslate}

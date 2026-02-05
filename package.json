@@ -9,7 +9,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "sync:gutendex": "node scripts/sync-gutendex.mjs",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package && node scripts/patch-webview-edit-menu.js && node scripts/patch-epubjs-bounces.js"
   },
   "dependencies": {
     "@react-native-community/slider": "4.5.5",

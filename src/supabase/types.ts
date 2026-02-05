@@ -45,6 +45,7 @@ export interface StudyWord {
   term_normalized: string;
   translation: string;
   context_snippet: string | null;
+  starred?: boolean;
   created_at: string;
 }
 

@@ -30,6 +30,9 @@ import {
   fetchFlashcardQueueAll,
   fetchFlashcardStats,
   upsertStudyWordReview,
+  deleteStudyWordReviewsForList,
+  deleteAllStudyWordReviews,
+  setStudyWordStarred,
   type FlashcardRating,
   type FlashcardStats,
 } from '@/supabase/queries';
@@ -54,6 +57,13 @@ import { OverlayModal } from '@/components/ui/OverlayModal';
 type FlashcardsRouteProp = RouteProp<RootStackParamList, 'Flashcards'>;
 
 type StudyMode = 'spaced' | 'browse';
+type StarredFilter = 'all' | 'starred' | 'unstarred';
+
+function applyStarredFilter(list: StudyWord[], filter: StarredFilter): StudyWord[] {
+  if (filter === 'all') return list;
+  if (filter === 'starred') return list.filter((w) => w.starred === true);
+  return list.filter((w) => !w.starred);
+}
 
 function formatIntervalLabel(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -90,11 +100,16 @@ export default function FlashcardsScreen() {
   const [stats, setStats] = useState<FlashcardStats | null>(null);
   const [completionVisible, setCompletionVisible] = useState(false);
   const [sessionWordsLearned, setSessionWordsLearned] = useState(0);
+  const [starredFilter, setStarredFilter] = useState<StarredFilter>('all');
 
   const flipAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
 
-  const displayWords = mode === 'spaced' ? queue : words;
+  const baseWords = mode === 'spaced' ? queue : words;
+  const displayWords = useMemo(
+    () => (mode === 'browse' ? applyStarredFilter(baseWords, starredFilter) : baseWords),
+    [baseWords, mode, starredFilter]
+  );
   const current = displayWords[index] ?? null;
 
   useEffect(() => {
@@ -124,6 +139,12 @@ export default function FlashcardsScreen() {
       setIndex(0);
       setFlipped(false);
       setCompletionVisible(false);
+      // If all cards are learned (no due cards), show congrats immediately instead of empty screen
+      const total = newStats.unseen + newStats.learning + newStats.learned;
+      if (data.length === 0 && total > 0 && newStats.learned === total) {
+        setSessionWordsLearned(total);
+        setCompletionVisible(true);
+      }
       return data;
     } catch (e) {
       logger.error('Failed to load flashcard queue', e);
@@ -191,6 +212,15 @@ export default function FlashcardsScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Clamp index when displayWords shrinks (e.g. after changing starred filter)
+  useEffect(() => {
+    if (displayWords.length > 0 && index >= displayWords.length) {
+      setIndex(0);
+      setFlipped(false);
+      flipAnim.setValue(0);
+    }
+  }, [displayWords.length, index, flipAnim]);
 
   const handleResume = useCallback(async () => {
     if (!pendingSession || !user) return;
@@ -348,10 +378,43 @@ export default function FlashcardsScreen() {
       Animated.timing(slideAnim, { toValue: -100, duration: 150, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
     ]).start();
-    setIndex((prev) => Math.min(displayWords.length - 1, prev + 1));
+    // At end of list, wrap to start (start over)
+    setIndex((prev) => {
+      if (prev >= displayWords.length - 1) return 0;
+      return prev + 1;
+    });
     setFlipped(false);
     flipAnim.setValue(0);
   }, [displayWords.length, flipAnim, mode, slideAnim]);
+
+  const handleShuffle = useCallback(() => {
+    if (mode === 'browse' && words.length > 0) {
+      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      setWords(shuffled);
+      setIndex(0);
+      setFlipped(false);
+      flipAnim.setValue(0);
+    } else if (mode === 'spaced' && queue.length > 0) {
+      const shuffled = [...queue].sort(() => Math.random() - 0.5);
+      setQueue(shuffled);
+      setIndex(0);
+      setFlipped(false);
+      flipAnim.setValue(0);
+    }
+  }, [mode, words, queue]);
+
+  const handleToggleStarred = useCallback(async () => {
+    if (!current || !user) return;
+    const next = !current.starred;
+    try {
+      await setStudyWordStarred(current.id, next);
+      const update = (w: StudyWord) => (w.id === current.id ? { ...w, starred: next } : w);
+      setWords((prev) => prev.map(update));
+      setQueue((prev) => prev.map(update));
+    } catch (e) {
+      logger.error('Failed to update starred', e);
+    }
+  }, [current, user]);
 
   const progressText = useMemo(() => {
     if (mode === 'browse') {
@@ -426,17 +489,34 @@ export default function FlashcardsScreen() {
               label={t('flashcards.resetAndStartOver')}
               variant="surface"
               onPress={async () => {
+                const total = (stats?.unseen ?? 0) + (stats?.learning ?? 0) + (stats?.learned ?? 0);
+                const confirmed = await new Promise<boolean>((resolve) => {
+                  Alert.alert(
+                    t('flashcards.resetConfirmTitle'),
+                    t('flashcards.resetConfirmMessage', { count: total }),
+                    [
+                      { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+                      { text: t('common.ok'), onPress: () => resolve(true) },
+                    ]
+                  );
+                });
+                if (!confirmed) return;
                 setCompletionVisible(false);
-                await clearFlashcardSession(listId ?? FLASHCARD_ALL_KEY);
                 setLoading(true);
                 try {
+                  await clearFlashcardSession(listId ?? FLASHCARD_ALL_KEY);
                   if (listId) {
+                    await deleteStudyWordReviewsForList(user!.id, listId);
                     await loadBrowse();
                     setMode('browse');
                   } else {
+                    await deleteAllStudyWordReviews(user!.id);
                     await loadQueue();
                     setMode('spaced');
                   }
+                } catch (e) {
+                  logger.error('Failed to reset progress', e);
+                  Alert.alert(t('common.error'), t('flashcards.resetFailed'));
                 } finally {
                   setLoading(false);
                 }
@@ -503,6 +583,26 @@ export default function FlashcardsScreen() {
       <View style={styles.header}>
         <Text style={styles.progress}>{progressText}</Text>
         <Text style={styles.modeLabel}>{mode === 'spaced' ? t('flashcards.spacedRepetition') : t('flashcards.browse')}</Text>
+        {mode === 'browse' ? (
+        <View style={styles.starredFilterRow}>
+          {(['all', 'starred', 'unstarred'] as const).map((f) => (
+            <Pressable
+              key={f}
+              onPress={() => {
+                setStarredFilter(f);
+                setIndex(0);
+                setFlipped(false);
+                flipAnim.setValue(0);
+              }}
+              style={[styles.starredFilterBtn, starredFilter === f && styles.starredFilterBtnActive]}
+            >
+              <Text style={[styles.starredFilterText, starredFilter === f && styles.starredFilterTextActive]}>
+                {f === 'all' ? t('flashcards.starredFilterAll') : f === 'starred' ? t('flashcards.starredFilterStarred') : t('flashcards.starredFilterUnstarred')}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        ) : null}
       </View>
 
       <Animated.View style={[styles.cardContainer, { transform: [{ translateX: slideAnim }] }]}>
@@ -518,20 +618,25 @@ export default function FlashcardsScreen() {
             <Text style={styles.cardHint}>{t('flashcards.tapToFlip')}</Text>
           </Animated.View>
           <Animated.View
-            style={[
-              styles.cardFace,
-              styles.cardBack,
-              { opacity: backOpacity, transform: [{ rotateY: backInterpolate }] },
-            ]}
-          >
-            <Text style={styles.cardLabel}>{backLabel}</Text>
-            <Text style={styles.cardText}>{backText}</Text>
-            {mode === 'spaced' ? (
-              <Text style={styles.cardHint}>{t('flashcards.howWell')}</Text>
-            ) : (
-              <Text style={styles.cardHint}>{t('flashcards.tapToFlip')}</Text>
-            )}
-          </Animated.View>
+              style={[
+                styles.cardFace,
+                styles.cardBack,
+                { opacity: backOpacity, transform: [{ rotateY: backInterpolate }] },
+              ]}
+            >
+              <Text style={styles.cardLabel}>{backLabel}</Text>
+              <Text style={styles.cardText}>{backText}</Text>
+              {mode === 'spaced' ? (
+                <Text style={styles.cardHint}>{t('flashcards.howWell')}</Text>
+              ) : (
+                <Text style={styles.cardHint}>{t('flashcards.tapToFlip')}</Text>
+              )}
+            </Animated.View>
+          {current ? (
+            <Pressable onPress={handleToggleStarred} style={styles.starButton} hitSlop={12}>
+              <Feather name="star" size={24} color={current.starred ? colors.warning : colors.textSecondary} fill={current.starred ? colors.warning : 'transparent'} />
+            </Pressable>
+          ) : null}
         </TouchableOpacity>
       </Animated.View>
 
@@ -576,11 +681,11 @@ export default function FlashcardsScreen() {
           <Button
             label={t('flashcards.next')}
             onPress={handleNext}
-            disabled={index >= displayWords.length - 1}
             variant="primary"
             size="md"
             style={styles.actionButton}
           />
+          <Button label={t('flashcards.shuffle')} onPress={handleShuffle} variant="surface" size="md" style={styles.actionButton} />
         </View>
       ) : null}
 
@@ -711,6 +816,33 @@ const styles = StyleSheet.create({
   promptButtons: {
     gap: spacing.md,
     marginTop: spacing.xl,
+  },
+  starredFilterRow: {
+    flexDirection: 'row',
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  starredFilterBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: 8,
+  },
+  starredFilterBtnActive: {
+    backgroundColor: colors.primary + '30',
+  },
+  starredFilterText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
+  starredFilterTextActive: {
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  starButton: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    zIndex: 10,
   },
   title: {
     ...typography.h2,

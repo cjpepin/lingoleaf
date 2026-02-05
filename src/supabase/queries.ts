@@ -174,19 +174,17 @@ export interface FlashcardStats {
   learned: number;
 }
 
+/** Returns only words due for review now (next_review_at null or <= now). Used for spaced repetition. */
 function buildFlashcardQueue(wordList: StudyWord[], reviewByWordId: Map<string, string>): StudyWord[] {
   const now = new Date().toISOString();
   const due: StudyWord[] = [];
-  const notDue: StudyWord[] = [];
   for (const word of wordList) {
     const nextReview = reviewByWordId.get(word.id) ?? null;
     if (!nextReview || nextReview <= now) {
       due.push(word);
-    } else {
-      notDue.push(word);
     }
   }
-  return [...due, ...notDue];
+  return due;
 }
 
 function computeFlashcardStats(
@@ -355,7 +353,15 @@ export async function fetchStudyWords(userId: string, listId?: string | null): P
   const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) throw error;
-  return data;
+  return (data ?? []) as StudyWord[];
+}
+
+export async function setStudyWordStarred(studyWordId: string, starred: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('study_words')
+    .update({ starred })
+    .eq('id', studyWordId);
+  if (error) throw error;
 }
 
 export async function countStudyWordsForList(userId: string, listId: string): Promise<number> {
@@ -367,6 +373,28 @@ export async function countStudyWordsForList(userId: string, listId: string): Pr
 
   if (error) throw error;
   return count ?? 0;
+}
+
+/** Deletes all study_word_reviews for words in the given list (reset progress). */
+export async function deleteStudyWordReviewsForList(userId: string, listId: string): Promise<void> {
+  const { data: words } = await supabase
+    .from('study_words')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('list_id', listId);
+  const ids = (words ?? []).map((w) => w.id);
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('study_word_reviews').delete().in('study_word_id', ids);
+  if (error) throw error;
+}
+
+/** Deletes all study_word_reviews for the user (reset progress on "Study all"). */
+export async function deleteAllStudyWordReviews(userId: string): Promise<void> {
+  const { data: words } = await supabase.from('study_words').select('id').eq('user_id', userId);
+  const ids = (words ?? []).map((w) => w.id);
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('study_word_reviews').delete().in('study_word_id', ids);
+  if (error) throw error;
 }
 
 export async function countAllStudyWords(userId: string): Promise<number> {

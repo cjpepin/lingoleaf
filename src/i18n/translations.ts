@@ -199,9 +199,16 @@ export const translations: Record<AppLang, Record<string, string>> = {
     'flashcards.comeBackTomorrow': 'Come back tomorrow',
     'flashcards.addWordsByReading': 'Add new words by reading',
     'flashcards.resetAndStartOver': 'Reset progress and start over',
+    'flashcards.resetConfirmTitle': 'Reset progress?',
+    'flashcards.resetConfirmMessage': 'Are you sure you want to reset progress on all {count} cards?',
+    'flashcards.resetFailed': 'Failed to reset progress.',
     'flashcards.goBackToReading': 'Go back to reading',
     'flashcards.failedToSaveReview': 'Failed to save review',
     'flashcards.failedToLoad': 'Failed to load flashcards',
+    'flashcards.shuffle': 'Shuffle',
+    'flashcards.starredFilterAll': 'All',
+    'flashcards.starredFilterStarred': 'Starred',
+    'flashcards.starredFilterUnstarred': 'Unstarred',
 
     // Flashcard Settings
     'flashcardSettings.title': 'Study Settings',
@@ -293,6 +300,7 @@ export const translations: Record<AppLang, Record<string, string>> = {
 
     // Common
     'common.error': 'Error',
+    'common.ok': 'OK',
     'common.close': 'Close',
     'common.done': 'Done',
     'common.cancel': 'Cancel',
@@ -515,9 +523,16 @@ export const translations: Record<AppLang, Record<string, string>> = {
     'flashcards.comeBackTomorrow': 'Volver mañana',
     'flashcards.addWordsByReading': 'Añadir palabras leyendo',
     'flashcards.resetAndStartOver': 'Reiniciar y empezar de nuevo',
+    'flashcards.resetConfirmTitle': '¿Reiniciar progreso?',
+    'flashcards.resetConfirmMessage': '¿Seguro que quieres reiniciar el progreso de las {count} tarjetas?',
+    'flashcards.resetFailed': 'Error al reiniciar el progreso.',
     'flashcards.goBackToReading': 'Volver a la lectura',
     'flashcards.failedToSaveReview': 'Error al guardar la valoración',
     'flashcards.failedToLoad': 'Error al cargar las tarjetas',
+    'flashcards.shuffle': 'Barajar',
+    'flashcards.starredFilterAll': 'Todas',
+    'flashcards.starredFilterStarred': 'Favoritas',
+    'flashcards.starredFilterUnstarred': 'Sin marcar',
 
     // Flashcard Settings
     'flashcardSettings.title': 'Ajustes de estudio',
@@ -609,6 +624,7 @@ export const translations: Record<AppLang, Record<string, string>> = {
 
     // Common
     'common.error': 'Error',
+    'common.ok': 'OK',
     'common.close': 'Cerrar',
     'common.done': 'Listo',
     'common.cancel': 'Cancelar',
