@@ -19,10 +19,15 @@ export const colors = {
   textSecondary: '#666666',
   textTertiary: '#999999',
   
-  // Highlight colors
+  // Highlight colors (pastel – used in UI badges, tags, backgrounds)
   highlightMint: '#D4F1E3',
   highlightYellow: '#FFF4CC',
   highlightPink: '#FFE5EC',
+  
+  // Annotation colors (saturated – used at 0.4 opacity for reader highlights)
+  annotationMint: '#6DD4A0',
+  annotationYellow: '#FFD54F',
+  annotationPink: '#F48FB1',
   
   // Semantic colors
   success: '#4A9B6F',

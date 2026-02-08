@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Pressable,
+  Linking,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
@@ -158,9 +159,24 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
               <View style={styles.iconWrapper}>
                 <Feather name="check-circle" size={48} color={colors.primary} />
               </View>
-              <Text style={styles.title}>You're all set!</Text>
+              <Text style={styles.title}>{t('onboarding.termsTitle')}</Text>
               <Text style={styles.description}>
-                Here's what you can do in LingoLeaf:
+                {t('onboarding.termsDescription')}
+              </Text>
+              <View style={styles.termsLinks}>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('https://lingoleaf.app/terms-and-conditions')}
+                >
+                  <Text style={styles.linkText}>{t('onboarding.viewTerms')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('https://lingoleaf.app/privacy-policy')}
+                >
+                  <Text style={styles.linkText}>{t('onboarding.viewPrivacy')}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.description}>
+                {t('flashcards.freeStudy')}
               </Text>
               <View style={styles.featureList}>
                 <View style={styles.featureItem}>
@@ -221,15 +237,15 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
               <Text style={styles.buttonSecondaryText}>Back</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.button, styles.buttonPrimary, !canProceed() && styles.buttonDisabled]}
-            onPress={handleNext}
-            disabled={!canProceed()}
-          >
-            <Text style={styles.buttonPrimaryText}>
-              {step === 4 ? 'Get Started' : 'Next'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, styles.buttonPrimary, !canProceed() && styles.buttonDisabled]}
+              onPress={handleNext}
+              disabled={!canProceed()}
+            >
+              <Text style={styles.buttonPrimaryText}>
+                {step === 4 ? t('onboarding.acceptAndContinue') : 'Next'}
+              </Text>
+            </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -335,6 +351,16 @@ const styles = StyleSheet.create({
   featureDescription: {
     ...typography.body,
     color: colors.textSecondary,
+  },
+  termsLinks: {
+    gap: spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  linkText: {
+    ...typography.bodySmall,
+    color: colors.primary,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',

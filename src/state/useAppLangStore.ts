@@ -1,6 +1,6 @@
 /**
  * useAppLangStore
- * App UI language (en/es).
+ * App UI language (en, es, de, fr, ru).
  * Persisted in user_settings (signed in) or AsyncStorage (guest).
  */
 
@@ -11,7 +11,7 @@ import { upsertUserSettings } from '@/supabase/queries';
 
 const APP_LANG_KEY = '@lingoleaf:app_lang';
 
-export const APP_LANGS = ['en', 'es'] as const;
+export const APP_LANGS = ['en', 'es', 'de', 'fr', 'ru'] as const;
 export type AppLangCode = (typeof APP_LANGS)[number];
 
 interface AppLangStore {
@@ -27,13 +27,13 @@ export const useAppLangStore = create<AppLangStore>((set) => ({
   setAppLang: (lang) => set({ appLang: lang }),
   hydrateFromSettings: (s) => {
     const raw = s?.app_lang;
-    const lang = raw === 'es' ? 'es' : 'en';
+    const lang = raw && APP_LANGS.includes(raw as AppLangCode) ? (raw as AppLang) : 'en';
     set({ appLang: lang });
   },
   hydrateFromStorage: async () => {
     try {
       const raw = await AsyncStorage.getItem(APP_LANG_KEY);
-      if (raw === 'es') set({ appLang: 'es' });
+      if (raw && APP_LANGS.includes(raw as AppLangCode)) set({ appLang: raw as AppLang });
     } catch {
       // ignore
     }

@@ -3,6 +3,9 @@
 dist/
 web-build/
 
+# EAS local build artifacts
+build/
+
 # Native
 *.orig.*
 *.jks
@@ -30,7 +33,11 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+*.ipa
 *~
 .DS_Store
 
 **/setup-eas-secrets.sh
+
+# build/
+build/

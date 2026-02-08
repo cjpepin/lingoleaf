@@ -211,24 +211,70 @@ Translation caching reduces API costs:
 
 ### Prerequisites
 
-- Apple Developer account (iOS)
-- Google Play Developer account (Android)
-- EAS CLI: `npm install -g eas-cli`
+- **Apple Developer account** (iOS) — paid membership required for App Store distribution
+- **Google Play Developer account** (Android)
+- **Expo account** — [expo.dev](https://expo.dev) (tied to EAS)
+- **EAS CLI** — `npm install -g eas-cli`
+- **Xcode** (for local iOS builds) — from Mac App Store; command-line tools: `xcode-select --install` if needed
+- **Fastlane** (for local iOS builds) — EAS local build uses it to run the iOS build. Install: `brew install fastlane` or `sudo gem install fastlane`
+- **CocoaPods** (for local iOS builds) — required for iOS native dependencies. Install: `sudo gem install cocoapods` or `brew install cocoapods`
 
-### Build & Deploy
+### One-time setup (EAS + iOS credentials)
+
+1. **Log in to EAS:**  
+   `eas login`
+
+2. **Configure the project for EAS Build** (if not already):  
+   `eas build:configure`  
+   This ensures `eas.json` and native project config exist.
+
+3. **Bundle identifier and team:**  
+   Set your iOS **bundle identifier** in `app.json` under `expo.ios.bundleIdentifier` (e.g. `com.yourcompany.yourapp`).  
+   Your **Apple Team ID** and signing credentials are managed by EAS. On first build, EAS will prompt to create or select credentials; choose **production** (App Store) distribution when building for release.
+
+4. **Credentials (recommended: let EAS manage):**  
+   For local builds, EAS will use credentials stored in your EAS project. Run a build once (e.g. `npm run ios:build:prod`); if credentials are missing, EAS will guide you through generating or uploading a distribution certificate and provisioning profile. No need to manually create them in Apple Developer Portal unless you prefer.
+
+### Local iOS production builds (no cloud queue)
+
+You can build the same production-quality iOS binary locally on your Mac and then submit it to App Store Connect. Output is equivalent to EAS cloud builds; the only difference is that the build runs on your machine (no queue, no cloud build time).
+
+**Scripts (run from repo root):**
+
+| Command | Description |
+|--------|-------------|
+| `npm run ios:build:prod` | Run EAS local iOS production build. Writes the `.ipa` to `./build/ios/` and records its path in `./build/ios/latest.txt`. Prints the IPA path at the end. |
+| `npm run ios:submit:prod` | Submit the IPA from `./build/ios/latest.txt` to App Store Connect (production profile). Requires `ascAppId` in `eas.json` (see below) or run once interactively so EAS can prompt. |
+| `npm run ios:release:prod` | Build then submit (build + submit in one go). |
+
+**Requirements:** Xcode, EAS CLI, **Fastlane**, and EAS credentials configured for the project (see one-time setup above). The build uses the `production` profile in `eas.json` (`distribution: "store"`), so the resulting IPA is for App Store distribution, not simulator or ad-hoc.
+
+**Common pitfalls:**
+
+- **Fastlane not installed** — Local EAS iOS builds require Fastlane. Install with `brew install fastlane` (or `sudo gem install fastlane`). If you see `spawn fastlane ENOENT`, Fastlane is missing from your PATH.
+- **CocoaPods not installed** — If you see `Cocoapods is not available` or `pod --version exited with non-zero code`, install CocoaPods: `sudo gem install cocoapods` (or `brew install cocoapods`). Ensure `pod` is on your PATH (e.g. after `gem install`, the bin may be in `$(gem environment gemdir)/bin`).
+- **Missing or wrong Apple credentials** — EAS will prompt on first build; ensure you select/store a **distribution** certificate and App Store provisioning profile, not development.
+- **Wrong bundle ID** — Must match the app in App Store Connect and in `app.json` → `expo.ios.bundleIdentifier`.
+- **Wrong team** — If you have multiple teams, EAS may ask which one to use; pick the one that owns the App Store app.
+- **Keychain access** — During local build, Xcode may prompt for keychain access; allow so the code signing step can run.
+- **Managed workflow** — This setup works without an `ios/` folder in the repo; EAS generates the native project when building.
+- **Submission: "Set ascAppId in the submit profile"** — EAS Submit needs your App Store Connect app ID. In **App Store Connect → Your App → App Information**, copy the **Apple ID** (numeric). Set it in `eas.json` under `submit.production.ios.ascAppId` (e.g. `"ascAppId": "1234567890"`). Alternatively, run `npm run ios:submit:prod` without setting it; EAS will run in interactive mode and prompt you to select the app.
+- **Libtool / ARCHIVE FAILED (Exit status 65)** — If the archive step fails with a "fatal error" in the Xcode toolchain or "Libtool" in the failed commands, clear Xcode DerivedData and retry: `rm -rf ~/Library/Developer/Xcode/DerivedData/*`. Then run `npm run ios:build:prod` again. Using the latest stable Xcode (and matching iOS SDK) also helps avoid toolchain issues.
+
+### Build & Deploy (cloud)
 
 ```bash
 # Configure EAS
 eas build:configure
 
-# Build for iOS
-eas build --platform ios
+# Build for iOS (cloud)
+eas build --platform ios --profile production
 
 # Build for Android
 eas build --platform android
 
-# Submit to stores
-eas submit --platform ios
+# Submit to stores (use --path for a specific IPA/APK, or --latest to submit last cloud build)
+eas submit --platform ios --profile production --path ./build/ios/your.app.ipa
 eas submit --platform android
 ```
 
@@ -279,7 +325,7 @@ The Admin Panel allows designated users to upload EPUB files to the global libra
 #### 1. Run Database Migration
 Execute in Supabase SQL Editor:
 ```sql
--- File: supabase/migrations/add_admin_and_global_library.sql
+-- File: supabase/migrations/024_add_admin_and_global_library.sql
 ```
 
 This adds:

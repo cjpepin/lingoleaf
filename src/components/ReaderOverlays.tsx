@@ -10,6 +10,8 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-nati
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
 
+const PAGE_INDICATOR_GREY = '#555555';
+
 interface Props {
   currentPage: number;
   totalPages: number;
@@ -31,18 +33,18 @@ export function ReaderOverlays({
       <View style={styles.pageIndicator}>
         {currentPage <= 0 ? (
           <View style={styles.pageLoadingRow}>
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} />
             <Text style={styles.pageText}>Loading…</Text>
           </View>
         ) : totalPages <= 0 ? (
           <View style={styles.pageLoadingRow}>
-            {pageLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+            {pageLoading ? <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} /> : null}
             <Text style={styles.pageText}>Page {currentPage}</Text>
           </View>
         ) : (
           <>
             <View style={styles.pageRow}>
-              {pageLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
+              {pageLoading ? <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} /> : null}
               <Text style={styles.pageText}>
                 {currentPage} / {totalPages}
               </Text>
@@ -64,23 +66,15 @@ export function ReaderOverlays({
 const styles = StyleSheet.create({
   pageIndicator: {
     position: 'absolute',
-    top: 12,
-    left: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    top: 6,
+    left: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 2,
   },
   pageText: {
-    color: '#FFFFFF',
+    color: PAGE_INDICATOR_GREY,
     fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
+    fontWeight: '500',
   },
   pageRow: {
     flexDirection: 'row',
@@ -88,9 +82,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chapterText: {
-    color: 'rgba(255, 255, 255, 0.85)',
+    color: PAGE_INDICATOR_GREY,
     fontSize: 12,
     marginTop: 2,
+    opacity: 0.9,
   },
   pageLoadingRow: {
     flexDirection: 'row',

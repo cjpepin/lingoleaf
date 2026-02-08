@@ -100,7 +100,11 @@ export function ReaderSettingsModal({ visible, onClose, onSettingsChange }: Prop
         </Pressable>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator
+      >
         <View style={styles.row}>
           <Text style={styles.label}>{t('readerSettings.highlightOnTranslate')}</Text>
           <Switch
@@ -114,17 +118,19 @@ export function ReaderSettingsModal({ visible, onClose, onSettingsChange }: Prop
         <Text style={styles.sectionTitle}>{t('readerSettings.fontSize')}</Text>
         <View style={styles.sliderRow}>
           <Text style={styles.sliderLabel}>{FONT_SIZE_MIN}px</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={FONT_SIZE_MIN}
-            maximumValue={FONT_SIZE_MAX}
-            step={FONT_SIZE_STEP}
-            value={Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, parseInt(fontSize, 10) || FONT_SIZE_MIN))}
-            onValueChange={(v) => setFontSize(`${Math.round(v)}px`)}
-            minimumTrackTintColor={colors.primary}
-            maximumTrackTintColor={colors.border}
-            thumbTintColor={colors.primary}
-          />
+          <View style={styles.sliderContainer}>
+            <Slider
+              style={styles.slider}
+              minimumValue={FONT_SIZE_MIN}
+              maximumValue={FONT_SIZE_MAX}
+              step={FONT_SIZE_STEP}
+              value={Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, parseInt(fontSize, 10) || FONT_SIZE_MIN))}
+              onValueChange={(v) => setFontSize(`${Math.round(v)}px`)}
+              minimumTrackTintColor={colors.primary}
+              maximumTrackTintColor={colors.border}
+              thumbTintColor={colors.primary}
+            />
+          </View>
           <Text style={styles.sliderLabel}>{FONT_SIZE_MAX}px</Text>
         </View>
         <Text style={styles.sliderValue}>{fontSize}</Text>
@@ -187,6 +193,10 @@ const styles = StyleSheet.create({
   content: {
     maxHeight: 400,
   },
+  contentContainer: {
+    flexGrow: 1,
+    minWidth: 0,
+  },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -210,6 +220,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.xs,
+  },
+  sliderContainer: {
+    flex: 1,
+    height: 40,
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   slider: {
     flex: 1,

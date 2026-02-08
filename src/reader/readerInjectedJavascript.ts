@@ -35,12 +35,7 @@ export const READER_INJECTED_JAVASCRIPT = `
             background: rgba(180, 215, 255, 0.4) !important;
           }
           [ref="epubjs-hl"], .epubjs-hl {
-            isolation: isolate !important;
             pointer-events: auto !important;
-            /* Darker text so it stays readable on top of highlight */
-            color: rgba(0,0,0,0.92) !important;
-            -webkit-text-fill-color: rgba(0,0,0,0.92) !important;
-            text-shadow: 0 0 1px rgba(255,255,255,0.9), 0 0 2px rgba(255,255,255,0.6), 0 1px 1px rgba(255,255,255,0.5) !important;
           }
         \`;
         (doc.head || doc.documentElement).appendChild(style);
@@ -322,6 +317,23 @@ export const READER_INJECTED_JAVASCRIPT = `
         if (++count > 100) clearInterval(interval);
       }, 100);
 
+      // Offset of a document's viewport relative to main window (for iframe content)
+      function getIframeOffsetForDoc(doc) {
+        try {
+          if (doc === window.document) return { x: 0, y: 0 };
+          var iframes = window.document.querySelectorAll('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            try {
+              if (iframes[i].contentDocument === doc || (iframes[i].contentWindow && iframes[i].contentWindow.document === doc)) {
+                var iframeRect = iframes[i].getBoundingClientRect();
+                return { x: iframeRect.left, y: iframeRect.top };
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+        return { x: 0, y: 0 };
+      }
+
       // Detect tap/long-press on highlights (must run in iframe docs where EPUB content lives)
       function attachHighlightClick(doc) {
         if (doc.__llHighlightClick) return;
@@ -330,7 +342,14 @@ export const READER_INJECTED_JAVASCRIPT = `
             var target = e.target;
             for (var i = 0; i < 8 && target; i++) {
               if (target.dataset && target.dataset.epubcfi) {
-                postToRN({ type: 'llHighlightClicked', cfi: target.dataset.epubcfi, highlightId: target.dataset.id || null });
+                // Bounding rect in main-window coords so RN can position the popup
+                var rect = null;
+                try {
+                  var bcr = target.getBoundingClientRect();
+                  var iOff = getIframeOffsetForDoc(doc);
+                  rect = { x: bcr.left + iOff.x, y: bcr.top + iOff.y, width: bcr.width, height: bcr.height };
+                } catch (_) {}
+                postToRN({ type: 'llHighlightClicked', cfi: target.dataset.epubcfi, highlightId: target.dataset.id || null, rect: rect });
                 e.stopPropagation();
                 e.preventDefault();
                 return;

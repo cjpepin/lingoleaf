@@ -45,8 +45,11 @@ export function OnboardingWrapper({ children }: Props) {
         await upsertUserSettings({
           user_id: user.id,
           native_lang: data.nativeLang,
+          known_langs: [data.nativeLang],
+          known_lang_levels: { [data.nativeLang]: 'native' },
           goal_langs: data.goalLangs,
-          target_lang: data.goalLangs[0] || 'en', // Default to first goal language
+          goal_lang_levels: Object.fromEntries((data.goalLangs || []).map((code: string) => [code, 'A1'])),
+          target_lang: data.goalLangs[0] || 'en',
         });
       }
 

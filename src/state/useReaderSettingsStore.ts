@@ -17,9 +17,9 @@ export const FONT_SIZES_PX = Array.from(
 ) as readonly string[];
 export const FONT_FAMILIES = ['inherit', 'Georgia', 'Palatino', 'Times New Roman', 'serif', 'sans-serif'] as const;
 export const HIGHLIGHT_COLORS = [
-  { value: 'mint', label: 'Mint', hex: '#D4F1E3' },
-  { value: 'yellow', label: 'Yellow', hex: '#FFF4CC' },
-  { value: 'pink', label: 'Pink', hex: '#FFE5EC' },
+  { value: 'mint', label: 'Mint', hex: '#6DD4A0' },
+  { value: 'yellow', label: 'Yellow', hex: '#FFD54F' },
+  { value: 'pink', label: 'Pink', hex: '#F48FB1' },
 ] as const;
 
 export type FontSize = (typeof FONT_SIZES_PX)[number];

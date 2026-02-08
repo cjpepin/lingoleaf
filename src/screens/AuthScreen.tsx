@@ -32,6 +32,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { FontAwesome } from '@expo/vector-icons';
+import { useTranslation } from '@/i18n/useTranslation';
 
 type AuthRouteProp = RouteProp<RootStackParamList, 'Auth'>;
 
@@ -63,6 +64,7 @@ function isUserCancelledAuth(error: unknown): boolean {
 export default function AuthScreen() {
   const route = useRoute<AuthRouteProp>();
   const navigation = useNavigation();
+  const t = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -127,7 +129,7 @@ export default function AuthScreen() {
   const handleAppleSignIn = async (): Promise<void> => {
     const available = Platform.OS === 'ios' ? await AppleAuthentication.isAvailableAsync() : false;
     if (!available) {
-      Alert.alert('Unavailable', 'Sign in with Apple is only available on iOS devices.');
+      Alert.alert(t('common.error'), t('auth.appleUnavailable'));
       return;
     }
 
@@ -139,18 +141,18 @@ export default function AuthScreen() {
         requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
       });
       if (!credential.identityToken) {
-        setSnackbar({ visible: true, message: 'Apple sign-in failed', type: 'error' });
+        setSnackbar({ visible: true, message: t('auth.appleFailed'), type: 'error' });
         return;
       }
       const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'apple', token: credential.identityToken });
       if (error) throw error;
       await handlePostAuthMigration(fromUserId, data?.session ?? null);
-      setSnackbar({ visible: true, message: 'Signed in successfully!', type: 'success' });
+      setSnackbar({ visible: true, message: t('auth.signedInSuccess'), type: 'success' });
       setTimeout(() => navigation.goBack(), 1000);
     } catch (e: any) {
       if (isUserCancelledAuth(e)) return;
       logger.error('Apple sign-in failed', e);
-      setSnackbar({ visible: true, message: e?.message ?? 'Apple sign-in failed', type: 'error' });
+      setSnackbar({ visible: true, message: e?.message ?? t('auth.appleFailed'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -163,11 +165,11 @@ export default function AuthScreen() {
       const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
       if (error) throw error;
       await handlePostAuthMigration(fromUserId, data?.session ?? null);
-      setSnackbar({ visible: true, message: 'Signed in successfully!', type: 'success' });
+      setSnackbar({ visible: true, message: t('auth.signedInSuccess'), type: 'success' });
       setTimeout(() => navigation.goBack(), 1000);
     } catch (e: any) {
       logger.error('Google sign-in failed', e);
-      setSnackbar({ visible: true, message: e?.message ?? 'Google sign-in failed', type: 'error' });
+      setSnackbar({ visible: true, message: e?.message ?? t('auth.googleFailed'), type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -175,7 +177,7 @@ export default function AuthScreen() {
 
   const handleSubmit = async () => {
     if (!email || !password) {
-      setSnackbar({ visible: true, message: 'Please enter email and password', type: 'error' });
+      setSnackbar({ visible: true, message: t('auth.missingEmailPassword'), type: 'error' });
       return;
     }
 
@@ -185,19 +187,19 @@ export default function AuthScreen() {
       if (!validation.isValid) {
         setSnackbar({ 
           visible: true, 
-          message: `Password must have: ${validation.errors.join(', ')}`, 
+          message: t('auth.passwordRequirementsPrefix') + validation.errors.join(', '), 
           type: 'error' 
         });
         return;
       }
 
       if (!confirmPassword) {
-        setSnackbar({ visible: true, message: 'Please confirm your password', type: 'error' });
+        setSnackbar({ visible: true, message: t('auth.confirmPasswordRequired'), type: 'error' });
         return;
       }
 
       if (password !== confirmPassword) {
-        setSnackbar({ visible: true, message: 'Passwords do not match', type: 'error' });
+        setSnackbar({ visible: true, message: t('auth.passwordMismatch'), type: 'error' });
         return;
       }
     }
@@ -218,23 +220,31 @@ export default function AuthScreen() {
       if (fromUserId && session) {
         await handlePostAuthMigration(fromUserId, session);
       }
-      setSnackbar({ visible: true, message: effectiveIsSignUp ? 'Account created!' : 'Signed in successfully!', type: 'success' });
+      setSnackbar({
+        visible: true,
+        message: effectiveIsSignUp ? t('auth.accountCreated') : t('auth.signedInSuccess'),
+        type: 'success',
+      });
       setTimeout(() => navigation.goBack(), 1000);
     } catch (error: any) {
       // Special handling for email confirmation requirement (expected behavior, not an error)
       if (error.message === 'EMAIL_CONFIRMATION_REQUIRED') {
         logger.info('Email confirmation required for new account');
         Alert.alert(
-          'Check Your Email',
-          `We've sent a confirmation link to ${email}. Please check your inbox (and spam folder) and click the link to activate your account.`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          t('auth.checkEmailTitle'),
+          t('auth.checkEmailMessage', { email }),
+          [{ text: t('common.ok'), onPress: () => navigation.goBack() }]
         );
         return;
       }
       
       // Log actual errors
       logger.error('Auth error:', error);
-      setSnackbar({ visible: true, message: error.message || 'Authentication failed', type: 'error' });
+      setSnackbar({
+        visible: true,
+        message: error.message || (effectiveIsSignUp ? t('auth.signUpError') : t('auth.signInError')),
+        type: 'error',
+      });
     } finally {
       setLoading(false);
     }
@@ -246,18 +256,18 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>{mode === 'upgrade' ? 'Create Account' : 'LingoLeaf'}</Text>
+        <Text style={styles.title}>{mode === 'upgrade' ? t('auth.signUp') : 'LingoLeaf'}</Text>
         <Text style={styles.subtitle}>
           {mode === 'upgrade'
-            ? 'Back up your highlights, vocab, and reading progress.'
-            : 'Read. Translate. Learn.'}
+            ? t('auth.upgradeSubtitle')
+            : t('auth.subtitle')}
         </Text>
 
         <View style={styles.form}>
           <View style={styles.providers}>
             {Platform.OS === 'ios' ? (
               <Button
-                label="Sign in with Apple"
+                label={t('auth.appleSignIn')}
                 variant="surface"
                 onPress={handleAppleSignIn}
                 disabled={loading}
@@ -267,11 +277,14 @@ export default function AuthScreen() {
               />
             ) : null}
             <Button
-              label="Sign in with Google"
+              label={t('auth.googleSignIn')}
               variant="surface"
               onPress={() => {
                 if (!googleRequest) {
-                  Alert.alert('Google not configured', 'Missing Google OAuth client IDs in env vars.');
+                  Alert.alert(
+                    t('auth.googleNotConfiguredTitle'),
+                    t('auth.googleNotConfiguredMessage'),
+                  );
                   return;
                 }
                 googlePromptAsync()
@@ -294,13 +307,13 @@ export default function AuthScreen() {
 
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
+              <Text style={styles.dividerText}>{t('auth.or')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
           <TextInput
             style={styles.input}
-            placeholder="Email"
+            placeholder={t('auth.email')}
             placeholderTextColor={colors.textTertiary}
             value={email}
             onChangeText={setEmail}
@@ -311,7 +324,7 @@ export default function AuthScreen() {
 
           <TextInput
             style={styles.input}
-            placeholder="Password"
+            placeholder={t('auth.password')}
             placeholderTextColor={colors.textTertiary}
             value={password}
             onChangeText={setPassword}
@@ -323,18 +336,18 @@ export default function AuthScreen() {
             <>
               {passwordValidation && password && (
                 <View style={styles.passwordRules}>
-                  <Text style={styles.passwordRulesTitle}>Password must have:</Text>
+                  <Text style={styles.passwordRulesTitle}>{t('auth.passwordRulesTitle')}</Text>
                   {passwordValidation.errors.map((error, i) => (
                     <Text key={i} style={styles.passwordRuleError}>• {error}</Text>
                   ))}
                   {passwordValidation.isValid && (
-                    <Text style={styles.passwordRuleSuccess}>✓ Strong password!</Text>
+                    <Text style={styles.passwordRuleSuccess}>{t('auth.passwordStrong')}</Text>
                   )}
                 </View>
               )}
               <TextInput
                 style={styles.input}
-                placeholder="Confirm Password"
+                placeholder={t('auth.confirmPassword')}
                 placeholderTextColor={colors.textTertiary}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
@@ -350,14 +363,18 @@ export default function AuthScreen() {
             disabled={loading}
           >
             <Text style={styles.buttonText}>
-              {loading ? 'Loading...' : effectiveIsSignUp ? (isGuest ? 'Create Account' : 'Sign Up') : 'Sign In'}
+              {loading
+                ? t('auth.loading')
+                : effectiveIsSignUp
+                ? t('auth.signUp')
+                : t('auth.signIn')}
             </Text>
           </TouchableOpacity>
 
           {mode ? null : (
             <TouchableOpacity style={styles.switchButton} onPress={() => setIsSignUp(!isSignUp)} disabled={loading}>
               <Text style={styles.switchButtonText}>
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                {isSignUp ? t('auth.switchToSignIn') : t('auth.switchToSignUp')}
               </Text>
             </TouchableOpacity>
           )}

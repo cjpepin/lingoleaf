@@ -27,7 +27,7 @@ for (const rel of viewFiles) {
 }
 
 // 2. GestureHandler: Pan with min distance + longer LongPress so native text selection wins
-const SWIPE_MIN_PX = 95; // higher = less chance of pan stealing touches during selection drag
+const SWIPE_MIN_PX = 70; // lower = easier page turn; 70 balances with selection drag
 const SWIPE_FAIL_VERTICAL_PX = 50;
 const LONG_PRESS_MS = 800; // longer than native selection (~400–500ms) so WebView gets long-press first
 const gestureFiles = [

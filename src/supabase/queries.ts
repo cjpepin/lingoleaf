@@ -9,7 +9,7 @@ import type {
   Book,
   Highlight,
   StudyWord,
-  StudyWordReview,
+  UserBookStatus,
   UserSettings,
   TranslationRequest,
   TranslationResponse,
@@ -18,6 +18,8 @@ import type {
   UserBookHighlight,
   UserPromptState,
 } from './types';
+
+export type BookWithStatus = Book & { status: UserBookStatus };
 
 // Books
 export interface BookFilters {
@@ -88,6 +90,17 @@ export async function fetchBookSubjects(language?: string): Promise<string[]> {
     return [];
   }
   return Array.isArray(data) ? data.map((r) => (r?.subject ?? '')).filter(Boolean) : [];
+}
+
+/** Fetches distinct language codes for filter. When subjects are set, only languages that have books in those subjects. */
+export async function fetchBookLanguages(subjects?: string[]): Promise<string[]> {
+  const pSubjects = subjects?.length ? subjects.map((s) => String(s).trim()).filter(Boolean) : null;
+  const { data, error } = await supabase.rpc('get_distinct_book_languages', { p_subjects: pSubjects });
+  if (error) {
+    logger.warn('Failed to fetch book languages', error);
+    return [];
+  }
+  return Array.isArray(data) ? data.map((r) => (r?.lang_code ?? '')).filter(Boolean) : [];
 }
 
 export async function fetchBook(id: string): Promise<Book> {
@@ -189,17 +202,27 @@ function buildFlashcardQueue(wordList: StudyWord[], reviewByWordId: Map<string, 
 
 function computeFlashcardStats(
   wordIds: string[],
-  reviewByWordId: Map<string, string>
+  reviewByWordId: Map<string, string>,
+  lastRatingByWordId?: Map<string, string>
 ): FlashcardStats {
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowISO = now.toISOString();
+  // Cards scheduled within 1 hour are "learning" (short interval)
+  const learningThreshold = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
   let unseen = 0;
   let learning = 0;
   let learned = 0;
   for (const id of wordIds) {
     const nextReview = reviewByWordId.get(id) ?? null;
+    const lastRating = lastRatingByWordId?.get(id) ?? null;
     if (!nextReview) {
       unseen++;
-    } else if (nextReview <= now) {
+    } else if (lastRating === 'hard') {
+      // "Hard" words stay in learning until they pass to good/easy
+      learning++;
+    } else if (nextReview <= nowISO) {
+      learning++;
+    } else if (nextReview <= learningThreshold) {
       learning++;
     } else {
       learned++;
@@ -252,14 +275,16 @@ export async function fetchFlashcardStats(
   const wordIds = wordList.map((w) => w.id);
   const { data: reviews } = await supabase
     .from('study_word_reviews')
-    .select('study_word_id, next_review_at')
+    .select('study_word_id, next_review_at, last_rating')
     .in('study_word_id', wordIds);
 
   const reviewByWordId = new Map<string, string>();
+  const lastRatingByWordId = new Map<string, string>();
   for (const r of reviews ?? []) {
     reviewByWordId.set(r.study_word_id, r.next_review_at);
+    if (r.last_rating) lastRatingByWordId.set(r.study_word_id, r.last_rating);
   }
-  return computeFlashcardStats(wordIds, reviewByWordId);
+  return computeFlashcardStats(wordIds, reviewByWordId, lastRatingByWordId);
 }
 
 export async function fetchFlashcardQueueAll(userId: string): Promise<StudyWord[]> {
@@ -357,11 +382,15 @@ export async function fetchStudyWords(userId: string, listId?: string | null): P
 }
 
 export async function setStudyWordStarred(studyWordId: string, starred: boolean): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('study_words')
     .update({ starred })
-    .eq('id', studyWordId);
+    .eq('id', studyWordId)
+    .select('id');
   if (error) throw error;
+  if (!data || data.length === 0) {
+    throw new Error('Failed to update starred status — no rows matched (check RLS policy)');
+  }
 }
 
 export async function countStudyWordsForList(userId: string, listId: string): Promise<number> {
@@ -675,21 +704,45 @@ export async function fetchUserBook(userId: string, bookId: string): Promise<Use
 }
 
 export async function upsertUserBook(
-  progress: Pick<UserBook, 'user_id' | 'book_id'> & Partial<Pick<UserBook, 'last_cfi' | 'highlights'>>
+  progress: Pick<UserBook, 'user_id' | 'book_id'> &
+    Partial<Pick<UserBook, 'last_cfi' | 'highlights' | 'status'>>
 ): Promise<UserBook> {
+  const payload: Record<string, unknown> = {
+    ...progress,
+    updated_at: new Date().toISOString(),
+  };
+  if (progress.status != null) payload.status = progress.status;
+  if (progress.status !== 'saved_for_later') {
+    payload.last_read_at = new Date().toISOString();
+  }
   const { data, error } = await supabase
     .from('user_books')
-    .upsert(
-      {
-        ...progress,
-        updated_at: new Date().toISOString(),
-        last_read_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id,book_id' }
-    )
+    .upsert(payload, { onConflict: 'user_id,book_id' })
     .select()
     .single();
 
+  if (error) throw error;
+  return data;
+}
+
+/** Save a book for later (add to history as saved_for_later). */
+export async function saveBookForLater(userId: string, bookId: string): Promise<UserBook> {
+  return upsertUserBook({ user_id: userId, book_id: bookId, status: 'saved_for_later' });
+}
+
+/** Mark a book as reading and update last_read_at (e.g. when starting from "Saved for later"). */
+export async function setUserBookReading(userId: string, bookId: string): Promise<UserBook> {
+  const { data, error } = await supabase
+    .from('user_books')
+    .update({
+      status: 'reading',
+      last_read_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId)
+    .eq('book_id', bookId)
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
@@ -708,6 +761,20 @@ export async function deleteUserBookHighlight(userId: string, bookId: string, hi
   return await upsertUserBook({ user_id: userId, book_id: bookId, highlights: next });
 }
 
+export async function updateUserBookHighlightColor(userId: string, bookId: string, highlightId: string, color: string): Promise<UserBook> {
+  const existing = await fetchUserBook(userId, bookId);
+  const prev = existing?.highlights ?? [];
+  const next = prev.map((h) => (h.id === highlightId ? { ...h, color } : h));
+  return await upsertUserBook({ user_id: userId, book_id: bookId, highlights: next });
+}
+
+export async function updateUserBookHighlightTranslation(userId: string, bookId: string, highlightId: string, translation: string): Promise<UserBook> {
+  const existing = await fetchUserBook(userId, bookId);
+  const prev = existing?.highlights ?? [];
+  const next = prev.map((h) => (h.id === highlightId ? { ...h, translation } : h));
+  return await upsertUserBook({ user_id: userId, book_id: bookId, highlights: next });
+}
+
 export async function hasReadingHistory(userId: string): Promise<boolean> {
   const { count, error } = await supabase
     .from('user_books')
@@ -718,11 +785,10 @@ export async function hasReadingHistory(userId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-export async function fetchHistoryBooks(userId: string, filters?: BookFilters): Promise<Book[]> {
-  // Select books that the user has opened (exists in user_books)
+export async function fetchHistoryBooks(userId: string, filters?: BookFilters): Promise<BookWithStatus[]> {
   let query = supabase
     .from('books')
-    .select('*, user_books!inner(user_id,last_read_at)')
+    .select('*, user_books!inner(user_id,last_read_at,status)')
     .eq('user_books.user_id', userId);
 
   const search = filters?.search?.trim();
@@ -761,14 +827,16 @@ export async function fetchHistoryBooks(userId: string, filters?: BookFilters): 
     query = query.range(offset, offset + filters.limit - 1);
   }
 
-  type Row = Book & { user_books: Array<{ last_read_at: string | null }> };
+  type Row = Book & { user_books: Array<{ last_read_at: string | null; status: UserBookStatus }> };
   const { data, error } = await query;
   if (error) throw error;
 
   const rows = (data ?? []) as Row[];
   return rows.map((r) => {
+    const { user_books: ub } = r;
     const { user_books: _ub, ...book } = r;
-    return book;
+    const status = ub?.[0]?.status ?? 'reading';
+    return { ...book, status };
   });
 }
 

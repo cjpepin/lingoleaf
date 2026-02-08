@@ -9,12 +9,13 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Pressable, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import type { Book } from '@/supabase/types';
-import { fetchBook } from '@/supabase/queries';
+import { fetchBook, fetchUserBook, saveBookForLater, setUserBookReading } from '@/supabase/queries';
+import { useAuthStore } from '@/state/useAuthStore';
 import { downloadBook, downloadExternalBook, getSignedUrl } from '@/supabase/storage';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
@@ -31,11 +32,14 @@ export default function BookDetailsScreen() {
   const route = useRoute<any>();
   const bookId: string = route.params?.bookId;
   const t = useTranslation();
+  const { user } = useAuthStore();
 
   const [book, setBook] = useState<Book | null>(null);
   const [loading, setLoading] = useState(true);
   const [opening, setOpening] = useState(false);
   const [coverUri, setCoverUri] = useState<string | null>(null);
+  const [userBookStatus, setUserBookStatus] = useState<'reading' | 'saved_for_later' | 'completed' | null>(null);
+  const [savingForLater, setSavingForLater] = useState(false);
 
   const subtitle = useMemo(() => {
     const bits: string[] = [];
@@ -58,9 +62,13 @@ export default function BookDetailsScreen() {
       try {
         if (!bookId) return;
         setLoading(true);
-        const b = await fetchBook(bookId);
+        const [b, ub] = await Promise.all([
+          fetchBook(bookId),
+          user ? fetchUserBook(user.id, bookId) : Promise.resolve(null),
+        ]);
         if (cancelled) return;
         setBook(b);
+        setUserBookStatus(ub?.status ?? null);
       } catch (e) {
         logger.error('Failed to load book', e);
         Alert.alert('Error', 'Could not load book details');
@@ -71,7 +79,7 @@ export default function BookDetailsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [bookId]);
+  }, [bookId, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -105,9 +113,13 @@ export default function BookDetailsScreen() {
   }, [book]);
 
   const handleReadNow = useCallback(async () => {
-    if (!book) return;
+    if (!book || !user) return;
     setOpening(true);
     try {
+      if (userBookStatus === 'saved_for_later') {
+        await setUserBookReading(user.id, book.id);
+        setUserBookStatus('reading');
+      }
       let localPath: string;
       if (book.epub_url) {
         localPath = await downloadExternalBook(book.id, book.epub_url);
@@ -117,7 +129,6 @@ export default function BookDetailsScreen() {
         throw new Error('No download source for book');
       }
 
-      // Best-effort: extract and cache cover now that EPUB is available locally
       ensureBookCoverFromCache(book.id).catch(() => {});
 
       navigation.replace('Reader', { bookId: book.id, localPath });
@@ -127,7 +138,21 @@ export default function BookDetailsScreen() {
     } finally {
       setOpening(false);
     }
-  }, [book, navigation]);
+  }, [book, navigation, user, userBookStatus]);
+
+  const handleSaveForLater = useCallback(async () => {
+    if (!book || !user) return;
+    setSavingForLater(true);
+    try {
+      await saveBookForLater(user.id, book.id);
+      setUserBookStatus('saved_for_later');
+    } catch (e) {
+      logger.error('Failed to save for later', e);
+      Alert.alert('Error', 'Failed to save book for later');
+    } finally {
+      setSavingForLater(false);
+    }
+  }, [book, user]);
 
   if (!bookId) return null;
 
@@ -166,7 +191,27 @@ export default function BookDetailsScreen() {
       </ScrollView>
 
       <View style={styles.bottomBar}>
-        <Button label={opening ? t('bookDetails.opening') : t('bookDetails.readNow')} onPress={handleReadNow} disabled={opening} variant="primary" />
+        <Button
+          label={
+            opening
+              ? t('bookDetails.opening')
+              : userBookStatus === 'saved_for_later'
+                ? t('bookDetails.startReading')
+                : t('bookDetails.readNow')
+          }
+          onPress={handleReadNow}
+          disabled={opening}
+          variant="primary"
+        />
+        {user && userBookStatus !== 'saved_for_later' && (
+          <Button
+            label={savingForLater ? '…' : t('bookDetails.saveForLater')}
+            onPress={handleSaveForLater}
+            disabled={savingForLater}
+            variant="outline"
+            style={styles.saveForLaterButton}
+          />
+        )}
       </View>
     </View>
   );
@@ -239,6 +284,10 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     padding: spacing.md,
     backgroundColor: colors.surface,
+    gap: spacing.sm,
+  },
+  saveForLaterButton: {
+    marginTop: spacing.xs,
   },
 });
 

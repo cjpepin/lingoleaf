@@ -62,14 +62,6 @@ export function TranslateSheet({
   const [newListName, setNewListName] = useState('');
   const pickerScrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    if (showNewListInput) {
-      const t = setTimeout(() => {
-        pickerScrollRef.current?.scrollToEnd({ animated: true });
-      }, 300);
-      return () => clearTimeout(t);
-    }
-  }, [showNewListInput]);
 
   return (
     <Modal
@@ -142,10 +134,49 @@ export function TranslateSheet({
               <KeyboardAvoidingView
                 style={styles.pickerAvoid}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? (showNewListInput ? 80 : 120) : 0}
               >
               <View style={styles.pickerCard}>
                 <Text style={styles.pickerTitle}>{t('translate.chooseList')}</Text>
+                {/* New list input at top when visible so it stays above keyboard */}
+                {showNewListInput ? (
+                  <View style={styles.newListInput}>
+                    <TextInput
+                      style={styles.newListTextInput}
+                      placeholder={t('translate.listName')}
+                      placeholderTextColor={colors.textTertiary}
+                      value={newListName}
+                      onChangeText={setNewListName}
+                      autoFocus
+                    />
+                    <View style={styles.newListActions}>
+                      <TouchableOpacity
+                        style={[styles.newListButton, styles.newListButtonCreate]}
+                        onPress={() => {
+                          if (!newListName.trim()) {
+                            Alert.alert(t('translate.error'), t('translate.pleaseEnterListName'));
+                            return;
+                          }
+                          onCreateNewList?.(newListName.trim());
+                          setNewListName('');
+                          setShowNewListInput(false);
+                          onCloseListPicker();
+                        }}
+                      >
+                        <Text style={styles.newListButtonTextCreate}>{t('translate.create')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.newListButton}
+                        onPress={() => {
+                          setNewListName('');
+                          setShowNewListInput(false);
+                        }}
+                      >
+                        <Text style={styles.newListButtonText}>{t('study.cancel')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
                 <ScrollView
                   ref={pickerScrollRef}
                   style={styles.pickerList}
@@ -167,52 +198,14 @@ export function TranslateSheet({
                       </TouchableOpacity>
                     );
                   })}
-                  {/* Create New List */}
-                  {showNewListInput ? (
-                    <View style={styles.newListInput}>
-                      <TextInput
-                        style={styles.newListTextInput}
-                        placeholder={t('translate.listName')}
-                        placeholderTextColor={colors.textTertiary}
-                        value={newListName}
-                        onChangeText={setNewListName}
-                        autoFocus
-                      />
-                      <View style={styles.newListActions}>
-                        <TouchableOpacity
-                          style={[styles.newListButton, styles.newListButtonCreate]}
-                          onPress={() => {
-                            if (!newListName.trim()) {
-                              Alert.alert(t('translate.error'), t('translate.pleaseEnterListName'));
-                              return;
-                            }
-                            onCreateNewList?.(newListName.trim());
-                            setNewListName('');
-                            setShowNewListInput(false);
-                            onCloseListPicker();
-                          }}
-                        >
-                          <Text style={styles.newListButtonTextCreate}>{t('translate.create')}</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={styles.newListButton}
-                          onPress={() => {
-                            setNewListName('');
-                            setShowNewListInput(false);
-                          }}
-                        >
-                          <Text style={styles.newListButtonText}>{t('study.cancel')}</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ) : (
+                  {!showNewListInput ? (
                     <TouchableOpacity
                       style={[styles.pickerRow, styles.newListRow]}
                       onPress={() => setShowNewListInput(true)}
                     >
                       <Text style={styles.newListText}>{t('translate.createNewList')}</Text>
                     </TouchableOpacity>
-                  )}
+                  ) : null}
                 </ScrollView>
                 <TouchableOpacity style={styles.pickerCloseButton} onPress={onCloseListPicker}>
                   <Text style={styles.pickerCloseText}>{t('translate.close')}</Text>

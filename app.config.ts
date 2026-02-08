@@ -9,6 +9,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   const iosAppId = env('EXPO_PUBLIC_ADMOB_IOS_APP_ID', 'ca-app-pub-3940256099942544~1458002511');
   const androidAppId = env('EXPO_PUBLIC_ADMOB_ANDROID_APP_ID', 'ca-app-pub-3940256099942544~3347511713');
 
+  const projectId = (config.extra as any)?.eas?.projectId ?? '';
   return {
     ...config,
     // Ensure required ExpoConfig fields are always present for type-safety.
@@ -16,6 +17,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? 'lingoleaf',
     version: config.version ?? '1.0.0',
     scheme: config.scheme ?? 'lingoleaf',
+    // EAS Update (required for production builds when expo-updates is installed)
+    updates: projectId ? { url: `https://u.expo.dev/${projectId}` } : undefined,
+    runtimeVersion: { policy: 'appVersion' },
     ios: {
       ...(config.ios ?? {}),
       infoPlist: {

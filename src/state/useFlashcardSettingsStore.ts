@@ -26,6 +26,8 @@ export const MULTIPLIER_MIN = 1.25;
 export const MULTIPLIER_MAX = 3;
 export const MULTIPLIER_DEFAULT = 2;
 
+export type StudyMethod = 'spaced' | 'free';
+
 export interface FlashcardIntervalSettings {
   againCards: number;
   intervalHardMin: number;
@@ -35,6 +37,8 @@ export interface FlashcardIntervalSettings {
 }
 
 interface FlashcardSettingsStore extends FlashcardIntervalSettings {
+  preferredStudyMethod: StudyMethod;
+  setPreferredStudyMethod: (v: StudyMethod) => void;
   setAgainCards: (v: number) => void;
   setIntervalHardMin: (v: number) => void;
   setIntervalGoodMin: (v: number) => void;
@@ -46,6 +50,7 @@ interface FlashcardSettingsStore extends FlashcardIntervalSettings {
     flashcard_interval_good_min?: number;
     flashcard_interval_easy_min?: number;
     flashcard_interval_multiplier?: number;
+    flashcard_preferred_study_method?: string;
   } | null) => void;
   getSettings: () => FlashcardIntervalSettings;
 }
@@ -56,6 +61,8 @@ export const useFlashcardSettingsStore = create<FlashcardSettingsStore>((set, ge
   intervalGoodMin: INTERVAL_GOOD_DEFAULT,
   intervalEasyMin: INTERVAL_EASY_DEFAULT,
   multiplier: MULTIPLIER_DEFAULT,
+  preferredStudyMethod: 'spaced',
+  setPreferredStudyMethod: (v) => set({ preferredStudyMethod: v }),
   setAgainCards: (v) => set({ againCards: Math.min(AGAIN_CARDS_MAX, Math.max(AGAIN_CARDS_MIN, v)) }),
   setIntervalHardMin: (v) => set({ intervalHardMin: Math.min(INTERVAL_HARD_MAX, Math.max(INTERVAL_HARD_MIN, v)) }),
   setIntervalGoodMin: (v) => set({ intervalGoodMin: Math.min(INTERVAL_GOOD_MAX, Math.max(INTERVAL_GOOD_MIN, v)) }),
@@ -68,6 +75,7 @@ export const useFlashcardSettingsStore = create<FlashcardSettingsStore>((set, ge
       intervalGoodMin: Math.min(INTERVAL_GOOD_MAX, Math.max(INTERVAL_GOOD_MIN, s?.flashcard_interval_good_min ?? INTERVAL_GOOD_DEFAULT)),
       intervalEasyMin: Math.min(INTERVAL_EASY_MAX, Math.max(INTERVAL_EASY_MIN, s?.flashcard_interval_easy_min ?? INTERVAL_EASY_DEFAULT)),
       multiplier: Math.min(MULTIPLIER_MAX, Math.max(MULTIPLIER_MIN, s?.flashcard_interval_multiplier ?? MULTIPLIER_DEFAULT)),
+      preferredStudyMethod: (s?.flashcard_preferred_study_method === 'free' ? 'free' : 'spaced') as StudyMethod,
     }),
   getSettings: () => ({
     againCards: get().againCards,

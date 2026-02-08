@@ -67,12 +67,21 @@ export interface TranslationCache {
   created_at: string;
 }
 
+/** Fluency for "languages you know": native, fluent, advanced, intermediate, beginner */
+export type KnownLangLevel = 'native' | 'fluent' | 'advanced' | 'intermediate' | 'beginner';
+/** CEFR level for "languages you're learning" */
+export type GoalLangLevel = 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2';
+
 export interface UserSettings {
   user_id: string;
   target_lang: string;
   native_lang: string;
   known_langs: string[];
   goal_langs: string[];
+  /** Map of language code -> known level (optional, for profile UI) */
+  known_lang_levels?: Record<string, KnownLangLevel>;
+  /** Map of language code -> CEFR goal level (optional) */
+  goal_lang_levels?: Record<string, GoalLangLevel>;
   reader_highlight_on_translate?: boolean;
   reader_font_size?: string;
   reader_font_family?: string;
@@ -82,6 +91,11 @@ export interface UserSettings {
   flashcard_interval_good_min?: number;
   flashcard_interval_easy_min?: number;
   flashcard_interval_multiplier?: number;
+  /**
+   * Default flashcard study method when opening the deck.
+   * Matches client-side StudyMethod union: 'spaced' | 'free'.
+   */
+  flashcard_preferred_study_method?: 'spaced' | 'free';
   app_lang?: string;
   created_at: string;
   updated_at: string;
@@ -116,12 +130,15 @@ export interface TranslationResponse {
   same_language?: boolean;
 }
 
+export type UserBookStatus = 'reading' | 'saved_for_later' | 'completed';
+
 export interface UserBook {
   user_id: string;
   book_id: string;
   last_cfi: string | null;
   highlights: UserBookHighlight[];
   last_read_at: string;
+  status?: UserBookStatus;
   created_at: string;
   updated_at: string;
 }
@@ -132,6 +149,10 @@ export interface UserBookHighlight {
   selected_text: string;
   created_at: string;
   color: string;
+  /** Translation for this highlight (nullable); set when user translates in popup or when saving from translate sheet */
+  translation?: string | null;
+  /** Page number (1-based) when highlight was created; may be stale if font/size changed */
+  page?: number | null;
 }
 
 export interface VocabList {

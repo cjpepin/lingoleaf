@@ -37,6 +37,8 @@ import {
   touchVocabList,
   countAllStudyWords,
   countAllUserHighlights,
+  updateUserBookHighlightColor,
+  updateUserBookHighlightTranslation,
 } from '@/supabase/queries';
 import type { Book, VocabList, UserBookHighlight } from '@/supabase/types';
 import { normalizeText, validateSelectionLength, MAX_SELECTION_LENGTH } from '@/utils/normalize';
@@ -49,6 +51,7 @@ import { READER_THEME } from '@/reader/readerTheme';
 import { useReaderStore } from '@/state/useReaderStore';
 import { useReaderSettingsStore } from '@/state/useReaderSettingsStore';
 import { ReaderSettingsModal } from '@/components/ReaderSettingsModal';
+import { HighlightActionPopup, HighlightColor } from '@/components/HighlightActionPopup';
 import { Feather } from '@expo/vector-icons';
 import { useTranslation } from '@/i18n/useTranslation';
 
@@ -61,6 +64,15 @@ interface Selection {
   context?: string | null;
   /** True once user lifts finger (touchend/mouseup). Toolbar only shows when committed. */
   committed?: boolean;
+}
+
+function normSelectionText(s: string): string {
+  return s.trim().replace(/\s+/g, ' ');
+}
+
+/** Map a stored highlight color name to its saturated annotation hex for the reader overlay */
+function annotationHex(color: string): string {
+  return color === 'yellow' ? colors.annotationYellow : color === 'pink' ? colors.annotationPink : colors.annotationMint;
 }
 
 export default function ReaderScreen() {
@@ -100,6 +112,8 @@ export default function ReaderScreen() {
     message: '',
     type: 'info',
   });
+  const [activeHighlight, setActiveHighlight] = useState<(UserBookHighlight & { bounds?: { x: number; y: number; width: number; height: number } }) | null>(null);
+  const [highlightTranslating, setHighlightTranslating] = useState(false);
 
   // Get reader navigation methods
   const {
@@ -456,15 +470,16 @@ export default function ReaderScreen() {
       navigation.setOptions({
         title: bookData.title,
         headerRight: () => (
-          <View style={{ marginRight: spacing.md }}>
-            <Pressable
-              onPress={() => setReaderSettingsVisible(true)}
-              hitSlop={8}
-              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-            >
-              <Feather name="more-vertical" size={24} color={colors.primary} />
-            </Pressable>
-          </View>
+          <Pressable
+            onPress={() => setReaderSettingsVisible(true)}
+            hitSlop={12}
+            style={({ pressed }) => [
+              styles.headerSettingsButton,
+              { opacity: pressed ? 0.6 : 1 },
+            ]}
+          >
+            <Feather name="settings" size={22} color={colors.text} />
+          </Pressable>
         ),
       });
     } catch (error) {
@@ -480,9 +495,8 @@ export default function ReaderScreen() {
     highlights.forEach((h) => {
       if (!h?.cfi_range) return;
       try {
-        const hex = h.color === 'yellow' ? colors.highlightYellow : h.color === 'pink' ? colors.highlightPink : colors.highlightMint;
         removeAnnotationByCfi(h.cfi_range);
-        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: hex, opacity: 0.7 });
+        addAnnotation('highlight', h.cfi_range, { id: h.id }, { color: annotationHex(h.color), opacity: 0.4 });
       } catch (e) {
         // Best-effort; CFI can fail if section not yet rendered
       }
@@ -501,8 +515,8 @@ export default function ReaderScreen() {
     // If selection already exists (committed), add the cfiRange. Otherwise store uncommitted.
     setSelection(prev => {
       const trimmed = text.trim();
-      if (prev && prev.committed && prev.text === trimmed) {
-        // Already committed with same text - just add cfiRange
+      if (prev && prev.committed && normSelectionText(prev.text) === normSelectionText(trimmed)) {
+        // Already committed with same text (normalized) - add cfiRange so highlight on save works
         return { ...prev, cfiRange };
       }
       // Store text/cfiRange but uncommitted (toolbar won't show yet)
@@ -519,6 +533,17 @@ export default function ReaderScreen() {
       `(function(){try{var d=document;if(d.getSelection){d.getSelection().removeAllRanges();}d.querySelectorAll('iframe').forEach(function(f){try{var id=f.contentDocument||f.contentWindow?.document;if(id&&id.getSelection){id.getSelection().removeAllRanges();}}catch(e){}});}catch(e){}}());true;`
     );
   }, [injectJavascript]);
+
+  const countOverlappingHighlights = useCallback((cfiRange: string) => {
+    return highlights.filter(
+      (h) =>
+        h.cfi_range === cfiRange ||
+        h.cfi_range.startsWith(cfiRange) ||
+        cfiRange.startsWith(h.cfi_range)
+    ).length;
+  }, [highlights]);
+
+  const MAX_OVERLAPPING_HIGHLIGHTS = 3;
 
   const handleHighlight = useCallback(async () => {
     if (!selection || !user || !book) return;
@@ -537,6 +562,10 @@ export default function ReaderScreen() {
       Alert.alert(t('reader.highlightsUnavailableTitle'), t('reader.highlightsUnavailable'));
       return;
     }
+    if (countOverlappingHighlights(selection.cfiRange) >= MAX_OVERLAPPING_HIGHLIGHTS) {
+      Alert.alert(t('reader.highlightOverlapTitle'), t('reader.highlightOverlapMessage'));
+      return;
+    }
 
     try {
       const highlightColor = useReaderSettingsStore.getState().highlightColor;
@@ -547,13 +576,13 @@ export default function ReaderScreen() {
         selected_text: selection.text,
         created_at: now,
         color: highlightColor,
+        page: currentPage > 0 ? currentPage : undefined,
       };
 
       // Apply immediately in the reader (best-effort)
       try {
         removeAnnotationByCfi?.(newHighlight.cfi_range);
-        const hex = highlightColor === 'yellow' ? colors.highlightYellow : highlightColor === 'pink' ? colors.highlightPink : colors.highlightMint;
-          addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: hex, opacity: 0.7 });
+        addAnnotation?.('highlight', newHighlight.cfi_range, { id: newHighlight.id }, { color: annotationHex(highlightColor), opacity: 0.4 });
       } catch (e) {}
 
       setHighlights((prev) => [...prev, newHighlight]);
@@ -571,7 +600,7 @@ export default function ReaderScreen() {
       logger.error('Failed to save highlight:', error);
       Alert.alert(t('common.error'), t('reader.failedToSaveHighlight'));
     }
-  }, [addAnnotation, addUserBookHighlight, book, clearWebViewSelection, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, t, upgradePrompt, user]);
+  }, [addAnnotation, addUserBookHighlight, book, clearWebViewSelection, countOverlappingHighlights, currentPage, highlightsEnabled, isGuest, removeAnnotationByCfi, selection, t, upgradePrompt, user]);
 
   const handleJumpToHighlight = useCallback((cfiRange: string) => {
     if (!cfiRange) return;
@@ -583,24 +612,71 @@ export default function ReaderScreen() {
 
   const handleDeleteHighlight = useCallback(async (h: UserBookHighlight) => {
     if (!user || !book) return;
-    Alert.alert(t('reader.deleteHighlightTitle'), t('reader.deleteHighlightMessage'), [
-      { text: t('common.cancel'), style: 'cancel' },
-      {
-        text: t('common.delete'),
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            removeAnnotationByCfi?.(h.cfi_range);
-            setHighlights((prev) => prev.filter((x) => x.id !== h.id));
-            await deleteUserBookHighlight(user.id, book.id, h.id);
-          } catch (error) {
-            logger.error('Failed to delete highlight:', error);
-            Alert.alert(t('common.error'), t('reader.failedToDeleteHighlight'));
-          }
-        },
-      },
-    ]);
+    try {
+      removeAnnotationByCfi?.(h.cfi_range);
+      setHighlights((prev) => prev.filter((x) => x.id !== h.id));
+      setActiveHighlight(null);
+      await deleteUserBookHighlight(user.id, book.id, h.id);
+    } catch (error) {
+      logger.error('Failed to delete highlight:', error);
+      setSnackbar({ visible: true, message: t('reader.failedToDeleteHighlight'), type: 'error' });
+    }
   }, [book, deleteUserBookHighlight, removeAnnotationByCfi, t, user]);
+
+  const handleChangeHighlightColor = useCallback(async (h: UserBookHighlight, newColor: HighlightColor) => {
+    if (!user || !book) return;
+    try {
+      // Update visual annotation
+      removeAnnotationByCfi?.(h.cfi_range);
+      addAnnotation?.('highlight', h.cfi_range, { id: h.id }, { color: annotationHex(newColor), opacity: 0.4 });
+      // Update local state
+      setHighlights((prev) => prev.map((x) => (x.id === h.id ? { ...x, color: newColor } : x)));
+      setActiveHighlight((prev) => (prev?.id === h.id ? { ...prev, color: newColor } : prev));
+      // Persist
+      await updateUserBookHighlightColor(user.id, book.id, h.id, newColor);
+    } catch (error) {
+      logger.error('Failed to update highlight color:', error);
+      setSnackbar({ visible: true, message: t('common.error'), type: 'error' });
+    }
+  }, [addAnnotation, book, removeAnnotationByCfi, t, user]);
+
+  const handleTranslateFromPopup = useCallback(async () => {
+    if (!activeHighlight || !book?.source_lang || !user) return;
+    setHighlightTranslating(true);
+    try {
+      const response = await translateText({
+        source_lang: book.source_lang,
+        target_lang: targetLang,
+        text: activeHighlight.selected_text,
+      });
+      const newTranslation = response.same_language ? activeHighlight.selected_text : response.translation;
+      await updateUserBookHighlightTranslation(user.id, book.id, activeHighlight.id, newTranslation);
+      setHighlights((prev) =>
+        prev.map((h) => (h.id === activeHighlight.id ? { ...h, translation: newTranslation } : h))
+      );
+      setActiveHighlight((prev) => (prev?.id === activeHighlight.id ? { ...prev, translation: newTranslation } : null));
+    } catch (error) {
+      logger.error('Failed to translate highlight from popup', error);
+      setSnackbar({ visible: true, message: t('msg.translationFailed'), type: 'error' });
+    } finally {
+      setHighlightTranslating(false);
+    }
+  }, [activeHighlight, book, targetLang, t, user]);
+
+  const handleSaveToVocabFromPopup = useCallback(() => {
+    if (!activeHighlight) return;
+    setSelection({
+      text: activeHighlight.selected_text,
+      cfiRange: activeHighlight.cfi_range,
+      committed: true,
+      context: null,
+    });
+    setTranslation(activeHighlight.translation ?? null);
+    setSameLanguage(false);
+    setTranslateError(null);
+    setShowTranslateSheet(true);
+    setActiveHighlight(null);
+  }, [activeHighlight]);
 
   const handleTranslate = useCallback(async () => {
     if (!selection || !book?.source_lang) return;
@@ -652,8 +728,6 @@ export default function ReaderScreen() {
     }
   }, [selection, book, targetLang, t]);
 
-  const highlightOnTranslate = useReaderSettingsStore((s) => s.highlightOnTranslate);
-
   const handleSaveStudyWord = useCallback(async () => {
     if (!selection || !translation || !user || !book?.source_lang) return;
     if (!selectedListId) {
@@ -662,26 +736,29 @@ export default function ReaderScreen() {
     }
 
     try {
-      // Auto-highlight when translating (if enabled in settings)
-      if (highlightOnTranslate && selection.cfiRange && highlightsEnabled) {
+      // Always highlight when saving to list (when we have CFI), so the saved word is visible in the book. Skip if this CFI already has a highlight (e.g. opened from highlight popup).
+      const alreadyHasHighlight = highlights.some((h) => h.cfi_range === selection.cfiRange);
+      if (selection.cfiRange && highlightsEnabled && !alreadyHasHighlight) {
         try {
-          const readerHighlightColor = useReaderSettingsStore.getState().highlightColor;
-          const highlightHex = readerHighlightColor === 'yellow' ? colors.highlightYellow
-            : readerHighlightColor === 'pink' ? colors.highlightPink
-            : colors.highlightMint;
-          const now = new Date().toISOString();
-          const newHighlight: UserBookHighlight = {
-            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-            cfi_range: selection.cfiRange,
-            selected_text: selection.text,
-            created_at: now,
-            color: readerHighlightColor,
-          };
-          addAnnotation?.('highlight', selection.cfiRange, { id: newHighlight.id }, { color: highlightHex, opacity: 0.7 });
-          setHighlights((prev) => [...prev, newHighlight]);
-          await addUserBookHighlight(user.id, book.id, newHighlight);
+          if (countOverlappingHighlights(selection.cfiRange) < MAX_OVERLAPPING_HIGHLIGHTS) {
+            const readerHighlightColor = useReaderSettingsStore.getState().highlightColor;
+            const now = new Date().toISOString();
+            const translationToStore = sameLanguage ? selection.text : translation;
+            const newHighlight: UserBookHighlight = {
+              id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+              cfi_range: selection.cfiRange,
+              selected_text: selection.text,
+              created_at: now,
+              color: readerHighlightColor,
+              translation: translationToStore ?? undefined,
+              page: currentPage > 0 ? currentPage : undefined,
+            };
+            addAnnotation?.('highlight', selection.cfiRange, { id: newHighlight.id }, { color: annotationHex(readerHighlightColor), opacity: 0.4 });
+            setHighlights((prev) => [...prev, newHighlight]);
+            await addUserBookHighlight(user.id, book.id, newHighlight);
+          }
         } catch (e) {
-          logger.warn('Auto-highlight on translate failed', e);
+          logger.warn('Auto-highlight on save to list failed', e);
         }
       }
 
@@ -719,23 +796,19 @@ export default function ReaderScreen() {
       logger.error('Failed to save study word:', error);
       setSnackbar({ visible: true, message: t('msg.failedToSave'), type: 'error' });
     }
-  }, [addAnnotation, book, clearWebViewSelection, highlightOnTranslate, highlightsEnabled, isGuest, sameLanguage, selectedListId, selection, studyStore, t, targetLang, translation, upgradePrompt, user]);
+  }, [addAnnotation, book, clearWebViewSelection, countOverlappingHighlights, currentPage, highlightsEnabled, isGuest, sameLanguage, selectedListId, selection, studyStore, t, targetLang, translation, upgradePrompt, user]);
 
   const handleCloseToolbar = useCallback(() => {
     setSelection(null);
     clearWebViewSelection();
   }, [clearWebViewSelection]);
 
-  const handlePressAnnotation = useCallback((annotation: { cfiRange?: string; data?: { id?: string }; cfiRangeText?: string }) => {
-    if (!annotation?.cfiRange) return;
-    const highlight = highlights.find((h) => h.id === annotation.data?.id || h.cfi_range === annotation.cfiRange);
-    if (highlight) {
-      Alert.alert(t('reader.highlights'), highlight.selected_text, [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('reader.removeHighlight'), style: 'destructive', onPress: () => handleDeleteHighlight(highlight) },
-      ]);
-    }
-  }, [highlights, handleDeleteHighlight, t]);
+  // Annotation taps are handled by our injected JS (llHighlightClicked) which
+  // includes the highlight bounding rect for popup positioning. The epub.js
+  // onPressAnnotation callback doesn't provide position data, so we no-op here.
+  const handlePressAnnotation = useCallback((_annotation: { cfiRange?: string; data?: { id?: string }; cfiRangeText?: string }) => {
+    // Intentional no-op — handled via llHighlightClicked in onWebViewMessage
+  }, []);
 
   const handleCreateNewList = useCallback(async (listName: string) => {
     if (!user) return;
@@ -806,12 +879,13 @@ export default function ReaderScreen() {
       if (type === 'llHighlightClicked') {
         const cfi = event?.cfi;
         const highlightId = event?.highlightId;
+        const rect = event?.rect;
         const highlight = highlights.find((h) => h.id === highlightId || h.cfi_range === cfi);
         if (highlight) {
-          Alert.alert(t('reader.highlights'), highlight.selected_text, [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('reader.removeHighlight'), style: 'destructive', onPress: () => handleDeleteHighlight(highlight) },
-          ]);
+          setActiveHighlight({
+            ...highlight,
+            bounds: rect ? { x: rect.x ?? 0, y: rect.y ?? 0, width: rect.width ?? 100, height: rect.height ?? 20 } : undefined,
+          });
         }
         return;
       }
@@ -822,19 +896,21 @@ export default function ReaderScreen() {
         const rect = event?.rect;
         if (!text || !rect) return;
         lastSelectionSource.current = 'fallback';
-        // Commit selection with proper rect. Preserve cfiRange if epubjs already set it.
-        setSelection(prev => ({
-          text,
-          cfiRange: prev && prev.text === text ? (prev.cfiRange || '') : '',
-          position: {
-            x: rect.x ?? 0,
-            y: rect.y ?? 0,
-            width: rect.width ?? 100,
-            height: rect.height ?? 40,
-          },
-          context: context || prev?.context || null,
-          committed: true,
-        }));
+        setSelection(prev => {
+          const sameText = prev && normSelectionText(prev.text) === normSelectionText(text);
+          return {
+            text,
+            cfiRange: sameText ? (prev!.cfiRange || '') : '',
+            position: {
+              x: rect.x ?? 0,
+              y: rect.y ?? 0,
+              width: rect.width ?? 100,
+              height: rect.height ?? 40,
+            },
+            context: context || prev?.context || null,
+            committed: true,
+          };
+        });
         setLastTouchPosition({ x: rect.x ?? 0, y: rect.y ?? 0 });
         selectionJustMade.current = true;
         setTimeout(() => {
@@ -847,7 +923,7 @@ export default function ReaderScreen() {
     } catch (error) {
       logger.error('Failed handling onWebViewMessage', error);
     }
-  }, [handleDeleteHighlight, highlights, t]);
+  }, [highlights, t]);
 
   const readerTheme = READER_THEME;
   const injectedJavascript = READER_INJECTED_JAVASCRIPT;
@@ -1244,11 +1320,22 @@ export default function ReaderScreen() {
   // Font changes apply instantly; no spinner — epub.js locations regenerate in background and we update when ready.
   const readerFontSize = useReaderSettingsStore((s) => s.fontSize);
   const readerFontFamily = useReaderSettingsStore((s) => s.fontFamily);
+  const prevFontSettingsRef = useRef({ fontSize: readerFontSize, fontFamily: readerFontFamily });
   useEffect(() => {
     if (!readerReady || !changeFontSize || !changeFontFamily) return;
     changeFontSize(readerFontSize);
     changeFontFamily(readerFontFamily);
-  }, [readerReady, readerFontSize, readerFontFamily, changeFontSize, changeFontFamily]);
+    const prev = prevFontSettingsRef.current;
+    const fontChanged = prev.fontSize !== readerFontSize || prev.fontFamily !== readerFontFamily;
+    prevFontSettingsRef.current = { fontSize: readerFontSize, fontFamily: readerFontFamily };
+    // After font change, epub.js can replace iframe content and we lose selection/highlight listeners. Re-inject so they work again.
+    if (fontChanged) {
+      const t = setTimeout(() => {
+        injectJavascript?.(READER_INJECTED_JAVASCRIPT);
+      }, 600);
+      return () => clearTimeout(t);
+    }
+  }, [readerReady, readerFontSize, readerFontFamily, changeFontSize, changeFontFamily, injectJavascript]);
 
   useEffect(() => {
     if (!readerReady) return;
@@ -1302,6 +1389,7 @@ export default function ReaderScreen() {
             snap={true}
             enableSwipe={true}
             enableSelection={true}
+            menuItems={[]}
             allowPopups={false}
             allowScriptedContent={true}
             initialLocation={initialLocation}
@@ -1384,7 +1472,12 @@ export default function ReaderScreen() {
             onGoBack={handleGoBack}
         highlights={highlights}
         onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
-        onDeleteHighlight={(h) => handleDeleteHighlight(h)}
+        onDeleteHighlight={(h) => {
+          Alert.alert(t('reader.deleteHighlightTitle'), t('reader.deleteHighlightMessage'), [
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteHighlight(h) },
+          ]);
+        }}
       />
       <UpgradeAccountPrompt
         visible={upgradePrompt.visible}
@@ -1396,6 +1489,20 @@ export default function ReaderScreen() {
       <ReaderSettingsModal
         visible={readerSettingsVisible}
         onClose={() => setReaderSettingsVisible(false)}
+      />
+      <HighlightActionPopup
+        visible={!!activeHighlight}
+        currentColor={(activeHighlight?.color as HighlightColor) ?? 'mint'}
+        highlightBounds={activeHighlight?.bounds}
+        readerOffset={readerOffset}
+        selectedText={activeHighlight?.selected_text}
+        translation={activeHighlight?.translation}
+        translating={highlightTranslating}
+        onTranslate={handleTranslateFromPopup}
+        onSaveToVocab={handleSaveToVocabFromPopup}
+        onChangeColor={(c) => activeHighlight && handleChangeHighlightColor(activeHighlight, c)}
+        onDelete={() => activeHighlight && handleDeleteHighlight(activeHighlight)}
+        onClose={() => setActiveHighlight(null)}
       />
       <Snackbar
         visible={snackbar.visible}
@@ -1413,6 +1520,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     overflow: 'hidden',
+  },
+  headerSettingsButton: {
+    padding: spacing.sm,
+    marginRight: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 8,
   },
   readerWrapper: {
     flex: 1,

@@ -8,22 +8,22 @@
 
 import type { Book } from '@/supabase/types';
 
-export type LibraryRow =
-  | { type: 'books'; key: string; items: Book[] }
+export type LibraryRow<B = Book> =
+  | { type: 'books'; key: string; items: B[] }
   | { type: 'ad'; key: string };
 
-export function buildAdRows(books: Book[], opts: { columns: number; adEveryRows: number }): LibraryRow[] {
+export function buildAdRows<B extends Book>(books: B[], opts: { columns: number; adEveryRows: number }): LibraryRow<B>[] {
   const columns = Math.max(1, Math.floor(opts.columns));
   const adEveryRows = Math.max(1, Math.floor(opts.adEveryRows));
 
-  const bookRows: LibraryRow[] = [];
+  const bookRows: LibraryRow<B>[] = [];
   for (let i = 0; i < books.length; i += columns) {
     const chunk = books.slice(i, i + columns);
     const firstId = chunk[0]?.id ?? String(i);
     bookRows.push({ type: 'books', key: `books-${i}-${firstId}`, items: chunk });
   }
 
-  const out: LibraryRow[] = [];
+  const out: LibraryRow<B>[] = [];
   let rowCount = 0;
   let adCount = 0;
   for (const r of bookRows) {

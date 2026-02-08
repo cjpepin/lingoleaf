@@ -324,13 +324,21 @@ export default function StudyScreen() {
             <Text style={styles.confirmBody}>
               {t('study.deleteListConfirm', { name: deleteTarget?.name ?? '' })}
             </Text>
-            <TextInput
-              style={styles.confirmInput}
-              value={deleteConfirm}
-              onChangeText={setDeleteConfirm}
-              placeholder={t('translate.listName')}
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={styles.confirmInputRow}>
+              <TextInput
+                style={[
+                  styles.confirmInput,
+                  deleteTarget && deleteConfirm.trim() === deleteTarget.name && styles.confirmInputMatch,
+                ]}
+                value={deleteConfirm}
+                onChangeText={setDeleteConfirm}
+                placeholder={t('translate.listName')}
+                placeholderTextColor={colors.textSecondary}
+              />
+              {deleteTarget && deleteConfirm.trim() === deleteTarget.name ? (
+                <Feather name="check-circle" size={22} color={colors.success} style={styles.confirmInputCheck} />
+              ) : null}
+            </View>
             <View style={styles.confirmActions}>
               <TouchableOpacity style={styles.confirmButton} onPress={() => setDeleteTarget(null)}>
                 <Text style={styles.confirmButtonText}>{t('study.cancel')}</Text>
@@ -871,7 +879,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '700',
   },
+  confirmInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
   confirmInput: {
+    flex: 1,
     ...typography.body,
     color: colors.text,
     backgroundColor: colors.surface,
@@ -880,6 +894,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  confirmInputMatch: {
+    borderColor: colors.success,
+    borderWidth: 2,
+  },
+  confirmInputCheck: {
+    marginLeft: spacing.xs,
   },
   confirmActions: {
     flexDirection: 'row',

@@ -6,19 +6,20 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, FlatList, StyleSheet, Alert, RefreshControl, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, FlatList, StyleSheet, Alert, RefreshControl, useWindowDimensions, ActivityIndicator, Text } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { CompositeNavigationProp } from '@react-navigation/native';
 import type { RootStackParamList, TabParamList } from '@/navigation/types';
 import type { Book } from '@/supabase/types';
+import type { BookWithStatus } from '@/supabase/queries';
 import { fetchHistoryBooks } from '@/supabase/queries';
 import { cleanupOrphanedCache } from '@/supabase/storage';
 import { BookGridItem } from '@/components/BookGridItem';
 import { EmptyState } from '@/components/EmptyState';
 import { LibraryHeader } from '@/components/LibraryHeader';
-import { colors, spacing } from '@/theme';
+import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { useAuthStore } from '@/state/useAuthStore';
 import { Button } from '@/components/ui/Button';
@@ -34,7 +35,7 @@ export default function HistoryScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const t = useTranslation();
 
-  const [books, setBooks] = useState<Book[]>([]);
+  const [books, setBooks] = useState<BookWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -48,7 +49,7 @@ export default function HistoryScreen() {
 
   const pageSize = 15; // 5 rows × 3 columns
   const requestSeq = useRef(0);
-  const booksRef = useRef<Book[]>([]);
+  const booksRef = useRef<BookWithStatus[]>([]);
 
   const grid = useCallback(() => {
     const horizontalPadding = spacing.md;
@@ -59,9 +60,27 @@ export default function HistoryScreen() {
     return { columns, itemWidth, horizontalPadding, columnGap };
   }, [windowWidth]);
 
-  const rows: LibraryRow[] = useMemo(() => {
-    return buildAdRows(books, { columns: grid().columns, adEveryRows: 4 });
-  }, [books, grid]);
+  const savedForLater = useMemo(() => books.filter((b) => b.status === 'saved_for_later'), [books]);
+  const recentlyRead = useMemo(() => books.filter((b) => b.status !== 'saved_for_later'), [books]);
+
+  type HistoryRow =
+    | { type: 'section'; key: string; title: string }
+    | (LibraryRow<BookWithStatus> & { type: 'books' | 'ad' });
+  const rows: HistoryRow[] = useMemo(() => {
+    const g = grid();
+    const savedRows = buildAdRows(savedForLater, { columns: g.columns, adEveryRows: 4 });
+    const recentRows = buildAdRows(recentlyRead, { columns: g.columns, adEveryRows: 4 });
+    const out: HistoryRow[] = [];
+    if (savedForLater.length > 0) {
+      out.push({ type: 'section', key: 'section-saved', title: t('history.savedForLater') });
+      out.push(...savedRows);
+    }
+    if (recentlyRead.length > 0) {
+      out.push({ type: 'section', key: 'section-recent', title: t('history.recentlyRead') });
+      out.push(...recentRows);
+    }
+    return out;
+  }, [books, grid, savedForLater, recentlyRead, t]);
 
   useEffect(() => {
     booksRef.current = books;
@@ -236,6 +255,13 @@ export default function HistoryScreen() {
           ) : null
         }
         renderItem={({ item }) => {
+          if (item.type === 'section') {
+            return (
+              <View style={[styles.sectionHeader, { paddingHorizontal: grid().horizontalPadding }]}>
+                <Text style={styles.sectionHeaderText}>{item.title}</Text>
+              </View>
+            );
+          }
           if (item.type === 'ad') {
             return (
               <View style={[styles.adRow, { paddingHorizontal: grid().horizontalPadding }]}>
@@ -246,13 +272,13 @@ export default function HistoryScreen() {
           return (
             <View style={[styles.bookRow, { paddingHorizontal: grid().horizontalPadding, gap: grid().columnGap }]}>
               {item.items.map((b) => (
-                <View key={b.id} style={{ width: grid().itemWidth, marginBottom: spacing.lg }}>
+                <View key={b.id} style={{ width: grid().itemWidth, marginBottom: spacing.md }}>
                   <BookGridItem book={b} onPress={handleBookPress} />
                 </View>
               ))}
               {item.items.length < grid().columns
                 ? Array.from({ length: grid().columns - item.items.length }).map((_, i) => (
-                    <View key={`spacer-${i}`} style={{ width: grid().itemWidth, marginBottom: spacing.lg }} />
+                    <View key={`spacer-${i}`} style={{ width: grid().itemWidth, marginBottom: spacing.md }} />
                   ))
                 : null}
             </View>
@@ -291,11 +317,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   adRow: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   footer: {
     paddingVertical: spacing.lg,
     alignItems: 'center',
+  },
+  sectionHeader: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  sectionHeaderText: {
+    ...typography.h3,
+    color: colors.text,
   },
 });
 

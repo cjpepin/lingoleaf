@@ -4,18 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
-import { useAppLangStore } from '@/state/useAppLangStore';
+import { useAppLangStore, APP_LANGS } from '@/state/useAppLangStore';
+import type { AppLangCode } from '@/state/useAppLangStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useTranslation } from '@/i18n/useTranslation';
 import { colors, spacing, typography } from '@/theme';
@@ -47,8 +42,14 @@ export default function SettingsScreen() {
     navigation.navigate('Admin');
   };
 
-  const handleSetLang = async (lang: 'en' | 'es') => {
+  const handleSetLang = async (lang: AppLangCode) => {
     await persist(user?.id ?? null, lang);
+  };
+
+  const handleOpenUrl = (url: string) => {
+    Linking.openURL(url).catch((err) => {
+      logger.error('Failed to open URL', err);
+    });
   };
 
   return (
@@ -57,22 +58,17 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>{t('settings.appLanguage')}</Text>
         <Text style={styles.sectionDescription}>{t('settings.appLanguageDescription')}</Text>
         <View style={styles.langRow}>
-          <TouchableOpacity
-            style={[styles.langButton, appLang === 'en' && styles.langButtonSelected]}
-            onPress={() => handleSetLang('en')}
-          >
-            <Text style={[styles.langButtonText, appLang === 'en' && styles.langButtonTextSelected]}>
-              {t('settings.english')}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.langButton, appLang === 'es' && styles.langButtonSelected]}
-            onPress={() => handleSetLang('es')}
-          >
-            <Text style={[styles.langButtonText, appLang === 'es' && styles.langButtonTextSelected]}>
-              {t('settings.spanish')}
-            </Text>
-          </TouchableOpacity>
+          {APP_LANGS.map((code) => (
+            <TouchableOpacity
+              key={code}
+              style={[styles.langButton, appLang === code && styles.langButtonSelected]}
+              onPress={() => handleSetLang(code)}
+            >
+              <Text style={[styles.langButtonText, appLang === code && styles.langButtonTextSelected]}>
+                {t('language.' + code)}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -94,6 +90,23 @@ export default function SettingsScreen() {
           <Button label={t('settings.adminPanel')} variant="surface" onPress={handleAdminPress} />
         </View>
       )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
+        <Text style={styles.sectionDescription}>{t('settings.legalDescription')}</Text>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => handleOpenUrl('https://lingoleaf.app/privacy-policy')}
+        >
+          <Text style={styles.linkText}>{t('settings.privacyPolicy')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.linkRow}
+          onPress={() => handleOpenUrl('https://lingoleaf.app/terms-and-conditions')}
+        >
+          <Text style={styles.linkText}>{t('settings.termsConditions')}</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 }
@@ -118,10 +131,12 @@ const styles = StyleSheet.create({
   },
   langRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
   langButton: {
+    minWidth: '30%',
     flex: 1,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -145,5 +160,12 @@ const styles = StyleSheet.create({
   },
   rectButton: {
     borderRadius: 8,
+  },
+  linkRow: {
+    paddingVertical: spacing.sm,
+  },
+  linkText: {
+    ...typography.body,
+    color: colors.primary,
   },
 });

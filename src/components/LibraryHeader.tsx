@@ -9,7 +9,7 @@ import { colors, spacing, typography } from '@/theme';
 import { OverlayModal } from '@/components/ui/OverlayModal';
 import { Button } from '@/components/ui/Button';
 import { LANGUAGES } from '@/constants/languages';
-import { fetchBookSubjects } from '@/supabase/queries';
+import { fetchBookSubjects, fetchBookLanguages } from '@/supabase/queries';
 import { useTranslation } from '@/i18n/useTranslation';
 import { translateLanguageCodeToName, translateLanguageNameToCode } from '@/i18n/translations';
 
@@ -47,7 +47,9 @@ export function LibraryHeader({
   const [languagePickerVisible, setLanguagePickerVisible] = useState(false);
   const [subjectPickerVisible, setSubjectPickerVisible] = useState(false);
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
+  const [availableLanguageCodes, setAvailableLanguageCodes] = useState<string[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
+  const [languagesLoading, setLanguagesLoading] = useState(false);
   const [draftLanguage, setDraftLanguage] = useState(language);
   const [draftSubjects, setDraftSubjects] = useState<string[]>(subjects);
   const [languageSearch, setLanguageSearch] = useState('');
@@ -77,6 +79,15 @@ export function LibraryHeader({
       .finally(() => setSubjectsLoading(false));
   }, [subjectPickerVisible, draftLanguage]);
 
+  useEffect(() => {
+    if (!languagePickerVisible) return;
+    setLanguagesLoading(true);
+    const subs = draftSubjects.length > 0 ? draftSubjects : undefined;
+    fetchBookLanguages(subs)
+      .then(setAvailableLanguageCodes)
+      .finally(() => setLanguagesLoading(false));
+  }, [languagePickerVisible, draftSubjects]);
+
   const handleApply = useCallback(() => {
     onApplyFilters({ language: draftLanguage, subjects: draftSubjects });
     setFiltersVisible(false);
@@ -100,14 +111,20 @@ export function LibraryHeader({
     );
   }, []);
 
+  const languageOptions = useMemo(() => {
+    if (availableLanguageCodes.length === 0) return LANGUAGES;
+    const set = new Set(availableLanguageCodes);
+    return LANGUAGES.filter((lang) => set.has(lang.code));
+  }, [availableLanguageCodes]);
+
   const filteredLanguages = useMemo(() => {
-    if (!languageSearch.trim()) return LANGUAGES;
+    if (!languageSearch.trim()) return languageOptions;
     const search = languageSearch.toLowerCase();
-    return LANGUAGES.filter(
+    return languageOptions.filter(
       (lang) =>
         lang.name.toLowerCase().includes(search) || lang.code.toLowerCase().includes(search)
     );
-  }, [languageSearch]);
+  }, [languageOptions, languageSearch]);
 
   const selectedLanguageName = useMemo(() => {
     if (!draftLanguage) return t('library.languageFiltersPlaceholder');
@@ -229,6 +246,11 @@ export function LibraryHeader({
               autoCorrect={false}
             />
 
+            {languagesLoading ? (
+              <View style={styles.subjectLoading}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : (
             <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
               <TouchableOpacity
                 style={[styles.languageOption, !draftLanguage && styles.languageOptionSelected]}
@@ -264,6 +286,7 @@ export function LibraryHeader({
                 );
               })}
             </ScrollView>
+            )}
           </>
         ) : (
           <>

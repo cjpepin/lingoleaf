@@ -262,13 +262,13 @@ export default function LibraryScreen() {
           return (
             <View style={[styles.bookRow, { paddingHorizontal: grid().horizontalPadding, gap: grid().columnGap }]}>
               {item.items.map((b) => (
-                <View key={b.id} style={{ width: grid().itemWidth, marginBottom: spacing.lg }}>
+                <View key={b.id} style={{ width: grid().itemWidth, marginBottom: spacing.md }}>
                   <BookGridItem book={b} onPress={handleBookPress} />
                 </View>
               ))}
               {item.items.length < grid().columns
                 ? Array.from({ length: grid().columns - item.items.length }).map((_, i) => (
-                    <View key={`spacer-${i}`} style={{ width: grid().itemWidth, marginBottom: spacing.lg }} />
+                    <View key={`spacer-${i}`} style={{ width: grid().itemWidth, marginBottom: spacing.md }} />
                   ))
                 : null}
             </View>
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   adRow: {
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   footer: {
     paddingVertical: spacing.lg,

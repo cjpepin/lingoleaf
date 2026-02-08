@@ -71,7 +71,7 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
           ]}
           pointerEvents="auto"
         >
-          <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+          <Pressable style={styles.pressable} onPress={onDismiss}>
             <Text style={[styles.message, { color: textColor }]}>{message}</Text>
           </Pressable>
         </Animated.View>
@@ -88,7 +88,7 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
             { backgroundColor, bottom: bottomInset, transform: [{ translateY }] },
           ]}
         >
-          <Pressable style={StyleSheet.absoluteFill} onPress={onDismiss}>
+          <Pressable style={styles.pressable} onPress={onDismiss}>
             <Text style={[styles.message, { color: textColor }]}>{message}</Text>
           </Pressable>
         </Animated.View>
@@ -122,12 +122,20 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
     maxWidth: SCREEN_WIDTH - spacing.md * 2,
+    minHeight: 48,
     alignSelf: 'center',
+  },
+  pressable: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.xs,
   },
   message: {
     ...typography.body,
     textAlign: 'center',
     fontWeight: '500',
+    flexShrink: 0,
   },
 });
 

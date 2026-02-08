@@ -188,6 +188,9 @@ export function BookNavigationSheet({
                       onClose();
                     }}
                   >
+                    <Text style={styles.highlightPage}>
+                      {h.page != null && Number.isFinite(h.page) ? `p. ${h.page}` : '—'}
+                    </Text>
                     <Text style={styles.chapterText} numberOfLines={2}>
                       {h.selected_text}
                     </Text>
@@ -313,6 +316,11 @@ const styles = StyleSheet.create({
   },
   highlightMain: {
     flex: 1,
+  },
+  highlightPage: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginBottom: 2,
   },
   highlightDelete: {
     paddingVertical: spacing.xs,

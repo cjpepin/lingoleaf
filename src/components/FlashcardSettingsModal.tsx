@@ -4,15 +4,16 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Switch } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { OverlayModal } from '@/components/ui/OverlayModal';
+import { Button } from '@/components/ui/Button';
 import { useTranslation } from '@/i18n/useTranslation';
 import { colors, spacing, typography } from '@/theme';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
-import { useFlashcardSettingsStore } from '@/state/useFlashcardSettingsStore';
 import {
+  useFlashcardSettingsStore,
   AGAIN_CARDS_MIN,
   AGAIN_CARDS_MAX,
   INTERVAL_HARD_MIN,
@@ -23,6 +24,7 @@ import {
   INTERVAL_EASY_MAX,
   MULTIPLIER_MIN,
   MULTIPLIER_MAX,
+  type StudyMethod,
 } from '@/state/useFlashcardSettingsStore';
 import { upsertUserSettings } from '@/supabase/queries';
 
@@ -31,6 +33,7 @@ interface Props {
   onClose: () => void;
   showTranslationFirst: boolean;
   onShowTranslationFirstChange: (value: boolean) => void;
+  onResetProgress?: () => void;
 }
 
 function formatMinutes(m: number): string {
@@ -44,6 +47,7 @@ export function FlashcardSettingsModal({
   onClose,
   showTranslationFirst,
   onShowTranslationFirstChange,
+  onResetProgress,
 }: Props) {
   const { user } = useAuthStore();
   const loadSettings = useSettingsStore((s) => s.loadSettings);
@@ -90,110 +94,157 @@ export function FlashcardSettingsModal({
       </View>
 
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>{t('flashcardSettings.cardOrder')}</Text>
-        <Text style={styles.description}>{t('flashcardSettings.cardOrderDesc')}</Text>
-
-        <TouchableOpacity
-          style={[styles.option, !showTranslationFirst && styles.optionSelected]}
-          onPress={() => onShowTranslationFirstChange(false)}
-        >
-          <Text style={[styles.optionText, !showTranslationFirst && styles.optionTextSelected]}>
-            {t('flashcardSettings.termToTranslation')}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.option, showTranslationFirst && styles.optionSelected]}
-          onPress={() => onShowTranslationFirstChange(true)}
-        >
-          <Text style={[styles.optionText, showTranslationFirst && styles.optionTextSelected]}>
-            {t('flashcardSettings.translationToTerm')}
-          </Text>
-        </TouchableOpacity>
-
-        <Text style={styles.sectionTitle}>{t('flashcardSettings.intervals')}</Text>
-        <Text style={styles.description}>{t('flashcardSettings.intervalsDesc')}</Text>
-
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>{t('flashcardSettings.againCards')}</Text>
-          <Text style={styles.sliderValue}>{againCards}</Text>
+        <View style={styles.sectionCard}>
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabel}>
+              <Text style={styles.sectionTitle}>{t('flashcardSettings.showTranslationFirst')}</Text>
+              <Text style={styles.toggleHelp}>
+                {showTranslationFirst
+                  ? t('flashcardSettings.translationToTerm')
+                  : t('flashcardSettings.termToTranslation')}
+              </Text>
+            </View>
+            <Switch
+              value={showTranslationFirst}
+              onValueChange={onShowTranslationFirstChange}
+              trackColor={{ false: colors.border, true: colors.primary }}
+              thumbColor={colors.surface}
+            />
+          </View>
         </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={AGAIN_CARDS_MIN}
-          maximumValue={AGAIN_CARDS_MAX}
-          step={1}
-          value={againCards}
-          onValueChange={(v) => setAgainCards(Math.round(v))}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-        />
 
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>Hard</Text>
-          <Text style={styles.sliderValue}>{formatMinutes(intervalHardMin)}</Text>
-        </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={INTERVAL_HARD_MIN}
-          maximumValue={INTERVAL_HARD_MAX}
-          step={5}
-          value={intervalHardMin}
-          onValueChange={(v) => setIntervalHardMin(Math.round(v))}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-        />
+        <View style={[styles.sectionCard, styles.sectionSpacing]}>
+          <Text style={styles.sectionTitle}>{t('flashcardSettings.intervals')}</Text>
+          <Text style={styles.description}>{t('flashcardSettings.intervalsDesc')}</Text>
 
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>Good</Text>
-          <Text style={styles.sliderValue}>{formatMinutes(intervalGoodMin)}</Text>
-        </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={INTERVAL_GOOD_MIN}
-          maximumValue={INTERVAL_GOOD_MAX}
-          step={60}
-          value={intervalGoodMin}
-          onValueChange={(v) => setIntervalGoodMin(Math.round(v))}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-        />
+          <View style={styles.sliderGroup}>
+            <View style={styles.sliderRow}>
+              <View>
+                <Text style={styles.sliderLabel}>{t('flashcardSettings.againCards')}</Text>
+                <Text style={styles.sliderHelp}>{t('flashcardSettings.againCardsHelp')}</Text>
+              </View>
+              <Text style={styles.sliderValue}>{againCards}</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={AGAIN_CARDS_MIN}
+                maximumValue={AGAIN_CARDS_MAX}
+                step={1}
+                value={againCards}
+                onValueChange={(v) => setAgainCards(Math.round(v))}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
+          </View>
 
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>Easy</Text>
-          <Text style={styles.sliderValue}>{formatMinutes(intervalEasyMin)}</Text>
-        </View>
-        <Slider
-          style={styles.slider}
-          minimumValue={INTERVAL_EASY_MIN}
-          maximumValue={INTERVAL_EASY_MAX}
-          step={24 * 60}
-          value={intervalEasyMin}
-          onValueChange={(v) => setIntervalEasyMin(Math.round(v))}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-        />
+          <View style={styles.sliderGroup}>
+            <View style={styles.sliderRow}>
+              <View>
+                <Text style={styles.sliderLabel}>Hard</Text>
+                <Text style={styles.sliderHelp}>{t('flashcardSettings.hardDesc')}</Text>
+              </View>
+              <Text style={styles.sliderValue}>{formatMinutes(intervalHardMin)}</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={INTERVAL_HARD_MIN}
+                maximumValue={INTERVAL_HARD_MAX}
+                step={5}
+                value={intervalHardMin}
+                onValueChange={(v) => setIntervalHardMin(Math.round(v))}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
+          </View>
 
-        <View style={styles.sliderRow}>
-          <Text style={styles.sliderLabel}>{t('flashcardSettings.increaseOnRepeat')}</Text>
-          <Text style={styles.sliderValue}>{multiplier}x</Text>
+          <View style={styles.sliderGroup}>
+            <View style={styles.sliderRow}>
+              <View>
+                <Text style={styles.sliderLabel}>Good</Text>
+                <Text style={styles.sliderHelp}>{t('flashcardSettings.goodDesc')}</Text>
+              </View>
+              <Text style={styles.sliderValue}>{formatMinutes(intervalGoodMin)}</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={INTERVAL_GOOD_MIN}
+                maximumValue={INTERVAL_GOOD_MAX}
+                step={60}
+                value={intervalGoodMin}
+                onValueChange={(v) => setIntervalGoodMin(Math.round(v))}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
+          </View>
+
+          <View style={styles.sliderGroup}>
+            <View style={styles.sliderRow}>
+              <View>
+                <Text style={styles.sliderLabel}>Easy</Text>
+                <Text style={styles.sliderHelp}>{t('flashcardSettings.easyDesc')}</Text>
+              </View>
+              <Text style={styles.sliderValue}>{formatMinutes(intervalEasyMin)}</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={INTERVAL_EASY_MIN}
+                maximumValue={INTERVAL_EASY_MAX}
+                step={24 * 60}
+                value={intervalEasyMin}
+                onValueChange={(v) => setIntervalEasyMin(Math.round(v))}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
+          </View>
+
+          <View style={styles.sliderGroup}>
+            <View style={styles.sliderRow}>
+              <View>
+                <Text style={styles.sliderLabel}>{t('flashcardSettings.increaseOnRepeat')}</Text>
+                <Text style={styles.sliderHelp}>{t('flashcardSettings.increaseDesc')}</Text>
+              </View>
+              <Text style={styles.sliderValue}>{multiplier}x</Text>
+            </View>
+            <View style={styles.sliderContainer}>
+              <Slider
+                style={styles.slider}
+                minimumValue={MULTIPLIER_MIN}
+                maximumValue={MULTIPLIER_MAX}
+                step={0.25}
+                value={multiplier}
+                onValueChange={(v) => setMultiplier(Math.round(v * 100) / 100)}
+                minimumTrackTintColor={colors.primary}
+                maximumTrackTintColor={colors.border}
+                thumbTintColor={colors.primary}
+              />
+            </View>
+          </View>
         </View>
-        <Text style={styles.description}>{t('flashcardSettings.increaseDesc')}</Text>
-        <Slider
-          style={styles.slider}
-          minimumValue={MULTIPLIER_MIN}
-          maximumValue={MULTIPLIER_MAX}
-          step={0.25}
-          value={multiplier}
-          onValueChange={(v) => setMultiplier(Math.round(v * 100) / 100)}
-          minimumTrackTintColor={colors.primary}
-          maximumTrackTintColor={colors.border}
-          thumbTintColor={colors.primary}
-        />
+
+        {onResetProgress ? (
+          <View style={styles.resetSection}>
+            <Text style={styles.resetTitle}>{t('flashcardSettings.resetTitle')}</Text>
+            <Text style={styles.resetDescription}>{t('flashcardSettings.resetDescription')}</Text>
+            <Button
+              label={t('flashcardSettings.resetProgress')}
+              variant="outline"
+              onPress={onResetProgress}
+              style={styles.resetButton}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </OverlayModal>
   );
@@ -221,6 +272,13 @@ const styles = StyleSheet.create({
   content: {
     gap: spacing.md,
   },
+  sectionCard: {
+    padding: spacing.md,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
   sliderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -236,6 +294,12 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
+  sliderContainer: {
+    width: '100%',
+    height: 40,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
   slider: {
     width: '100%',
     height: 40,
@@ -250,23 +314,47 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.sm,
   },
-  option: {
-    padding: spacing.md,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  optionSelected: {
-    borderColor: colors.primary,
-    backgroundColor: colors.highlightMint,
+  toggleLabel: {
+    flex: 1,
+    marginRight: spacing.md,
   },
-  optionText: {
+  toggleHelp: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sliderGroup: {
+    marginTop: spacing.md,
+  },
+  sliderHelp: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  sectionSpacing: {
+    marginTop: spacing.lg,
+  },
+  resetSection: {
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.xs,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  resetTitle: {
     ...typography.body,
     color: colors.text,
-  },
-  optionTextSelected: {
-    color: colors.primary,
     fontWeight: '600',
+  },
+  resetDescription: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
+  },
+  resetButton: {
+    marginTop: spacing.sm,
   },
 });

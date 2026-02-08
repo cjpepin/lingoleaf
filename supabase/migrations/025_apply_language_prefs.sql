@@ -1,4 +1,4 @@
--- Add language preference columns to user_settings
+-- Add language preference columns to user_settings (idempotent; safe if 003 already applied)
 -- Run this directly in Supabase SQL Editor
 
 -- Check if columns already exist before adding
