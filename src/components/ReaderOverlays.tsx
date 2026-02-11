@@ -1,14 +1,12 @@
 /**
  * ReaderOverlays
  *
- * Small floating UI overlay for the reader:
- * - Navigate button (bottom center)
+ * Small floating page indicator for the reader (top-left).
  */
 
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
-import { colors, spacing, typography } from '@/theme';
-import { useTranslation } from '@/i18n/useTranslation';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { colors, spacing } from '@/theme';
 
 const PAGE_INDICATOR_GREY = '#555555';
 
@@ -17,7 +15,6 @@ interface Props {
   totalPages: number;
   pageLoading?: boolean;
   chapterLeftPct?: number | null;
-  onPressNavigate: () => void;
 }
 
 export function ReaderOverlays({
@@ -25,41 +22,33 @@ export function ReaderOverlays({
   totalPages,
   pageLoading = false,
   chapterLeftPct = null,
-  onPressNavigate,
 }: Props) {
-  const t = useTranslation();
   return (
-    <>
-      <View style={styles.pageIndicator}>
-        {currentPage <= 0 ? (
-          <View style={styles.pageLoadingRow}>
-            <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} />
-            <Text style={styles.pageText}>Loading…</Text>
-          </View>
-        ) : totalPages <= 0 ? (
-          <View style={styles.pageLoadingRow}>
+    <View style={styles.pageIndicator}>
+      {currentPage <= 0 ? (
+        <View style={styles.pageLoadingRow}>
+          <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} />
+          <Text style={styles.pageText}>Loading…</Text>
+        </View>
+      ) : totalPages <= 0 ? (
+        <View style={styles.pageLoadingRow}>
+          {pageLoading ? <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} /> : null}
+          <Text style={styles.pageText}>Page {currentPage}</Text>
+        </View>
+      ) : (
+        <>
+          <View style={styles.pageRow}>
             {pageLoading ? <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} /> : null}
-            <Text style={styles.pageText}>Page {currentPage}</Text>
+            <Text style={styles.pageText}>
+              {currentPage} / {totalPages}
+            </Text>
           </View>
-        ) : (
-          <>
-            <View style={styles.pageRow}>
-              {pageLoading ? <ActivityIndicator size="small" color={PAGE_INDICATOR_GREY} /> : null}
-              <Text style={styles.pageText}>
-                {currentPage} / {totalPages}
-              </Text>
-            </View>
-            {typeof chapterLeftPct === 'number' ? (
-              <Text style={styles.chapterText}>{Math.max(0, Math.min(100, chapterLeftPct))}% left in this chapter</Text>
-            ) : null}
-          </>
-        )}
-      </View>
-
-      <Pressable style={styles.navButton} onPress={onPressNavigate}>
-        <Text style={styles.navButtonText}>{t('reader.navigate')}</Text>
-      </Pressable>
-    </>
+          {typeof chapterLeftPct === 'number' ? (
+            <Text style={styles.chapterText}>{Math.max(0, Math.min(100, chapterLeftPct))}% left in this chapter</Text>
+          ) : null}
+        </>
+      )}
+    </View>
   );
 }
 
@@ -92,25 +81,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  navButton: {
-    position: 'absolute',
-    bottom: spacing.lg,
-    left: '50%',
-    transform: [{ translateX: -50 }],
-    width: 100,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingVertical: spacing.sm,
-    borderRadius: 999,
-    alignItems: 'center',
-    zIndex: 6,
-  },
-  navButtonText: {
-    ...typography.caption,
-    color: colors.text,
-    fontWeight: '700',
-  },
 });
-
-

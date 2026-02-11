@@ -3,7 +3,7 @@
  * Toast-style notification that appears at the bottom of the screen
  */
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions, Modal, Pressable } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -25,11 +25,14 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onDismissRef = useRef(onDismiss);
   const insets = useSafeAreaInsets();
+  const [rendered, setRendered] = useState(visible);
 
   onDismissRef.current = onDismiss;
 
   useEffect(() => {
     if (visible) {
+      // Ensure the snackbar is mounted before playing the entrance animation
+      setRendered(true);
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
@@ -46,7 +49,10 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
         toValue: 100,
         duration: 200,
         useNativeDriver: true,
-      }).start();
+      }).start(() => {
+        // Only unmount after the dismissal animation has completed
+        setRendered(false);
+      });
     }
 
     return () => {
@@ -54,7 +60,7 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
     };
   }, [visible, duration, translateY]);
 
-  if (!visible) return null;
+  if (!rendered) return null;
 
   const backgroundColor =
     type === 'success' ? colors.success : type === 'error' ? colors.error : colors.surface;
@@ -80,7 +86,7 @@ export function Snackbar({ visible, message, type = 'info', duration = 3000, onD
   }
 
   return (
-    <Modal transparent visible={visible} animationType="none" pointerEvents="box-none">
+    <Modal transparent visible={rendered} animationType="none" pointerEvents="box-none">
       <View style={styles.overlay} pointerEvents="box-none">
         <Animated.View
           style={[

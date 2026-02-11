@@ -41,6 +41,8 @@ Get your service role key from: [Supabase Dashboard → Settings → API](https:
 
 **Note**: Expo automatically loads environment variables from `.env` in the root directory
 
+**Google Sign-In**: To fix "Authorization Error / deleted_client" (401), create **new** OAuth 2.0 Client IDs in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (APIs & Services → Credentials): one **iOS** (bundle ID `com.lingoleaf.app`), one **Android** (package `com.lingoleaf.app` + your signing SHA-1), one **Web application**. Copy the three client IDs into `.env` as `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`. In Supabase Dashboard → Authentication → Providers → Google, set the **Web** client ID and its **secret** (from the same Web client).
+
 ### 3. Setup Database
 
 Run the migration in Supabase SQL Editor:

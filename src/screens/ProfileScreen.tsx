@@ -3,7 +3,7 @@
  * User profile with language preferences and account management
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   Modal,
   TextInput,
   FlatList,
+  Linking,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -23,6 +24,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
+import { useAppLangStore, APP_LANGS } from '@/state/useAppLangStore';
+import type { AppLangCode } from '@/state/useAppLangStore';
 import { useTranslation } from '@/i18n/useTranslation';
 import { fetchUserSettings, upsertUserSettings, checkIsAdmin } from '@/supabase/queries';
 import { supabase } from '@/supabase/client';
@@ -30,6 +33,9 @@ import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { Button } from '@/components/ui/Button';
 import { Snackbar } from '@/components/Snackbar';
+import { ReaderTutorialModal } from '@/components/ReaderTutorialModal';
+import { StudyTutorialModal } from '@/components/StudyTutorialModal';
+import { AdBanner } from '@/components/ads/AdBanner';
 import { LANGUAGES } from '@/constants/languages';
 import type { KnownLangLevel, GoalLangLevel } from '@/supabase/types';
 
@@ -70,6 +76,7 @@ export default function ProfileScreen() {
   const signOut = useAuthStore((state) => state.signOut);
   const isGuest = useAuthStore((state) => state.isGuest);
   const { targetLang, setTargetLang } = useSettingsStore();
+  const { appLang, persist } = useAppLangStore();
   const t = useTranslation();
 
   const [loading, setLoading] = useState(true);
@@ -79,14 +86,20 @@ export default function ProfileScreen() {
   const [goalLangs, setGoalLangs] = useState<string[]>([]);
   const [knownLangLevels, setKnownLangLevels] = useState<Record<string, KnownLangLevel>>({ en: 'native' });
   const [goalLangLevels, setGoalLangLevels] = useState<Record<string, GoalLangLevel>>({});
+  const [autoRemoveDownloadsAfterDays, setAutoRemoveDownloadsAfterDays] = useState(14);
   const [isAdmin, setIsAdmin] = useState(false);
   const [snackbar, setSnackbar] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     visible: false,
     message: '',
     type: 'info',
   });
-  type PickerKind = 'knownLang' | 'knownLevel' | 'goalLang' | 'goalLevel' | 'targetLang';
+  const [showReaderTutorial, setShowReaderTutorial] = useState(false);
+  const [showStudyTutorial, setShowStudyTutorial] = useState(false);
+  type PickerKind = 'knownLang' | 'knownLevel' | 'goalLang' | 'goalLevel' | 'targetLang' | 'appLang' | 'autoRemove';
   const [pickerOpen, setPickerOpen] = useState<{ kind: PickerKind; code?: string; index?: number } | null>(null);
+  const initialLoadDone = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveCallbackRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   useEffect(() => {
     if (!user) {
@@ -95,6 +108,28 @@ export default function ProfileScreen() {
     }
     loadSettings();
   }, [user]);
+
+  useEffect(() => {
+    if (!loading) initialLoadDone.current = true;
+  }, [loading]);
+
+  const profileEffectFirstRun = useRef(true);
+  // Auto-save profile changes after a short debounce (skip during initial load, first run, and for guests)
+  useEffect(() => {
+    if (!user || isGuest || !initialLoadDone.current || loading) return;
+    if (profileEffectFirstRun.current) {
+      profileEffectFirstRun.current = false;
+      return;
+    }
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      saveCallbackRef.current();
+    }, 1500);
+    return () => {
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    };
+  }, [targetLang, nativeLang, knownLangs, goalLangs, knownLangLevels, goalLangLevels, user, isGuest, loading]);
 
   const loadSettings = async () => {
     if (!user) return;
@@ -118,6 +153,7 @@ export default function ProfileScreen() {
         known.forEach((code) => { if (!knownLevels[code]) knownLevels[code] = 'fluent'; });
         setKnownLangLevels(knownLevels);
         setGoalLangLevels(settings.goal_lang_levels ?? {});
+        setAutoRemoveDownloadsAfterDays(settings.auto_remove_downloads_after_days ?? 14);
       }
       
       setIsAdmin(adminStatus);
@@ -152,6 +188,7 @@ export default function ProfileScreen() {
       setSaving(false);
     }
   };
+  saveCallbackRef.current = handleSave;
 
   const setKnownLevel = (code: string, level: KnownLangLevel) => {
     setKnownLangLevels((prev) => ({ ...prev, [code]: level }));
@@ -220,21 +257,43 @@ export default function ProfileScreen() {
     });
   };
 
-  const pickerOptions: { value: string; label: string }[] =
-    pickerOpen?.kind === 'knownLevel' || pickerOpen?.kind === 'goalLevel'
-      ? (pickerOpen.kind === 'knownLevel'
-          ? KNOWN_LEVELS.map((l) => ({ value: l, label: t('profile.knownLevel.' + l) }))
-          : GOAL_LEVELS.map((l) => ({ value: l, label: t('profile.goalLevel.' + l) })))
-      : LANGUAGES.map((l) => ({ value: l.code, label: t('language.' + l.code) }));
+  const AUTO_REMOVE_OPTIONS = [
+    { value: '7', label: t('settings.autoRemove1Week') },
+    { value: '14', label: t('settings.autoRemove2Weeks') },
+    { value: '0', label: t('settings.autoRemoveNever') },
+  ];
 
-  const handlePickerSelect = (value: string) => {
+  const pickerOptions: { value: string; label: string }[] =
+    pickerOpen?.kind === 'autoRemove'
+      ? AUTO_REMOVE_OPTIONS
+      : pickerOpen?.kind === 'knownLevel' || pickerOpen?.kind === 'goalLevel'
+        ? (pickerOpen.kind === 'knownLevel'
+            ? KNOWN_LEVELS.map((l) => ({ value: l, label: t('profile.knownLevel.' + l) }))
+            : GOAL_LEVELS.map((l) => ({ value: l, label: t('profile.goalLevel.' + l) })))
+        : pickerOpen?.kind === 'appLang'
+          ? APP_LANGS.map((code) => ({ value: code, label: t('language.' + code) }))
+          : LANGUAGES.map((l) => ({ value: l.code, label: t('language.' + l.code) }));
+
+  const handlePickerSelect = async (value: string) => {
     if (!pickerOpen) return;
     const { kind, code, index } = pickerOpen;
     if (kind === 'knownLang' && typeof index === 'number') replaceKnownLang(index, value);
     else if (kind === 'knownLevel' && code) setKnownLevel(code, value as KnownLangLevel);
     else if (kind === 'goalLang' && typeof index === 'number') replaceGoalLang(index, value);
     else if (kind === 'goalLevel' && code) setGoalLevel(code, value as GoalLangLevel);
-    else if (kind === 'targetLang') setTargetLang(value);
+    else if (kind === 'targetLang') setTargetLang(value, user?.id);
+    else if (kind === 'appLang') handleSetAppLang(value as AppLangCode);
+    else if (kind === 'autoRemove' && user) {
+      const days = parseInt(value, 10);
+      setAutoRemoveDownloadsAfterDays(days);
+      useSettingsStore.setState({ autoRemoveDownloadsAfterDays: days });
+      try {
+        await upsertUserSettings({ user_id: user.id, auto_remove_downloads_after_days: days });
+        setSnackbar({ visible: true, message: t('profile.profileUpdated'), type: 'success' });
+      } catch (e) {
+        logger.error('Failed to save auto-remove setting', e);
+      }
+    }
     setPickerOpen(null);
   };
 
@@ -272,6 +331,14 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleSetAppLang = (lang: AppLangCode) => {
+    persist(user?.id ?? null, lang);
+  };
+
+  const handleOpenUrl = (url: string) => {
+    Linking.openURL(url).catch((err) => logger.error('Failed to open URL', err));
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -284,37 +351,63 @@ export default function ProfileScreen() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{t('profile.title')}</Text>
-        <View style={styles.section}>
+        <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+          <Text style={styles.email}>{t('profile.guest')}</Text>
           <Text style={styles.sectionDescription}>{t('profile.signInPrompt')}</Text>
           <Button
             label={t('profile.signInCreateAccount')}
             variant="primary"
             style={styles.rectButton}
             onPress={() => navigation.navigate('Auth')}
+            textStyle={styles.rectButtonText}
           />
         </View>
+        <View style={styles.spacer} />
       </ScrollView>
     );
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('profile.title')}</Text>
-      
-      <View style={styles.section}>
-        <View style={styles.emailRow}>
-          <Text style={styles.email}>
-            {isGuest ? t('profile.guest') : (getUserDisplayName(user) === 'APPLE_USER_PLACEHOLDER' ? t('profile.appleUser') : getUserDisplayName(user))}
-          </Text>
-          {isAdmin && (
-            <View style={styles.adminChip}>
-              <Text style={styles.adminChipText}>{t('profile.admin')}</Text>
-            </View>
-          )}
-        </View>
+
+      {/* Account — top: user info or guest + CTA */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>{t('settings.account')}</Text>
+        {isGuest ? (
+          <>
+            <Text style={styles.email}>{t('profile.guest')}</Text>
+            <Text style={styles.sectionDescription}>{t('settings.guestDescription')}</Text>
+            <Button
+              label={t('settings.signInCreate')}
+              variant="primary"
+              style={styles.rectButton}
+              onPress={() => navigation.navigate('Auth')}
+              textStyle={styles.rectButtonText}
+            />
+          </>
+        ) : (
+          <View style={styles.emailRow}>
+            <Text style={styles.email}>
+              {getUserDisplayName(user) === 'APPLE_USER_PLACEHOLDER' ? t('profile.appleUser') : getUserDisplayName(user)}
+            </Text>
+            {isAdmin && (
+              <View style={styles.adminChip}>
+                <Text style={styles.adminChipText}>{t('profile.admin')}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
+      <View style={styles.profileAd}>
+        <AdBanner />
+      </View>
+
+      {/* Languages */}
+      <View style={styles.sectionCard}>
       {/* Languages you know */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('profile.knownLangs')}</Text>
@@ -413,6 +506,99 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </View>
+      </View>
+
+      {/* App language */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>{t('settings.appLanguage')}</Text>
+        <Text style={styles.sectionDescription}>{t('settings.appLanguageDescription')}</Text>
+        <View style={styles.profileRow}>
+          <Pressable
+            style={[styles.dropdown, styles.dropdownFull]}
+            onPress={() => setPickerOpen({ kind: 'appLang' })}
+          >
+            <Text style={styles.dropdownText} numberOfLines={1}>{t('language.' + appLang)}</Text>
+            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Auto-remove downloads */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>{t('settings.autoRemoveDownloads')}</Text>
+        <Text style={styles.sectionDescription}>{t('settings.autoRemoveDownloadsDesc')}</Text>
+        <View style={styles.profileRow}>
+          <Pressable
+            style={[styles.dropdown, styles.dropdownFull]}
+            onPress={() => setPickerOpen({ kind: 'autoRemove' })}
+          >
+            <Text style={styles.dropdownText} numberOfLines={1}>
+              {AUTO_REMOVE_OPTIONS.find((o) => o.value === String(autoRemoveDownloadsAfterDays))?.label ?? t('settings.autoRemove2Weeks')}
+            </Text>
+            <Feather name="chevron-down" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      </View>
+
+      {isAdmin && (
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{t('settings.admin')}</Text>
+          <Button
+            label={t('settings.adminPanel')}
+            variant="surface"
+            style={styles.adminPanelButton}
+            onPress={() => navigation.navigate('Admin')}
+          />
+        </View>
+      )}
+
+      <View style={styles.profileAd}>
+        <AdBanner />
+      </View>
+
+      {/* Replay tutorials — show in place */}
+      <TouchableOpacity style={styles.replayTutorialRow} onPress={() => setShowReaderTutorial(true)}>
+        <Feather name="book" size={20} color={colors.primary} />
+        <Text style={styles.replayTutorialText}>{t('settings.replayReaderTutorial')}</Text>
+        <Feather name="chevron-right" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+      <TouchableOpacity style={styles.replayTutorialRow} onPress={() => setShowStudyTutorial(true)}>
+        <Feather name="layers" size={20} color={colors.primary} />
+        <Text style={styles.replayTutorialText}>{t('settings.replayStudyTutorial')}</Text>
+        <Feather name="chevron-right" size={18} color={colors.textSecondary} />
+      </TouchableOpacity>
+
+      <View style={styles.profileAd}>
+        <AdBanner />
+      </View>
+
+      {/* Legal */}
+      <View style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
+        <Text style={styles.sectionDescription}>{t('settings.legalDescription')}</Text>
+        <TouchableOpacity style={styles.linkRow} onPress={() => handleOpenUrl('https://lingoleaf.app/privacy-policy')}>
+          <Text style={styles.linkText}>{t('settings.privacyPolicy')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.linkRow} onPress={() => handleOpenUrl('https://lingoleaf.app/terms-and-conditions')}>
+          <Text style={styles.linkText}>{t('settings.termsConditions')}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bottom: log out + delete (signed-in users only) */}
+      {!isGuest && (
+        <>
+          <Button
+            label={t('profile.signOut')}
+            variant="primary"
+            style={styles.bottomActionButton}
+            onPress={handleSignOut}
+            textStyle={styles.rectButtonText}
+          />
+          <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccountPress}>
+            <Text style={styles.deleteButtonText}>{t('profile.deleteAccount')}</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* Picker modal */}
       <Modal visible={pickerOpen !== null} transparent animationType="fade">
@@ -422,7 +608,11 @@ export default function ProfileScreen() {
             <Text style={styles.pickerTitle}>
               {pickerOpen?.kind === 'knownLevel' || pickerOpen?.kind === 'goalLevel'
                 ? t('profile.selectLevel')
-                : t('profile.selectLanguage')}
+                : pickerOpen?.kind === 'appLang'
+                  ? t('settings.appLanguage')
+                  : pickerOpen?.kind === 'autoRemove'
+                    ? t('settings.autoRemoveDownloads')
+                    : t('profile.selectLanguage')}
             </Text>
             <FlatList
               data={pickerOptions}
@@ -442,53 +632,6 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-
-      {/* Save Button */}
-      <View style={styles.saveButtonContainer}>
-      <TouchableOpacity
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-        onPress={handleSave}
-        disabled={saving}
-      >
-        {saving ? (
-          <ActivityIndicator color={colors.background} />
-        ) : (
-          <Text style={styles.saveButtonText}>{t('profile.saveChanges')}</Text>
-        )}
-      </TouchableOpacity>
-
-      {/* Settings */}
-      <TouchableOpacity
-        style={styles.settingsButton}
-        onPress={() => navigation.navigate('Settings')}
-      >
-        <Text style={styles.settingsButtonText}>{t('nav.settings')}</Text>
-      </TouchableOpacity>
-      </View>
-
-      {/* Sign Out */}
-      {isGuest ? (
-        <Button 
-          label={t('profile.signInCreateAccount')} 
-          variant="primary" 
-          style={styles.rectButton} 
-          onPress={() => navigation.navigate('Auth')} 
-          textStyle={styles.rectButtonText}
-        />
-      ) : (
-        <Button 
-          label={t('profile.signOut')} 
-          variant="primary" 
-          style={styles.rectButton} 
-          onPress={handleSignOut} 
-          textStyle={styles.rectButtonText}
-        />
-      )}
-
-      {/* Delete Account */}
-      <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccountPress}>
-        <Text style={styles.deleteButtonText}>{t('profile.deleteAccount')}</Text>
-      </TouchableOpacity>
 
       <Modal visible={deleteAccountModalVisible} transparent animationType="fade" onRequestClose={() => setDeleteAccountModalVisible(false)}>
         <View style={styles.deleteOverlay}>
@@ -530,7 +673,18 @@ export default function ProfileScreen() {
         type={snackbar.type}
         onDismiss={() => setSnackbar({ ...snackbar, visible: false })}
       />
-    </ScrollView>
+      </ScrollView>
+      <ReaderTutorialModal
+        visible={showReaderTutorial}
+        onComplete={() => setShowReaderTutorial(false)}
+        onSkip={() => setShowReaderTutorial(false)}
+      />
+      <StudyTutorialModal
+        visible={showStudyTutorial}
+        onComplete={() => setShowStudyTutorial(false)}
+        onSkip={() => setShowStudyTutorial(false)}
+      />
+    </>
   );
 }
 
@@ -545,7 +699,15 @@ const styles = StyleSheet.create({
   title: {
     ...typography.h1,
     color: colors.text,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  sectionCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   section: {
     marginBottom: spacing.xl,
@@ -691,39 +853,34 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
   },
-  saveButtonContainer: {
+  profileAd: {
+    marginBottom: spacing.lg,
+  },
+  replayTutorialRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingVertical: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    ...typography.button,
-    color: colors.background,
-  },
-  settingsButton: {
-    flex: 1,
     backgroundColor: colors.surface,
-    paddingVertical: spacing.md,
-    borderRadius: 8,
-    alignItems: 'center',
+    borderRadius: 12,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  settingsButtonText: {
-    ...typography.button,
+  replayTutorialText: {
+    ...typography.body,
     color: colors.text,
-    fontSize: 16,
+    flex: 1,
+  },
+  linkRow: {
+    paddingVertical: spacing.sm,
+  },
+  linkText: {
+    ...typography.body,
+    color: colors.primary,
+  },
+  adminPanelButton: {
+    marginTop: spacing.xs,
   },
   signOutButton: {
     backgroundColor: colors.surface,
@@ -750,6 +907,17 @@ const styles = StyleSheet.create({
   deleteButtonText: {
     ...typography.button,
     color: colors.error,
+  },
+  bottomActionButton: {
+    ...typography.button,
+    paddingVertical: spacing.md,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    fontWeight: '600',
   },
   deleteOverlay: {
     flex: 1,

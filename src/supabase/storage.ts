@@ -131,6 +131,57 @@ export async function downloadExternalBook(bookId: string, epubUrl: string): Pro
   return localPath;
 }
 
+/** Path for a cached EPUB on disk. */
+export function getLocalBookPath(bookId: string): string {
+  return `${FileSystem.documentDirectory}books/${bookId}.epub`;
+}
+
+/** Remove the local EPUB file for a book. Keeps all DB data (progress, highlights). */
+export async function removeBookDownload(bookId: string): Promise<void> {
+  const localPath = getLocalBookPath(bookId);
+  try {
+    await FileSystem.deleteAsync(localPath, { idempotent: true });
+    logger.info('Removed local download', { bookId });
+  } catch (error) {
+    logger.error('Failed to remove local download', { bookId, error });
+    throw error;
+  }
+}
+
+/**
+ * Remove local files for books not read within the last `afterDays` days.
+ * Call when library loads if user has auto-remove enabled. Keeps all DB data.
+ */
+export async function runAutoRemoveDownloads(
+  afterDays: number,
+  lastReadByBook: Array<{ book_id: string; last_read_at: string | null }>
+): Promise<void> {
+  if (afterDays <= 0) return;
+  const dirPath = `${FileSystem.documentDirectory}books/`;
+  const dirInfo = await FileSystem.getInfoAsync(dirPath);
+  if (!dirInfo.exists) return;
+
+  const lastReadMap = new Map(lastReadByBook.map((r) => [r.book_id, r.last_read_at]));
+  const cutoffMs = Date.now() - afterDays * 24 * 60 * 60 * 1000;
+
+  const files = await FileSystem.readDirectoryAsync(dirPath);
+  for (const file of files) {
+    if (!file.endsWith('.epub')) continue;
+    const bookId = file.replace('.epub', '');
+    const lastRead = lastReadMap.get(bookId) ?? null;
+    const lastReadMs = lastRead ? new Date(lastRead).getTime() : 0;
+    if (lastReadMs < cutoffMs) {
+      const filePath = `${dirPath}${file}`;
+      try {
+        await FileSystem.deleteAsync(filePath, { idempotent: true });
+        logger.info('Auto-removed download (not read in time)', { bookId, afterDays });
+      } catch (e) {
+        logger.warn('Failed to auto-remove download', { bookId, e });
+      }
+    }
+  }
+}
+
 /**
  * Clean up cached books that no longer exist in the database
  * @param validBookIds Array of book IDs that exist in the database

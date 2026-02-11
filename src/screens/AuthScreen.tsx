@@ -101,6 +101,9 @@ export default function AuthScreen() {
     ...googleConfig,
   });
 
+  // Capture guest user ID before Google prompt so it's available when the response comes back
+  const guestUserIdRef = React.useRef<string | null>(null);
+
   useEffect(() => {
     if (googleResponse?.type !== 'success') return;
     const idToken = (googleResponse as any)?.params?.id_token as string | undefined;
@@ -111,10 +114,15 @@ export default function AuthScreen() {
 
   const handlePostAuthMigration = async (
     fromUserId: string | null,
-    session: { user: { id: string }; access_token: string } | null
+    session: { user: { id: string; is_anonymous?: boolean }; access_token: string } | null
   ): Promise<void> => {
     if (!fromUserId || !session?.user?.id || !session?.access_token) {
       logger.info('Skipping migration: missing fromUserId or session', { hasFrom: Boolean(fromUserId), hasSession: Boolean(session) });
+      return;
+    }
+    // Never migrate if the new session is still anonymous (e.g. signOut → signInAnonymously)
+    if ((session.user as any)?.is_anonymous === true) {
+      logger.info('Skipping migration: new session is anonymous');
       return;
     }
     const toUserId = session.user.id;
@@ -122,7 +130,7 @@ export default function AuthScreen() {
       logger.info('Same user ID after auth, no migration needed');
       return;
     }
-    logger.info('Different user IDs detected, migrating with session from sign-in response', { fromUserId, toUserId });
+    logger.info('Migrating guest data to authenticated user', { fromUserId, toUserId });
     await migrateUserDataIfNeeded(fromUserId, toUserId, session.access_token);
   };
 
@@ -159,7 +167,9 @@ export default function AuthScreen() {
   };
 
   const handleGoogleSignIn = async (idToken: string): Promise<void> => {
-    const fromUserId = isGuest ? user?.id ?? null : null;
+    // Use the ref captured before the Google prompt (avoids race with onAuthStateChange)
+    const fromUserId = guestUserIdRef.current;
+    guestUserIdRef.current = null;
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
@@ -287,6 +297,8 @@ export default function AuthScreen() {
                   );
                   return;
                 }
+                // Snapshot guest user ID before the OAuth flow changes auth state
+                guestUserIdRef.current = isGuest ? user?.id ?? null : null;
                 googlePromptAsync()
                   .then((res) => {
                     // Treat user cancellation/dismiss as a no-op.

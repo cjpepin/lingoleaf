@@ -75,10 +75,16 @@ export function SelectionToolbar({ onHighlight, onTranslate, onClose, selectionB
     return { top, left, arrowPosition };
   }, [selectionBounds, readerOffset]);
 
+  const contentStyle = [
+    styles.content,
+    position.arrowPosition === 'top' && styles.contentNoTopBorder,
+    position.arrowPosition === 'bottom' && styles.contentNoBottomBorder,
+  ];
+
   return (
     <View style={[styles.container, { top: position.top, left: position.left }]}>
       {position.arrowPosition === 'top' && <View style={styles.arrowTop} />}
-      <View style={styles.content}>
+      <View style={contentStyle}>
         <TouchableOpacity style={styles.button} onPress={onHighlight}>
           <Feather name="edit-3" size={16} color={colors.text} style={styles.buttonIcon} />
           <Text style={styles.buttonText}>Highlight</Text>
@@ -110,7 +116,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.surface,
+    borderBottomColor: '#FFFFFF',
     alignSelf: 'center',
     marginBottom: -1,
   },
@@ -124,7 +130,7 @@ const styles = StyleSheet.create({
     borderTopWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.surface,
+    borderTopColor: '#FFFFFF',
     alignSelf: 'center',
     marginTop: -1,
   },
@@ -140,6 +146,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     height: TOOLBAR_HEIGHT,
+  },
+  contentNoTopBorder: {
+    borderTopWidth: 0,
+  },
+  contentNoBottomBorder: {
+    borderBottomWidth: 0,
   },
   button: {
     flexDirection: 'row',

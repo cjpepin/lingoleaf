@@ -134,9 +134,9 @@ export function TranslateSheet({
               <KeyboardAvoidingView
                 style={styles.pickerAvoid}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? (showNewListInput ? 80 : 120) : 0}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? (showNewListInput ? 220 : 120) : 0}
               >
-              <View style={styles.pickerCard}>
+              <View style={[styles.pickerCard, showNewListInput && styles.pickerCardWithInput]}>
                 <Text style={styles.pickerTitle}>{t('translate.chooseList')}</Text>
                 {/* New list input at top when visible so it stays above keyboard */}
                 {showNewListInput ? (
@@ -302,6 +302,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     flex: 1,
     maxHeight: '100%',
+  },
+  pickerCardWithInput: {
+    minHeight: 220,
   },
   pickerTitle: {
     ...typography.h3,

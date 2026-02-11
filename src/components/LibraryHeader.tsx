@@ -14,7 +14,7 @@ import { useTranslation } from '@/i18n/useTranslation';
 import { translateLanguageCodeToName, translateLanguageNameToCode } from '@/i18n/translations';
 
 export interface LibraryFilters {
-  language: string;
+  languages: string[];
   subjects: string[];
 }
 
@@ -23,7 +23,7 @@ interface Props {
   /** Title/author search - always shown in main window */
   search: string;
   onChangeSearch: (next: string) => void;
-  language: string;
+  languages: string[];
   subjects: string[];
   onApplyFilters: (filters: LibraryFilters) => void;
   onResetFilters: () => void;
@@ -35,7 +35,7 @@ export function LibraryHeader({
   title,
   search,
   onChangeSearch,
-  language,
+  languages,
   subjects,
   onApplyFilters,
   onResetFilters,
@@ -50,34 +50,34 @@ export function LibraryHeader({
   const [availableLanguageCodes, setAvailableLanguageCodes] = useState<string[]>([]);
   const [subjectsLoading, setSubjectsLoading] = useState(false);
   const [languagesLoading, setLanguagesLoading] = useState(false);
-  const [draftLanguage, setDraftLanguage] = useState(language);
+  const [draftLanguages, setDraftLanguages] = useState<string[]>(languages);
   const [draftSubjects, setDraftSubjects] = useState<string[]>(subjects);
   const [languageSearch, setLanguageSearch] = useState('');
   const [subjectSearch, setSubjectSearch] = useState('');
 
   const handleReset = useCallback(() => {
-    setDraftLanguage('');
+    setDraftLanguages([]);
     setDraftSubjects([]);
     onResetFilters();
   }, [onResetFilters]);
 
   const activeFilterCount = useMemo(() => {
-    return (language.trim().length > 0 ? 1 : 0) + (subjects.length > 0 ? 1 : 0);
-  }, [language, subjects]);
+    return (languages.length > 0 ? 1 : 0) + (subjects.length > 0 ? 1 : 0);
+  }, [languages, subjects]);
 
   useEffect(() => {
     if (!filtersVisible) return;
-    setDraftLanguage(language);
+    setDraftLanguages(languages);
     setDraftSubjects(subjects);
-  }, [filtersVisible, language, subjects]);
+  }, [filtersVisible, languages, subjects]);
 
   useEffect(() => {
     if (!subjectPickerVisible) return;
     setSubjectsLoading(true);
-    fetchBookSubjects(draftLanguage?.trim() || undefined)
+    fetchBookSubjects(draftLanguages[0]?.trim() || undefined)
       .then(setAvailableSubjects)
       .finally(() => setSubjectsLoading(false));
-  }, [subjectPickerVisible, draftLanguage]);
+  }, [subjectPickerVisible, draftLanguages]);
 
   useEffect(() => {
     if (!languagePickerVisible) return;
@@ -89,9 +89,29 @@ export function LibraryHeader({
   }, [languagePickerVisible, draftSubjects]);
 
   const handleApply = useCallback(() => {
-    onApplyFilters({ language: draftLanguage, subjects: draftSubjects });
+    onApplyFilters({ languages: draftLanguages, subjects: draftSubjects });
     setFiltersVisible(false);
-  }, [draftLanguage, draftSubjects, onApplyFilters]);
+    setLanguagePickerVisible(false);
+    setSubjectPickerVisible(false);
+    setLanguageSearch('');
+    setSubjectSearch('');
+  }, [draftLanguages, draftSubjects, onApplyFilters]);
+
+  const hasDraftChanges = useMemo(() => {
+    const a = [...draftLanguages].sort();
+    const b = [...languages].sort();
+    const langEq = a.length === b.length && a.every((c, i) => b[i] === c);
+    const c = [...draftSubjects].sort();
+    const d = [...subjects].sort();
+    const subjEq = c.length === d.length && c.every((s, i) => d[i] === s);
+    return !langEq || !subjEq;
+  }, [draftLanguages, draftSubjects, languages, subjects]);
+
+  const toggleLanguage = useCallback((code: string) => {
+    setDraftLanguages((prev) =>
+      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code].sort()
+    );
+  }, []);
 
   const filteredSubjects = useMemo(() => {
     if (!subjectSearch.trim()) return availableSubjects;
@@ -126,11 +146,14 @@ export function LibraryHeader({
     );
   }, [languageOptions, languageSearch]);
 
-  const selectedLanguageName = useMemo(() => {
-    if (!draftLanguage) return t('library.languageFiltersPlaceholder');
-    const lang = LANGUAGES.find((l) => l.code === draftLanguage);
-    return lang ? t('language.' + translateLanguageCodeToName(lang.code)) : draftLanguage;
-  }, [draftLanguage]);
+  const selectedLanguageNames = useMemo(() => {
+    if (draftLanguages.length === 0) return t('library.languageFiltersPlaceholder');
+    if (draftLanguages.length === 1) {
+      const lang = LANGUAGES.find((l) => l.code === draftLanguages[0]);
+      return lang ? t('language.' + translateLanguageCodeToName(lang.code)) : draftLanguages[0];
+    }
+    return `${draftLanguages.length} ${t('library.selected')}`;
+  }, [draftLanguages, t]);
 
   return (
     <View style={styles.container}>
@@ -178,14 +201,20 @@ export function LibraryHeader({
           <>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('library.subjectFilters')}</Text>
-              <Pressable
-                onPress={() => {
-                  setSubjectPickerVisible(false);
-                  setSubjectSearch('');
-                }}
-              >
-                <Text style={styles.modalClose}>{t('library.back')}</Text>
-              </Pressable>
+              {hasDraftChanges ? (
+                <Pressable onPress={handleApply} style={styles.modalDoneButton}>
+                  <Text style={styles.modalDoneText}>{t('library.done')}</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setSubjectPickerVisible(false);
+                    setSubjectSearch('');
+                  }}
+                >
+                  <Text style={styles.modalClose}>{t('library.back')}</Text>
+                </Pressable>
+              )}
             </View>
 
             <TextInput
@@ -226,14 +255,20 @@ export function LibraryHeader({
           <>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('library.languageFilters')}</Text>
-              <Pressable
-                onPress={() => {
-                  setLanguagePickerVisible(false);
-                  setLanguageSearch('');
-                }}
-              >
-                <Text style={styles.modalClose}>{t('library.back')}</Text>
-              </Pressable>
+              {hasDraftChanges ? (
+                <Pressable onPress={handleApply} style={styles.modalDoneButton}>
+                  <Text style={styles.modalDoneText}>{t('library.done')}</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => {
+                    setLanguagePickerVisible(false);
+                    setLanguageSearch('');
+                  }}
+                >
+                  <Text style={styles.modalClose}>{t('library.back')}</Text>
+                </Pressable>
+              )}
             </View>
 
             <TextInput
@@ -253,30 +288,22 @@ export function LibraryHeader({
             ) : (
             <ScrollView style={styles.languageList} contentContainerStyle={styles.languageListContent}>
               <TouchableOpacity
-                style={[styles.languageOption, !draftLanguage && styles.languageOptionSelected]}
-                onPress={() => {
-                  setDraftLanguage('');
-                  setLanguagePickerVisible(false);
-                  setLanguageSearch('');
-                }}
+                style={[styles.languageOption, draftLanguages.length === 0 && styles.languageOptionSelected]}
+                onPress={() => setDraftLanguages([])}
               >
-                <Text style={[styles.languageOptionText, !draftLanguage && styles.languageOptionTextSelected]}>
+                <Text style={[styles.languageOptionText, draftLanguages.length === 0 && styles.languageOptionTextSelected]}>
                   {t('library.allLanguages')}
                 </Text>
-                {!draftLanguage && <Text style={styles.languageCheck}>✓</Text>}
+                {draftLanguages.length === 0 && <Text style={styles.languageCheck}>✓</Text>}
               </TouchableOpacity>
 
               {filteredLanguages.map((lang) => {
-                const selected = draftLanguage === lang.code;
+                const selected = draftLanguages.includes(lang.code);
                 return (
                   <TouchableOpacity
                     key={lang.code}
                     style={[styles.languageOption, selected && styles.languageOptionSelected]}
-                    onPress={() => {
-                      setDraftLanguage(lang.code);
-                      setLanguagePickerVisible(false);
-                      setLanguageSearch('');
-                    }}
+                    onPress={() => toggleLanguage(lang.code)}
                   >
                     <Text style={[styles.languageOptionText, selected && styles.languageOptionTextSelected]}>
                       {t('language.' + lang.code)}
@@ -292,9 +319,15 @@ export function LibraryHeader({
           <>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('library.filters')}</Text>
-              <Pressable onPress={() => setFiltersVisible(false)}>
-                <Text style={styles.modalClose}>{t('library.cancel')}</Text>
-              </Pressable>
+              {hasDraftChanges ? (
+                <Pressable onPress={handleApply} style={styles.modalDoneButton}>
+                  <Text style={styles.modalDoneText}>{t('library.done')}</Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => setFiltersVisible(false)}>
+                  <Text style={styles.modalClose}>{t('library.cancel')}</Text>
+                </Pressable>
+              )}
             </View>
 
             <Text style={styles.label}>{t('library.languageFilters')}</Text>
@@ -304,8 +337,8 @@ export function LibraryHeader({
               activeOpacity={0.7}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={[styles.languagePickerText, !draftLanguage && styles.languagePickerPlaceholder]}>
-                {selectedLanguageName}
+              <Text style={[styles.languagePickerText, draftLanguages.length === 0 && styles.languagePickerPlaceholder]}>
+                {selectedLanguageNames}
               </Text>
               <Text style={styles.languagePickerChevron}>›</Text>
             </TouchableOpacity>
@@ -425,6 +458,17 @@ const styles = StyleSheet.create({
   modalClose: {
     ...typography.body,
     color: colors.primary,
+  },
+  modalDoneButton: {
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 8,
+  },
+  modalDoneText: {
+    ...typography.bodySmall,
+    color: colors.surface,
+    fontWeight: '600',
   },
   modalActions: {
     marginTop: spacing.md,

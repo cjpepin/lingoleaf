@@ -107,12 +107,14 @@ export function ReaderSettingsModal({ visible, onClose, onSettingsChange }: Prop
       >
         <View style={styles.row}>
           <Text style={styles.label}>{t('readerSettings.highlightOnTranslate')}</Text>
-          <Switch
-            value={highlightOnTranslate}
-            onValueChange={setHighlightOnTranslate}
-            trackColor={{ false: colors.border, true: colors.primaryLight }}
-            thumbColor={colors.surface}
-          />
+          <View style={styles.switchWrap}>
+            <Switch
+              value={highlightOnTranslate}
+              onValueChange={setHighlightOnTranslate}
+              trackColor={{ false: colors.border, true: colors.primaryLight }}
+              thumbColor={colors.surface}
+            />
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>{t('readerSettings.fontSize')}</Text>
@@ -204,10 +206,19 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+    minWidth: 0,
+  },
+  switchWrap: {
+    flexShrink: 0,
+    paddingRight: spacing.md,
+    alignItems: 'flex-end',
   },
   label: {
     ...typography.body,
     color: colors.text,
+    flexShrink: 1,
+    minWidth: 0,
+    marginRight: spacing.sm,
   },
   sectionTitle: {
     ...typography.caption,

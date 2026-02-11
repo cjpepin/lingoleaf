@@ -100,10 +100,14 @@ export function HighlightActionPopup({
     let top: number;
     let arrowPosition: 'top' | 'bottom' = 'bottom';
 
-    if (spaceAbove >= totalAbove) {
+    const minSpaceBelow = totalPopupHeight + ARROW_SIZE + GAP;
+    // Require buffer above so popup never overlaps highlight when placed above
+    const spaceAboveWithBuffer = totalAbove + GAP;
+    if (spaceAbove >= spaceAboveWithBuffer) {
       top = selTop - totalPopupHeight - ARROW_SIZE - GAP;
       arrowPosition = 'bottom';
-    } else if (spaceBelow >= totalAbove) {
+    } else if (spaceBelow >= minSpaceBelow) {
+      // Not enough space above or highlight near top → show below with arrow up
       top = selBottom + GAP + ARROW_SIZE;
       arrowPosition = 'top';
     } else {
@@ -117,6 +121,13 @@ export function HighlightActionPopup({
   }, [highlightBounds, readerOffset, totalPopupHeight]);
 
   if (!visible) return null;
+
+  const contentStyle = [
+    styles.content,
+    hasTranslationSection && styles.contentNoTopRadius,
+    position.arrowPosition === 'bottom' && styles.contentNoBottomBorder,
+    position.arrowPosition === 'top' && styles.contentNoTopBorder,
+  ];
 
   return (
     <>
@@ -151,7 +162,7 @@ export function HighlightActionPopup({
             ) : null}
           </View>
         )}
-        <View style={[styles.content, hasTranslationSection && styles.contentNoTopRadius]}>
+        <View style={contentStyle}>
           {COLOR_OPTIONS.map((opt) => {
             const isActive = opt.value === currentColor;
             const ringColor = ACTIVE_RING[opt.value];
@@ -200,7 +211,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.surface,
+    borderBottomColor: '#FFFFFF',
     alignSelf: 'center',
     marginBottom: -1,
   },
@@ -214,9 +225,15 @@ const styles = StyleSheet.create({
     borderTopWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.surface,
+    borderTopColor: '#FFFFFF',
     alignSelf: 'center',
     marginTop: -1,
+  },
+  contentNoBottomBorder: {
+    borderBottomWidth: 0,
+  },
+  contentNoTopBorder: {
+    borderTopWidth: 0,
   },
   translationSection: {
     backgroundColor: colors.surface,

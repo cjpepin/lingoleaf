@@ -39,6 +39,19 @@ export const READER_INJECTED_JAVASCRIPT = `
           }
         \`;
         (doc.head || doc.documentElement).appendChild(style);
+
+        // Extra hardening: also set inline styles on root/body so iOS WKWebView
+        // respects the suppression of the native "Speak/Spell" callout.
+        try {
+          if (doc.documentElement && doc.documentElement.style) {
+            doc.documentElement.style.webkitTouchCallout = 'none';
+            doc.documentElement.style.webkitUserSelect = 'text';
+          }
+          if (doc.body && doc.body.style) {
+            doc.body.style.webkitTouchCallout = 'none';
+            doc.body.style.webkitUserSelect = 'text';
+          }
+        } catch (e) {}
         
         // Block context menu
         doc.addEventListener('contextmenu', e => {
@@ -290,6 +303,9 @@ export const READER_INJECTED_JAVASCRIPT = `
             if (doc && !doc.__llHighlightClick) {
               attachHighlightClick(doc);
             }
+            if (doc && !doc.__llCenterTap) {
+              attachCenterTap(doc);
+            }
           } catch (e) {
             if (!iframe.__listener) {
               iframe.addEventListener('load', () => {
@@ -299,6 +315,7 @@ export const READER_INJECTED_JAVASCRIPT = `
                     applyCSS(doc);
                     attachSelectionDebug(doc);
                     attachHighlightClick(doc);
+                    attachCenterTap(doc);
                   }
                 } catch (e2) {}
               });
@@ -334,7 +351,10 @@ export const READER_INJECTED_JAVASCRIPT = `
         return { x: 0, y: 0 };
       }
 
-      // Detect tap/long-press on highlights (must run in iframe docs where EPUB content lives)
+      // Shared: set when we send llHighlightClicked so center-tap skips opening nav
+      var __llHighlightClickedAt = 0;
+
+      // Original highlight click handler — works because CSS sets pointer-events:auto on .epubjs-hl
       function attachHighlightClick(doc) {
         if (doc.__llHighlightClick) return;
         function handleHighlightTap(e) {
@@ -342,7 +362,7 @@ export const READER_INJECTED_JAVASCRIPT = `
             var target = e.target;
             for (var i = 0; i < 8 && target; i++) {
               if (target.dataset && target.dataset.epubcfi) {
-                // Bounding rect in main-window coords so RN can position the popup
+                __llHighlightClickedAt = Date.now();
                 var rect = null;
                 try {
                   var bcr = target.getBoundingClientRect();
@@ -363,6 +383,94 @@ export const READER_INJECTED_JAVASCRIPT = `
         doc.__llHighlightClick = true;
       }
       attachHighlightClick(document);
+
+      // Center tap — never open nav if tap is on a highlight (check flag first, then by coords)
+      var EDGE_MARGIN_PX = 56;
+      var MAX_TAP_MOVE_PX = 12;
+      function isTapOnHighlight(clientX, clientY, doc) {
+        if (Date.now() - __llHighlightClickedAt < 500) return true;
+        try {
+          var iOff = getIframeOffsetForDoc(doc);
+          var mainX = clientX + iOff.x;
+          var mainY = clientY + iOff.y;
+          var docs = [window.document];
+          var iframes = window.document.querySelectorAll('iframe');
+          for (var i = 0; i < iframes.length; i++) {
+            try {
+              var d = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+              if (d) docs.push(d);
+            } catch (e) {}
+          }
+          for (var di = 0; di < docs.length; di++) {
+            var doff = getIframeOffsetForDoc(docs[di]);
+            var px = mainX - doff.x;
+            var py = mainY - doff.y;
+            var groups = docs[di].querySelectorAll('.epubjs-hl, [ref="epubjs-hl"]');
+            for (var g = 0; g < groups.length; g++) {
+              var rects = groups[g].querySelectorAll('rect');
+              for (var r = 0; r < rects.length; r++) {
+                var rect = rects[r].getBoundingClientRect();
+                if (px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom) return true;
+              }
+            }
+          }
+        } catch (e) {}
+        return false;
+      }
+      function attachCenterTap(doc) {
+        if (doc.__llCenterTap) return;
+        var touchStartTime = 0;
+        var touchStartX = 0;
+        var touchStartY = 0;
+        var touchStartTarget = null;
+        var lastCenterTap = 0;
+        function isLinkOrHighlight(el) {
+          if (!el) return false;
+          if (el.closest && (el.closest('[data-epubcfi]') || el.closest('[data-highlight-id]') || el.closest('.epubjs-hl') || el.closest('[ref="epubjs-hl"]'))) return true;
+          for (var i = 0; i < 20 && el; i++) {
+            if (el.tagName === 'A' || (el.dataset && (el.dataset.epubcfi || el.dataset.highlightId))) return true;
+            if (el.getAttribute && (el.getAttribute('ref') === 'epubjs-hl' || (el.classList && el.classList.contains('epubjs-hl')))) return true;
+            el = el.parentElement;
+          }
+          return false;
+        }
+        function inCenterZone(clientX, docWidth) {
+          if (docWidth <= 2 * EDGE_MARGIN_PX) return true;
+          return clientX >= EDGE_MARGIN_PX && clientX <= docWidth - EDGE_MARGIN_PX;
+        }
+        doc.addEventListener('touchstart', function(e) {
+          var t = e.changedTouches && e.changedTouches[0];
+          if (t) {
+            touchStartTime = Date.now();
+            touchStartX = t.clientX;
+            touchStartY = t.clientY;
+            touchStartTarget = e.target;
+          }
+        }, { passive: true });
+        doc.addEventListener('touchend', function(e) {
+          var t = e.changedTouches && e.changedTouches[0];
+          if (!t) return;
+          // First check: is this tap on a highlight? If yes, never open navigate modal
+          if (isTapOnHighlight(t.clientX, t.clientY, doc)) return;
+          var duration = Date.now() - touchStartTime;
+          if (duration > 350) return;
+          var dx = t.clientX - touchStartX;
+          var dy = t.clientY - touchStartY;
+          if (dx * dx + dy * dy > MAX_TAP_MOVE_PX * MAX_TAP_MOVE_PX) return;
+          if (Date.now() - lastCenterTap < 400) return;
+          try {
+            var sel = doc.getSelection ? doc.getSelection() : null;
+            if (sel && (sel.toString() || '').trim().length > 0) return;
+            if (isLinkOrHighlight(touchStartTarget || e.target)) return;
+            var docWidth = (doc.documentElement && doc.documentElement.clientWidth) || (doc.body && doc.body.clientWidth) || window.innerWidth;
+            if (!inCenterZone(t.clientX, docWidth)) return;
+            lastCenterTap = Date.now();
+            postToRN({ type: 'llCenterTap' });
+          } catch (err) {}
+        }, { passive: true });
+        doc.__llCenterTap = true;
+      }
+      attachCenterTap(document);
       
       console.log('✅ LingoLeaf JS initialized');
     })();

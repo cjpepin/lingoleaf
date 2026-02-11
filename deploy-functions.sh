@@ -67,6 +67,9 @@ deploy_one() {
     fi
   fi
 
+  # migrate-user-data: no custom secrets needed — SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY
+  # are automatically injected by the Edge Functions runtime.
+
   echo "✅ Deployed: $name"
   echo ""
 }

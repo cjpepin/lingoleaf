@@ -26,7 +26,10 @@ export interface BookFilters {
   /** Title/author search (used in History; Library uses main app search) */
   search?: string;
   author?: string;
+  /** Single language (legacy); prefer languages when multiselect */
   language?: string;
+  /** Multiple source languages (multiselect); books matching any are returned */
+  languages?: string[];
   /** Array of subject values (multiselect); books matching any are returned */
   subjects?: string[];
   source?: string;
@@ -47,9 +50,16 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
     query = query.ilike('author', `%${author}%`);
   }
 
-  const language = filters?.language?.trim();
-  if (language) {
-    query = query.eq('source_lang', language);
+  const languages = filters?.languages?.length
+    ? filters.languages.map((l) => String(l).trim()).filter(Boolean)
+    : null;
+  if (languages && languages.length > 0) {
+    query = query.in('source_lang', languages);
+  } else {
+    const language = filters?.language?.trim();
+    if (language) {
+      query = query.eq('source_lang', language);
+    }
   }
 
   const subjects = filters?.subjects;
@@ -485,6 +495,9 @@ export async function upsertUserPromptState(
   return data;
 }
 
+/** Max words per study list (enforced in UI and recommended for performance). */
+export const MAX_STUDY_LIST_WORDS = 512;
+
 export async function createStudyWord(word: Omit<StudyWord, 'id' | 'created_at'>): Promise<StudyWord> {
   const { data, error } = await supabase
     .from('study_words')
@@ -747,6 +760,18 @@ export async function setUserBookReading(userId: string, bookId: string): Promis
   return data;
 }
 
+/** Fetch book_id and last_read_at for all user_books (for auto-remove downloads). */
+export async function fetchUserBooksLastRead(
+  userId: string
+): Promise<Array<{ book_id: string; last_read_at: string | null }>> {
+  const { data, error } = await supabase
+    .from('user_books')
+    .select('book_id, last_read_at')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function addUserBookHighlight(userId: string, bookId: string, highlight: UserBookHighlight): Promise<UserBook> {
   const existing = await fetchUserBook(userId, bookId);
   const prev = existing?.highlights ?? [];
@@ -801,9 +826,16 @@ export async function fetchHistoryBooks(userId: string, filters?: BookFilters): 
     query = query.ilike('author', `%${author}%`);
   }
 
-  const language = filters?.language?.trim();
-  if (language) {
-    query = query.eq('source_lang', language);
+  const languages = filters?.languages?.length
+    ? filters.languages.map((l) => String(l).trim()).filter(Boolean)
+    : null;
+  if (languages && languages.length > 0) {
+    query = query.in('source_lang', languages);
+  } else {
+    const language = filters?.language?.trim();
+    if (language) {
+      query = query.eq('source_lang', language);
+    }
   }
 
   const subjects = filters?.subjects;

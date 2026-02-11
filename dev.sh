@@ -36,9 +36,13 @@ case $PLATFORM in
     echo "📱 Building iOS..."
     if [ "$CLEAN" = "clean" ]; then
       echo "🧹 Cleaning build artifacts..."
-      rm -rf ios/build
-      rm -rf ~/Library/Developer/Xcode/DerivedData/lingoleaf-*
-      cd ios && xcodebuild clean -workspace lingoleaf.xcworkspace -scheme lingoleaf && cd ..
+      # Clear Xcode cache only; do not remove ios/build or run xcodebuild clean, or
+      # ReactCodegen outputs (rnscreens, safeareacontext, etc.) are lost and the next
+      # build fails with "Build input file cannot be found".
+      rm -rf ~/Library/Developer/Xcode/DerivedData/LingoLeaf-*
+      echo "📦 Re-running pod install..."
+      (cd ios && export LANG=en_US.UTF-8 && pod install)
+      echo "💡 If the build fails with missing codegen files, run: ./dev.sh prebuild && ./dev.sh ios"
     fi
     export LANG=en_US.UTF-8
     npx expo run:ios

@@ -1,6 +1,7 @@
 /**
  * OnboardingModal
  * Guided step-by-step user journey for first-time users
+ * Steps 1-3: Language setup, Steps 4-6: Feature tour, Step 7: Terms
  */
 
 import React, { useState } from 'react';
@@ -19,6 +20,8 @@ import { colors, spacing, typography } from '@/theme';
 import { LANGUAGES } from '@/constants/languages';
 import { useTranslation } from '@/i18n/useTranslation';
 
+const TOTAL_STEPS = 7;
+
 interface Props {
   visible: boolean;
   onComplete: (data: {
@@ -28,14 +31,28 @@ interface Props {
   onSkip: () => void;
 }
 
+function DotIndicator({ current, total }: { current: number; total: number }) {
+  return (
+    <View style={styles.dots}>
+      {Array.from({ length: total }, (_, i) => (
+        <View
+          key={i}
+          style={[styles.dot, i + 1 === current && styles.dotActive]}
+        />
+      ))}
+    </View>
+  );
+}
+
 export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
   const t = useTranslation();
   const [step, setStep] = useState(1);
   const [nativeLang, setNativeLang] = useState('en');
   const [goalLangs, setGoalLangs] = useState<string[]>([]);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const handleNext = () => {
-    if (step < 4) {
+    if (step < TOTAL_STEPS) {
       setStep(step + 1);
     } else {
       onComplete({ nativeLang, goalLangs });
@@ -55,26 +72,33 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
   };
 
   const canProceed = () => {
-    if (step === 1) return true; // Welcome
-    if (step === 2) return nativeLang.length > 0; // Native language
-    if (step === 3) return goalLangs.length > 0; // Goal languages
-    if (step === 4) return true; // Tour
-    return false;
+    if (step === 2) return nativeLang.length > 0;
+    if (step === 3) return goalLangs.length > 0;
+    if (step === TOTAL_STEPS) return termsAccepted;
+    return true;
+  };
+
+  const getButtonLabel = () => {
+    if (step === TOTAL_STEPS) return t('onboarding.getStarted');
+    return 'Next';
   };
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.stepIndicator}>
-            Step {step} of 4
-          </Text>
-          <Pressable onPress={handleSkip}>
-            <Text style={styles.skipButton}>Skip</Text>
-          </Pressable>
+          <DotIndicator current={step} total={TOTAL_STEPS} />
+          {step !== TOTAL_STEPS ? (
+            <Pressable onPress={handleSkip}>
+              <Text style={styles.skipButton}>{t('tutorial.skip')}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.skipPlaceholder} />
+          )}
         </View>
 
         <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+          {/* Step 1: Welcome */}
           {step === 1 && (
             <View style={styles.stepContent}>
               <View style={styles.iconWrapper}>
@@ -88,6 +112,7 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
             </View>
           )}
 
+          {/* Step 2: Native language */}
           {step === 2 && (
             <View style={styles.stepContent}>
               <View style={styles.iconWrapper}>
@@ -121,10 +146,11 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
             </View>
           )}
 
+          {/* Step 3: Goal languages */}
           {step === 3 && (
             <View style={styles.stepContent}>
               <View style={styles.iconWrapper}>
-                <Feather name="target" size={48} color={colors.primary} />
+                <Feather name="book" size={48} color={colors.primary} />
               </View>
               <Text style={styles.title}>What language(s) do you want to learn?</Text>
               <Text style={styles.description}>
@@ -154,7 +180,71 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
             </View>
           )}
 
+          {/* Step 4: Feature - Read */}
           {step === 4 && (
+            <View style={styles.stepContent}>
+              <View style={styles.featureIconCircle}>
+                <Feather name="book-open" size={40} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>{t('onboarding.readTitle')}</Text>
+              <Text style={styles.description}>{t('onboarding.readDesc')}</Text>
+              <View style={styles.featureVisual}>
+                <View style={styles.miniCard}>
+                  <Feather name="download" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Offline reading</Text>
+                </View>
+                <View style={styles.miniCard}>
+                  <Feather name="globe" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Multiple languages</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Step 5: Feature - Translate */}
+          {step === 5 && (
+            <View style={styles.stepContent}>
+              <View style={styles.featureIconCircle}>
+                <Feather name="type" size={40} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>{t('onboarding.translateTitle')}</Text>
+              <Text style={styles.description}>{t('onboarding.translateDesc')}</Text>
+              <View style={styles.featureVisual}>
+                <View style={styles.miniCard}>
+                  <Feather name="edit-3" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Highlight words</Text>
+                </View>
+                <View style={styles.miniCard}>
+                  <Feather name="save" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Save to lists</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Step 6: Feature - Study */}
+          {step === 6 && (
+            <View style={styles.stepContent}>
+              <View style={styles.featureIconCircle}>
+                <Feather name="layers" size={40} color={colors.primary} />
+              </View>
+              <Text style={styles.title}>{t('onboarding.studyTitle')}</Text>
+              <Text style={styles.description}>{t('onboarding.studyDesc')}</Text>
+              <View style={styles.featureVisual}>
+                <View style={styles.miniCard}>
+                  <Feather name="repeat" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Spaced repetition</Text>
+                </View>
+                <View style={styles.miniCard}>
+                  <Feather name="trending-up" size={20} color={colors.textSecondary} />
+                  <Text style={styles.miniCardText}>Track progress</Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Step 7: Terms — user must accept to proceed */}
+          {step === 7 && (
             <View style={styles.stepContent}>
               <View style={styles.iconWrapper}>
                 <Feather name="check-circle" size={48} color={colors.primary} />
@@ -175,55 +265,13 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
                   <Text style={styles.linkText}>{t('onboarding.viewPrivacy')}</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.description}>
-                {t('flashcards.freeStudy')}
-              </Text>
-              <View style={styles.featureList}>
-                <View style={styles.featureItem}>
-                  <View style={styles.featureIcon}>
-                    <Feather name="book-open" size={24} color={colors.primary} />
-                  </View>
-                  <View style={styles.featureText}>
-                    <Text style={styles.featureTitle}>Browse Library</Text>
-                    <Text style={styles.featureDescription}>
-                      Discover books in your target languages
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.featureItem}>
-                  <View style={styles.featureIcon}>
-                    <Feather name="globe" size={24} color={colors.primary} />
-                  </View>
-                  <View style={styles.featureText}>
-                    <Text style={styles.featureTitle}>Instant Translation</Text>
-                    <Text style={styles.featureDescription}>
-                      Select any word while reading to translate it
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.featureItem}>
-                  <View style={styles.featureIcon}>
-                    <Feather name="edit-3" size={24} color={colors.primary} />
-                  </View>
-                  <View style={styles.featureText}>
-                    <Text style={styles.featureTitle}>Build Vocabulary</Text>
-                    <Text style={styles.featureDescription}>
-                      Save words and study them with flashcards
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.featureItem}>
-                  <View style={styles.featureIcon}>
-                    <Feather name="user" size={24} color={colors.primary} />
-                  </View>
-                  <View style={styles.featureText}>
-                    <Text style={styles.featureTitle}>Manage Profile</Text>
-                    <Text style={styles.featureDescription}>
-                      Update preferences and track your progress
-                    </Text>
-                  </View>
-                </View>
-              </View>
+              <Pressable
+                style={[styles.termsAcceptRow, termsAccepted && styles.termsAcceptRowChecked]}
+                onPress={() => setTermsAccepted((v) => !v)}
+              >
+                <Feather name={termsAccepted ? 'check-square' : 'square'} size={24} color={termsAccepted ? colors.primary : colors.textSecondary} />
+                <Text style={styles.termsAcceptText}>{t('onboarding.acceptTerms')}</Text>
+              </Pressable>
             </View>
           )}
         </ScrollView>
@@ -243,7 +291,7 @@ export function OnboardingModal({ visible, onComplete, onSkip }: Props) {
               disabled={!canProceed()}
             >
               <Text style={styles.buttonPrimaryText}>
-                {step === 4 ? t('onboarding.acceptAndContinue') : 'Next'}
+                {getButtonLabel()}
               </Text>
             </TouchableOpacity>
         </View>
@@ -265,15 +313,27 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: spacing.md,
   },
-  stepIndicator: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    fontWeight: '600',
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.border,
+  },
+  dotActive: {
+    backgroundColor: colors.primary,
+    width: 20,
   },
   skipButton: {
     ...typography.body,
     color: colors.primary,
     fontWeight: '600',
+  },
+  skipPlaceholder: {
+    minWidth: 44,
   },
   content: {
     flex: 1,
@@ -284,8 +344,18 @@ const styles = StyleSheet.create({
   },
   stepContent: {
     alignItems: 'center',
+    paddingTop: spacing.xl,
   },
   iconWrapper: {
+    marginBottom: spacing.lg,
+  },
+  featureIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.lg,
   },
   title: {
@@ -299,6 +369,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.xl,
+    lineHeight: 22,
+  },
+  featureVisual: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.sm,
+  },
+  miniCard: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  miniCardText: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   languageGrid: {
     flexDirection: 'row',
@@ -326,35 +417,29 @@ const styles = StyleSheet.create({
     color: colors.surface,
     fontWeight: '600',
   },
-  featureList: {
-    width: '100%',
-    gap: spacing.lg,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  featureIcon: {
-    width: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  featureText: {
-    flex: 1,
-  },
-  featureTitle: {
-    ...typography.h3,
-    color: colors.text,
-    marginBottom: spacing.xs / 2,
-  },
-  featureDescription: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
   termsLinks: {
     gap: spacing.sm,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  termsAcceptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignSelf: 'stretch',
+  },
+  termsAcceptRowChecked: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '10',
+  },
+  termsAcceptText: {
+    ...typography.body,
+    color: colors.text,
+    flex: 1,
   },
   linkText: {
     ...typography.bodySmall,
@@ -398,4 +483,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

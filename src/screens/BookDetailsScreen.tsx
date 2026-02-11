@@ -9,14 +9,15 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity } from 'react-native';
+import * as FileSystem from 'expo-file-system';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import type { Book } from '@/supabase/types';
 import { fetchBook, fetchUserBook, saveBookForLater, setUserBookReading } from '@/supabase/queries';
 import { useAuthStore } from '@/state/useAuthStore';
-import { downloadBook, downloadExternalBook, getSignedUrl } from '@/supabase/storage';
+import { downloadBook, downloadExternalBook, getSignedUrl, getLocalBookPath, removeBookDownload } from '@/supabase/storage';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { ensureBookCoverFromCache } from '@/utils/epubCover';
@@ -40,6 +41,8 @@ export default function BookDetailsScreen() {
   const [coverUri, setCoverUri] = useState<string | null>(null);
   const [userBookStatus, setUserBookStatus] = useState<'reading' | 'saved_for_later' | 'completed' | null>(null);
   const [savingForLater, setSavingForLater] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
+  const [removingDownload, setRemovingDownload] = useState(false);
 
   const subtitle = useMemo(() => {
     const bits: string[] = [];
@@ -112,6 +115,29 @@ export default function BookDetailsScreen() {
     };
   }, [book]);
 
+  useEffect(() => {
+    if (!bookId) return;
+    let cancelled = false;
+    FileSystem.getInfoAsync(getLocalBookPath(bookId)).then((info) => {
+      if (!cancelled) setIsDownloaded(info.exists && (info.size ?? 0) > 0);
+    });
+    return () => { cancelled = true; };
+  }, [bookId]);
+
+  const handleRemoveDownload = useCallback(async () => {
+    if (!book?.id) return;
+    setRemovingDownload(true);
+    try {
+      await removeBookDownload(book.id);
+      setIsDownloaded(false);
+    } catch (e) {
+      logger.error('Failed to remove download', e);
+      Alert.alert(t('common.error'), t('bookDetails.removeDownloadFailed'));
+    } finally {
+      setRemovingDownload(false);
+    }
+  }, [book?.id, t]);
+
   const handleReadNow = useCallback(async () => {
     if (!book || !user) return;
     setOpening(true);
@@ -180,13 +206,13 @@ export default function BookDetailsScreen() {
         <Text style={styles.title}>{book.title}</Text>
         {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
 
+        <View style={styles.adSection}>
+          <AdBanner />
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('bookDetails.about')}</Text>
           <Text style={styles.body}>{description ?? t('bookDetails.noDescription')}</Text>
-        </View>
-
-        <View style={styles.adSection}>
-          <AdBanner />
         </View>
       </ScrollView>
 
@@ -203,7 +229,7 @@ export default function BookDetailsScreen() {
           disabled={opening}
           variant="primary"
         />
-        {user && userBookStatus !== 'saved_for_later' && (
+        {user && userBookStatus == null && (
           <Button
             label={savingForLater ? '…' : t('bookDetails.saveForLater')}
             onPress={handleSaveForLater}
@@ -211,6 +237,17 @@ export default function BookDetailsScreen() {
             variant="outline"
             style={styles.saveForLaterButton}
           />
+        )}
+        {isDownloaded && (
+          <TouchableOpacity
+            style={styles.removeDownloadButton}
+            onPress={handleRemoveDownload}
+            disabled={removingDownload}
+          >
+            <Text style={styles.removeDownloadText}>
+              {removingDownload ? '…' : t('bookDetails.removeDownload')}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
@@ -288,6 +325,15 @@ const styles = StyleSheet.create({
   },
   saveForLaterButton: {
     marginTop: spacing.xs,
+  },
+  removeDownloadButton: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  removeDownloadText: {
+    ...typography.bodySmall,
+    color: colors.textSecondary,
   },
 });
 

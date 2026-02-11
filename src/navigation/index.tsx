@@ -125,6 +125,7 @@ export function RootNavigator() {
           },
           headerTintColor: colors.primary,
           headerShadowVisible: false,
+          headerBackTitleVisible: false,
           presentation: 'card',
         }}
       >
@@ -137,10 +138,7 @@ export function RootNavigator() {
         <Stack.Screen
           name="Reader"
           component={ReaderScreen}
-          options={{
-            title: '',
-            headerBackTitle: t('nav.library'),
-          }}
+          options={{ headerShown: false }}
         />
         <Stack.Screen
           name="BookDetails"
@@ -152,7 +150,7 @@ export function RootNavigator() {
         />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: t('nav.settings') }} />
         <Stack.Screen name="Admin" component={AdminScreen} options={{ title: t('nav.adminPanel') }} />
-        <Stack.Screen name="Flashcards" component={FlashcardsScreen} options={{ title: t('nav.flashcards') }} />
+        <Stack.Screen name="Flashcards" component={FlashcardsScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

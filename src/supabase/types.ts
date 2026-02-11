@@ -97,6 +97,8 @@ export interface UserSettings {
    */
   flashcard_preferred_study_method?: 'spaced' | 'free';
   app_lang?: string;
+  /** Remove local book files if not read in this many days; 0 = never. Default 14. */
+  auto_remove_downloads_after_days?: number;
   created_at: string;
   updated_at: string;
 }

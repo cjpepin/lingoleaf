@@ -30,6 +30,7 @@ import {
   createVocabList,
   deleteStudyWord,
   deleteVocabList,
+  MAX_STUDY_LIST_WORDS,
   moveStudyWordToList,
   renameVocabList,
   touchVocabList,
@@ -42,6 +43,8 @@ import { VocabListPickerModal } from '@/components/VocabListPickerModal';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { Button } from '@/components/ui/Button';
+import { StudyTutorial } from '@/components/StudyTutorial';
+import { AdBanner } from '@/components/ads/AdBanner';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -207,6 +210,11 @@ export default function StudyScreen() {
 
   const handleMoveWord = useCallback(
     async (word: StudyWord, toListId: string) => {
+      const targetCount = studyStore.counts[toListId] ?? 0;
+      if (targetCount >= MAX_STUDY_LIST_WORDS) {
+        Alert.alert(t('common.error'), t('study.listFull'));
+        return;
+      }
       try {
         const updated = await moveStudyWordToList(word.id, toListId);
         touchVocabList(toListId).catch(() => {});
@@ -424,6 +432,11 @@ export default function StudyScreen() {
           contentContainerStyle={styles.list}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
           ListEmptyComponent={<EmptyState message={t('study.noLists')} />}
+          ListFooterComponent={
+            <View style={styles.studyListFooterAd}>
+              <AdBanner />
+            </View>
+          }
           renderItem={({ item }) => {
             const c = counts[item.id] ?? 0;
             return (
@@ -459,6 +472,7 @@ export default function StudyScreen() {
         />
 
         {manageModals}
+        <StudyTutorial ready={!loading && Boolean(user)} />
       </View>
     );
   }
@@ -577,6 +591,10 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     paddingBottom: spacing.lg,
   },
+  studyListFooterAd: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
   disabled: {
     opacity: 0.5,
   },
@@ -613,6 +631,8 @@ const styles = StyleSheet.create({
     marginLeft: spacing.md,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    minHeight: 40,
     borderRadius: 999,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -671,7 +691,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   inlineStudyButton: {
-    borderRadius: 999,
+    borderRadius: 10,
     backgroundColor: colors.primary,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,

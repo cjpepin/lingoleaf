@@ -6,6 +6,10 @@ Format: `[Date] [Type] Description (Files affected)`
 
 ## 2026-02-01
 
+- [2026-02-01] [REFACTOR] Profile: move all settings onto profile page — App language, Account, Admin, Legal in card-style sections; remove Settings button (`src/screens/ProfileScreen.tsx`)
+- [2026-02-01] [FIX] TranslateSheet list picker: keep new-list input visible above keyboard — keyboardVerticalOffset 220 when input shown, pickerCardWithInput minHeight (`src/components/TranslateSheet.tsx`)
+- [2026-02-01] [FIX] Profile: skip first auto-save run on load; assign save ref after handleSave to fix declaration order (`src/screens/ProfileScreen.tsx`)
+- [2026-02-01] [FEAT] Reader: Kindle-style zoom-out navigation — center tap scales reader to 55% and reveals navigation panel with horizontal page strip, scrub slider, and chapters/highlights tabs; replaces Navigate button and BookNavigationSheet (`src/components/ReaderNavigationOverlay.tsx`, `src/screens/ReaderScreen.tsx`, `src/components/ReaderOverlays.tsx`, `src/i18n/translations.ts`)
 - [2026-02-01] [FEAT] Profile: i18n for language level labels (knownLevel, goalLevel) in es, de, fr, ru (`src/i18n/translations.ts`)
 - [2026-02-01] [FIX] Flashcards: Prev button no longer disabled on first card so users can wrap to last card (`src/screens/FlashcardsScreen.tsx`)
 - [2026-02-01] [STYLE] Header settings/menu icons and sliders: opaque background and fixed-height slider containers for consistent look on liquid glass iOS (`src/screens/ReaderScreen.tsx`, `src/screens/FlashcardsScreen.tsx`, `src/components/ReaderSettingsModal.tsx`, `src/components/FlashcardSettingsModal.tsx`)

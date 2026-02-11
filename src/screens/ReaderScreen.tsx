@@ -1,10 +1,12 @@
 /**
  * ReaderScreen
- * EPUB reader with selection, highlight, and translation
+ * EPUB reader with selection, highlight, and translation.
+ * TODO: consider non-intrusive reader ads (e.g. between chapters) without harming reading experience.
  */
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { View, StyleSheet, Alert, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Alert, Pressable, Animated, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
@@ -14,8 +16,8 @@ import { useFileSystem } from '@epubjs-react-native/expo-file-system';
 import * as FileSystem from 'expo-file-system';
 import { SelectionToolbar } from '@/components/SelectionToolbar';
 import { TranslateSheet } from '@/components/TranslateSheet';
-import { BookNavigationSheet } from '@/components/BookNavigationSheet';
 import { ReaderOverlays } from '@/components/ReaderOverlays';
+import { ReaderNavigationOverlay } from '@/components/ReaderNavigationOverlay';
 import { ReaderEdgeTapOverlay, READER_EDGE_WIDTH } from '@/components/ReaderEdgeTapOverlay';
 import { UpgradeAccountPrompt } from '@/components/UpgradeAccountPrompt';
 import { Snackbar } from '@/components/Snackbar';
@@ -26,6 +28,7 @@ import { useStudyStore } from '@/state/useStudyStore';
 import {
   fetchBook,
   createStudyWord,
+  MAX_STUDY_LIST_WORDS,
   translateText,
   fetchUserBook,
   upsertUserBook,
@@ -48,6 +51,7 @@ import { addReadMinutes, incrementReadingSession } from '@/utils/readingEngageme
 import { getCachedLastCfi, setCachedLastCfi, setCachedLastPosition } from '@/utils/readerProgressCache';
 import { READER_INJECTED_JAVASCRIPT } from '@/reader/readerInjectedJavascript';
 import { READER_THEME } from '@/reader/readerTheme';
+import { ReaderTutorial } from '@/components/ReaderTutorial';
 import { useReaderStore } from '@/state/useReaderStore';
 import { useReaderSettingsStore } from '@/state/useReaderSettingsStore';
 import { ReaderSettingsModal } from '@/components/ReaderSettingsModal';
@@ -79,6 +83,7 @@ export default function ReaderScreen() {
   const t = useTranslation();
   const route = useRoute<ReaderRouteProp>();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { bookId, localPath } = route.params;
   const { user, isGuest } = useAuthStore();
   const { targetLang, loadSettings } = useSettingsStore();
@@ -98,8 +103,9 @@ export default function ReaderScreen() {
   const [listPickerVisible, setListPickerVisible] = useState(false);
   const [highlights, setHighlights] = useState<UserBookHighlight[]>([]);
   const [highlightsEnabled, setHighlightsEnabled] = useState(true);
-  const [navVisible, setNavVisible] = useState(false);
-  const [navInitialTab, setNavInitialTab] = useState<'navigate' | 'highlights'>('navigate');
+  const [navigationMode, setNavigationMode] = useState(false);
+  const [readerHeight, setReaderHeight] = useState(0);
+  const [currentSectionHref, setCurrentSectionHref] = useState<string | null>(null);
   const [lastTouchPosition, setLastTouchPosition] = useState<{ x: number; y: number } | null>(null);
   const [initialLocation, setInitialLocation] = useState<string | undefined>(undefined);
   const [progressLoaded, setProgressLoaded] = useState(false);
@@ -151,11 +157,36 @@ export default function ReaderScreen() {
     return out;
   }, [toc]);
 
+  // Derive current chapter label from the section href and TOC
+  const currentChapterLabel = useMemo(() => {
+    if (!currentSectionHref || tocItems.length === 0) return null;
+    const norm = (s: string) => {
+      let out = s.split('#')[0];
+      out = out.replace(/^(OEBPS|OPS)\//i, '');
+      out = out.replace(/^\/+/, '');
+      out = out.replace(/^\.\/+/, '');
+      return out;
+    };
+    const sectionNorm = norm(currentSectionHref);
+    let match: { label: string } | null = null;
+    for (const item of tocItems) {
+      if (norm(item.href) === sectionNorm) {
+        match = item;
+      }
+    }
+    return match?.label?.trim() ?? null;
+  }, [currentSectionHref, tocItems]);
+
   useEffect(() => {
     if (!readerReady) return;
     if (!tocItems || tocItems.length === 0) return;
     logger.info('📚 TOC loaded', { bookId, count: tocItems.length, sample: tocItems.slice(0, 8) });
   }, [bookId, readerReady, tocItems]);
+
+  // Navigation mode animation
+  const NAV_READER_SCALE = 0.55;
+  const navProgress = useRef(new Animated.Value(0)).current;
+  const animatingRef = useRef(false);
 
   // Track when selection just happened to prevent immediate clearing
   const selectionJustMade = useRef(false);
@@ -168,6 +199,8 @@ export default function ReaderScreen() {
   const resumeGuardRef = useRef<{ expectedCfi: string; expectedIndex0: number | null; expiresAt: number } | null>(null);
   const previousNavRef = useRef<{ cfi: string; page: number | null } | null>(null);
   const appliedInitialCfiRef = useRef<string | null>(null);
+  const waitingForResumeLocationRef = useRef(false);
+  const [resumeConfirmed, setResumeConfirmed] = useState(false);
 
   // Reset per-book reader state so we never show stale page totals from the previous book.
   useEffect(() => {
@@ -184,13 +217,17 @@ export default function ReaderScreen() {
     setTranslateError(null);
     setTranslating(false);
 
-    setNavVisible(false);
-    setNavInitialTab('navigate');
+    setNavigationMode(false);
+    navProgress.setValue(0);
+    animatingRef.current = false;
+    setCurrentSectionHref(null);
 
     setInitialLocation(undefined);
     setReaderReady(false);
     setProgressLoaded(false);
     appliedInitialCfiRef.current = null;
+    waitingForResumeLocationRef.current = false;
+    setResumeConfirmed(false);
 
     // Reset overlay/progress UI (page counter)
     setCurrentPage(0);
@@ -202,6 +239,8 @@ export default function ReaderScreen() {
   useEffect(() => {
     if (user) loadSettings(user.id);
   }, [user, loadSettings]);
+
+  // (native header is hidden — we render our own custom header bar below)
 
   // Run once per book: verify file and load book data. Do not depend on t (useTranslation) or
   // the effect re-runs every render and triggers loadBookData -> setOptions -> re-render loop.
@@ -267,28 +306,30 @@ export default function ReaderScreen() {
       lastSavedCfi.current = local.cfi;
       logger.info('📌 Loaded local reading progress', { bookId, hasLocal: true });
 
-      // Hydrate page counter immediately from local cache (best-effort).
+      // Hydrate from cache so the page indicator is useful immediately.
       const hasTotal =
         typeof local.totalLocations === 'number' && Number.isFinite(local.totalLocations) && local.totalLocations > 0;
-      const hasIndex = typeof local.locationIndex0 === 'number' && Number.isFinite(local.locationIndex0) && local.locationIndex0 >= 0;
-      if (typeof local.totalLocations === 'number' && Number.isFinite(local.totalLocations) && local.totalLocations > 0) {
+      if (hasTotal && typeof local.totalLocations === 'number') {
         setTotalPages(Math.floor(local.totalLocations));
       }
-      if (typeof local.locationIndex0 === 'number' && Number.isFinite(local.locationIndex0) && local.locationIndex0 >= 0) {
-        logger.info('setCurrentPage 1');
-        setCurrentPage(Math.floor(local.locationIndex0) + 1);
-      }
 
-      // Guard against the common flicker where the reader briefly reports page 1 before jumping to the resume CFI.
+      const hasIndex =
+        typeof local.locationIndex0 === 'number' && Number.isFinite(local.locationIndex0) && local.locationIndex0 >= 0;
       resumeGuardRef.current = {
         expectedCfi: local.cfi,
         expectedIndex0: hasIndex ? Math.floor(local.locationIndex0 as number) : null,
         expiresAt: Date.now() + 1500,
       };
 
-      // If we have both page + total cached, we can render immediately without a loading state.
-      // Otherwise, keep the spinner until `onLocationChange` fills in missing data.
-      setPageLoading(!(hasTotal && hasIndex));
+      if (hasIndex) {
+        // Show the cached page number immediately; resume guard + overlay prevent visible mismatches.
+        setCurrentPage(Math.floor(local.locationIndex0 as number) + 1);
+        // If we also know total locations, we can hide the loading spinner.
+        setPageLoading(!hasTotal);
+      } else {
+        setCurrentPage(0);
+        setPageLoading(true);
+      }
     }
     if (!local?.cfi) {
       // No local cache. Keep currentPage at 0 (loading state) until we know more.
@@ -467,21 +508,6 @@ export default function ReaderScreen() {
     try {
       const bookData = await fetchBook(bookId);
       setBook(bookData);
-      navigation.setOptions({
-        title: bookData.title,
-        headerRight: () => (
-          <Pressable
-            onPress={() => setReaderSettingsVisible(true)}
-            hitSlop={12}
-            style={({ pressed }) => [
-              styles.headerSettingsButton,
-              { opacity: pressed ? 0.6 : 1 },
-            ]}
-          >
-            <Feather name="settings" size={22} color={colors.text} />
-          </Pressable>
-        ),
-      });
     } catch (error) {
       logger.error('Failed to load book data:', error);
       Alert.alert('Error', 'Failed to load book');
@@ -607,7 +633,6 @@ export default function ReaderScreen() {
     try {
       goToLocation?.(cfiRange);
     } catch (e) {}
-    setNavVisible(false);
   }, [goToLocation]);
 
   const handleDeleteHighlight = useCallback(async (h: UserBookHighlight) => {
@@ -734,6 +759,11 @@ export default function ReaderScreen() {
       setSnackbar({ visible: true, message: t('msg.chooseList'), type: 'error' });
       return;
     }
+    const listCount = studyStore.counts[selectedListId] ?? 0;
+    if (listCount >= MAX_STUDY_LIST_WORDS) {
+      setSnackbar({ visible: true, message: t('study.listFull'), type: 'error' });
+      return;
+    }
 
     try {
       // Always highlight when saving to list (when we have CFI), so the saved word is visible in the book. Skip if this CFI already has a highlight (e.g. opened from highlight popup).
@@ -833,7 +863,7 @@ export default function ReaderScreen() {
 
   const handleTapLeftEdge = useCallback(() => {
     if (selection || showTranslateSheet || selectionJustMade.current) return;
-    if (navVisible) return;
+    if (navigationMode) return;
     if (atStart) return;
     tapNavJustMade.current = true;
     setTimeout(() => {
@@ -842,11 +872,11 @@ export default function ReaderScreen() {
     logger.info('👈 Tap left edge');
     if (totalPages > 0) setPageLoading(false);
     goPrevious?.();
-  }, [atStart, goPrevious, navVisible, selection, setPageLoading, showTranslateSheet, totalPages]);
+  }, [atStart, goPrevious, navigationMode, selection, setPageLoading, showTranslateSheet, totalPages]);
 
   const handleTapRightEdge = useCallback(() => {
     if (selection || showTranslateSheet || selectionJustMade.current) return;
-    if (navVisible) return;
+    if (navigationMode) return;
     if (atEnd) return;
     tapNavJustMade.current = true;
     setTimeout(() => {
@@ -855,13 +885,27 @@ export default function ReaderScreen() {
     logger.info('👉 Tap right edge');
     if (totalPages > 0) setPageLoading(false);
     goNext?.();
-  }, [atEnd, goNext, navVisible, selection, setPageLoading, showTranslateSheet, totalPages]);
+  }, [atEnd, goNext, navigationMode, selection, setPageLoading, showTranslateSheet, totalPages]);
+
+  const toggleNavigationModeRef = useRef<() => void>(() => {});
+  const pendingCenterTapNav = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastHighlightTapAt = useRef(0);
 
   const handleReaderWebViewMessage = useCallback((event: any) => {
     // This only receives NON-internal events from the epubjs webview template.
     // We use it as a "selection debug + fallback" bridge.
     try {
       const type = event?.type;
+      if (type === 'llCenterTap') {
+        // Defer nav open so llHighlightClicked can cancel it when user tapped a highlight
+        if (pendingCenterTapNav.current) clearTimeout(pendingCenterTapNav.current);
+        pendingCenterTapNav.current = setTimeout(() => {
+          pendingCenterTapNav.current = null;
+          if (Date.now() - lastHighlightTapAt.current < 400) return;
+          if (!selection && !showTranslateSheet) toggleNavigationModeRef.current();
+        }, 80);
+        return;
+      }
       if (type === 'llNavDebug') {
         logger.info('🧭 llNavDebug (web)', event);
         return;
@@ -877,6 +921,11 @@ export default function ReaderScreen() {
         return;
       }
       if (type === 'llHighlightClicked') {
+        if (pendingCenterTapNav.current) {
+          clearTimeout(pendingCenterTapNav.current);
+          pendingCenterTapNav.current = null;
+        }
+        lastHighlightTapAt.current = Date.now();
         const cfi = event?.cfi;
         const highlightId = event?.highlightId;
         const rect = event?.rect;
@@ -923,7 +972,7 @@ export default function ReaderScreen() {
     } catch (error) {
       logger.error('Failed handling onWebViewMessage', error);
     }
-  }, [highlights, t]);
+  }, [highlights, selection, showTranslateSheet, t]);
 
   const readerTheme = READER_THEME;
   const injectedJavascript = READER_INJECTED_JAVASCRIPT;
@@ -948,6 +997,44 @@ export default function ReaderScreen() {
     Alert.alert(t('reader.readerErrorTitle'), t('reader.failedToDisplayBook'));
   }, [t]);
 
+  // ── Navigation mode animation ──
+  const dismissNavigationMode = useCallback(() => {
+    if (animatingRef.current || !navigationMode) return;
+    animatingRef.current = true;
+    Animated.spring(navProgress, {
+      toValue: 0,
+      useNativeDriver: false,
+      tension: 65,
+      friction: 10,
+    }).start(() => {
+      setNavigationMode(false);
+      animatingRef.current = false;
+    });
+  }, [navigationMode, navProgress]);
+
+  const toggleNavigationMode = useCallback(() => {
+    if (animatingRef.current) return;
+    if (navigationMode) {
+      dismissNavigationMode();
+      return;
+    }
+    animatingRef.current = true;
+    setNavigationMode(true);
+    // Defer spring so initial layout completes and open animation is smooth
+    requestAnimationFrame(() => {
+      Animated.spring(navProgress, {
+        toValue: 1,
+        useNativeDriver: false,
+        tension: 72,
+        friction: 12,
+      }).start(() => {
+        animatingRef.current = false;
+      });
+    });
+  }, [dismissNavigationMode, navigationMode, navProgress]);
+
+  toggleNavigationModeRef.current = toggleNavigationMode;
+
   const handleReaderPress = useCallback(() => {
     // Don't clear if selection was just made (prevents race condition)
     if (selectionJustMade.current || tapNavJustMade.current) {
@@ -962,23 +1049,18 @@ export default function ReaderScreen() {
 
   const handleReaderSingleTap = useCallback(() => {
     logger.info('📱 Single tap detected');
-    // Don't clear if selection was just made (prevents race condition)
     if (selectionJustMade.current || tapNavJustMade.current) {
       logger.debug('Single tap - ignoring, selection just made');
       return;
     }
-    // If nothing is selected and no sheet is open, treat center tap as "toggle nav"
     if (!selection && !showTranslateSheet) {
-      setNavVisible((prev) => !prev);
-      logger.debug('Single tap - toggling navigation', { next: !navVisible });
+      toggleNavigationMode();
       return;
     }
-
-    // Otherwise clear selection when tapping
     logger.debug('Single tap', selection ? '- clearing selection' : '- no selection');
     setSelection(null);
     setShowTranslateSheet(false);
-  }, [navVisible, selection, showTranslateSheet]);
+  }, [selection, showTranslateSheet, toggleNavigationMode]);
 
   const handleReaderLongPress = useCallback(() => {
     logger.info('📱 Long press detected');
@@ -1036,6 +1118,10 @@ export default function ReaderScreen() {
     progress: number,
     currentSection: Section | null
   ) => {
+    if (waitingForResumeLocationRef.current) {
+      waitingForResumeLocationRef.current = false;
+      setResumeConfirmed(true);
+    }
     logger.info('Location change', {
       totalLocs,
       progress,
@@ -1099,6 +1185,11 @@ export default function ReaderScreen() {
 
     if (cfi) {
       scheduleSaveReadingProgress(cfi);
+    }
+
+    // Track current section for chapter label
+    if (currentSection?.href) {
+      setCurrentSectionHref(currentSection.href);
     }
 
     logger.debug('📄 Location changed', {
@@ -1257,8 +1348,10 @@ export default function ReaderScreen() {
           `return true;` +
         `})()`
       );
-
-      setNavVisible(false);
+      // Re-inject so tap-to-open works on the new section
+      setTimeout(() => {
+        injectJavascript?.(READER_INJECTED_JAVASCRIPT);
+      }, 700);
     },
     [currentLocation?.start?.cfi, currentLocation?.start?.href, currentPage, goToLocation, injectJavascript]
   );
@@ -1312,6 +1405,10 @@ export default function ReaderScreen() {
           `return true;` +
         `})()`
       );
+      // Re-inject so tap-to-open works on the new page (epub.js may replace iframe content)
+      setTimeout(() => {
+        injectJavascript?.(READER_INJECTED_JAVASCRIPT);
+      }, 700);
     },
     [currentLocation?.start?.cfi, currentPage, injectJavascript, setCurrentPage, setPageLoading, totalPages]
   );
@@ -1345,16 +1442,24 @@ export default function ReaderScreen() {
     goToLocation(pending);
   }, [goToLocation, readerReady]);
 
+  // When not resuming (no initialLocation), don't show resume overlay.
+  useEffect(() => {
+    if (progressLoaded && !initialLocation) setResumeConfirmed(true);
+  }, [progressLoaded, initialLocation]);
+
   // Force displayed page to match cached initialLocation when reader is ready (fixes page counter correct but content on cover).
   useEffect(() => {
     if (!readerReady || !initialLocation || !goToLocation) return;
     if (appliedInitialCfiRef.current === initialLocation) return;
     appliedInitialCfiRef.current = initialLocation;
+    waitingForResumeLocationRef.current = true;
     const t = setTimeout(() => {
       try {
         goToLocation(initialLocation);
       } catch (e) {
         appliedInitialCfiRef.current = null;
+        waitingForResumeLocationRef.current = false;
+        setResumeConfirmed(true);
       }
     }, 100);
     return () => clearTimeout(t);
@@ -1369,16 +1474,59 @@ export default function ReaderScreen() {
     ? { x: readerLayout.x + READER_EDGE_WIDTH, y: readerLayout.y + spacing.lg }
     : { x: READER_EDGE_WIDTH, y: spacing.lg };
 
+  // Animated styles driven by navProgress (0→1)
+  const readerScale = navProgress.interpolate({ inputRange: [0, 1], outputRange: [1, NAV_READER_SCALE] });
+  const readerTranslateY = navProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -(readerHeight * (1 - NAV_READER_SCALE) / 2)],
+  });
+  const panelTranslateY = navProgress.interpolate({ inputRange: [0, 1], outputRange: [400, 0] });
+  const panelOpacity = navProgress.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.7, 1] });
+  const dimOpacity = navProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] });
+
   return (
     <View style={styles.container}>
-      <View
-        style={styles.readerWrapper}
+      {/* Custom header bar — replaces native header to avoid iOS pill styling */}
+      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          style={({ pressed }) => [styles.headerBackButton, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Feather name="chevron-left" size={24} color={colors.primary} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {book?.title ?? ''}
+        </Text>
+        <Pressable
+          onPress={() => setReaderSettingsVisible(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.headerSettingsButton, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Feather name="more-vertical" size={22} color={colors.text} />
+        </Pressable>
+      </View>
+
+      <Animated.View
+        style={[
+          styles.readerWrapper,
+          {
+            transform: [{ scale: readerScale }, { translateY: readerTranslateY }],
+          },
+        ]}
+        pointerEvents={navigationMode ? 'none' : 'auto'}
         onLayout={(e) => {
-          const { x, y } = e.nativeEvent.layout;
+          const { x, y, height } = e.nativeEvent.layout;
           setReaderLayout({ x, y });
+          setReaderHeight(height);
         }}
       >
         <ReaderEdgeTapOverlay onTapLeft={handleTapLeftEdge} onTapRight={handleTapRightEdge}>
+          {initialLocation && readerReady && !resumeConfirmed ? (
+            <View style={styles.resumeOverlay}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : null}
           <Reader
             src={localPath}
             fileSystem={useFileSystem}
@@ -1412,17 +1560,15 @@ export default function ReaderScreen() {
             onWebViewMessage={handleReaderWebViewMessage}
           />
         </ReaderEdgeTapOverlay>
-      </View>
-      <ReaderOverlays
-        currentPage={currentPage}
-        totalPages={totalPages}
-        pageLoading={pageLoading}
-        chapterLeftPct={chapterLeftPct}
-        onPressNavigate={() => {
-          setNavInitialTab('navigate');
-          setNavVisible(true);
-        }}
-      />
+        {!navigationMode && (
+          <ReaderOverlays
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageLoading={pageLoading}
+            chapterLeftPct={chapterLeftPct}
+          />
+        )}
+      </Animated.View>
       {/* Custom Selection Toolbar - only show after selection is committed (user lifted finger) */}
       {selection?.committed && !showTranslateSheet && (
         <SelectionToolbar
@@ -1459,26 +1605,40 @@ export default function ReaderScreen() {
         onSave={handleSaveStudyWord}
         onClose={handleCloseSheet}
       />
-      <BookNavigationSheet
-        visible={navVisible}
-        initialTab={navInitialTab}
-            currentPage={currentPage}
-            totalPages={totalPages}
-        tocItems={tocItems}
-            canGoBack={Boolean(previousNavRef.current?.cfi)}
-        onClose={() => setNavVisible(false)}
-        onGoToHref={handleGoToHref}
-            onGoToPage={handleGoToPage}
-            onGoBack={handleGoBack}
-        highlights={highlights}
-        onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
-        onDeleteHighlight={(h) => {
-          Alert.alert(t('reader.deleteHighlightTitle'), t('reader.deleteHighlightMessage'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteHighlight(h) },
-          ]);
-        }}
-      />
+      {/* Kindle-style navigation mode */}
+      {navigationMode && (
+        <>
+          <Animated.View style={[styles.navDimOverlay, { opacity: dimOpacity }]}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={dismissNavigationMode} />
+          </Animated.View>
+          <Animated.View
+            style={[
+              styles.navPanel,
+              { opacity: panelOpacity, transform: [{ translateY: panelTranslateY }] },
+            ]}
+          >
+            <ReaderNavigationOverlay
+              currentPage={currentPage}
+              totalPages={totalPages}
+              currentChapter={currentChapterLabel}
+              tocItems={tocItems}
+              highlights={highlights}
+              canGoBack={Boolean(previousNavRef.current?.cfi)}
+              onGoToPage={handleGoToPage}
+              onGoToHref={handleGoToHref}
+              onGoBack={handleGoBack}
+              onJumpToHighlight={(cfiRange) => handleJumpToHighlight(cfiRange)}
+              onDeleteHighlight={(h) => {
+                Alert.alert(t('reader.deleteHighlightTitle'), t('reader.deleteHighlightMessage'), [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('common.delete'), style: 'destructive', onPress: () => handleDeleteHighlight(h) },
+                ]);
+              }}
+              onClose={dismissNavigationMode}
+            />
+          </Animated.View>
+        </>
+      )}
       <UpgradeAccountPrompt
         visible={upgradePrompt.visible}
         onClose={upgradePrompt.close}
@@ -1511,6 +1671,7 @@ export default function ReaderScreen() {
         onDismiss={() => setSnackbar((s) => ({ ...s, visible: false }))}
         passThrough
       />
+      <ReaderTutorial />
     </View>
   );
 }
@@ -1521,21 +1682,71 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     overflow: 'hidden',
   },
-  headerSettingsButton: {
-    padding: spacing.sm,
-    marginRight: spacing.xs,
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  headerBackButton: {
+    width: 44,
+    height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 8,
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text,
+    marginHorizontal: spacing.xs,
+  },
+  headerSettingsButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   readerWrapper: {
     flex: 1,
     width: '100%',
     overflow: 'hidden',
-    // Reserve space for bottom overlays (e.g. Navigate button) so they don't cover text.
-    paddingBottom: spacing.xxl,
+    paddingBottom: spacing.lg,
     paddingTop: spacing.lg,
+  },
+  resumeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+  },
+  navDimOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    zIndex: 10,
+  },
+  navPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
+    backgroundColor: colors.background,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    paddingTop: spacing.md,
+    zIndex: 11,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
   notice: {
     margin: 20,

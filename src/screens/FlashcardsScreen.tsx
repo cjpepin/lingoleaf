@@ -23,6 +23,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useStudyStore } from '@/state/useStudyStore';
 import {
@@ -74,6 +75,7 @@ function formatIntervalLabel(minutes: number): string {
 export default function FlashcardsScreen() {
   const route = useRoute<FlashcardsRouteProp>();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
   const studyStore = useStudyStore();
   const loadSettings = useSettingsStore((s) => s.loadSettings);
@@ -114,22 +116,7 @@ export default function FlashcardsScreen() {
   );
   const current = displayWords[index] ?? null;
 
-  useEffect(() => {
-    navigation.setOptions({
-      title: listName || t('nav.flashcards'),
-      headerRight: () => (
-        <View style={styles.headerRightWrap}>
-          <Pressable
-            onPress={() => setSettingsVisible(true)}
-            hitSlop={8}
-            style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }, styles.headerSettingsButton]}
-          >
-            <Feather name="more-vertical" size={24} color={colors.primary} />
-          </Pressable>
-        </View>
-      ),
-    });
-  }, [listName, navigation, t]);
+  // (native header is hidden — we render our own custom header bar below)
 
   const loadQueue = useCallback(async (): Promise<StudyWord[]> => {
     if (!user) return [];
@@ -196,6 +183,13 @@ export default function FlashcardsScreen() {
         } else {
           const data = await fetchFlashcardQueueAll(user.id);
           setWords(data);
+        }
+        // Ensure stats are populated when resuming a spaced session so counts don't start at 0
+        try {
+          const newStats = await fetchFlashcardStats(user.id, listId);
+          setStats(newStats);
+        } catch (e) {
+          logger.error('Failed to load flashcard stats for resumed session', e);
         }
         setLoading(false);
         return;
@@ -694,7 +688,29 @@ export default function FlashcardsScreen() {
   });
 
   return (
-    <View style={styles.container}>
+    <View style={styles.screenContainer}>
+      {/* Custom header bar — replaces native header to avoid iOS pill styling */}
+      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
+        <Pressable
+          onPress={() => navigation.goBack()}
+          hitSlop={8}
+          style={({ pressed }) => [styles.headerBackButton, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Feather name="chevron-left" size={24} color={colors.primary} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {listName || t('nav.flashcards')}
+        </Text>
+        <Pressable
+          onPress={() => setSettingsVisible(true)}
+          hitSlop={8}
+          style={({ pressed }) => [styles.headerSettingsButton, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Feather name="more-vertical" size={22} color={colors.text} />
+        </Pressable>
+      </View>
+
+      <View style={styles.container}>
       <View style={styles.header}>
         {mode === 'spaced' && <Text style={styles.progress}>{progressText}</Text>}
         <Pressable style={styles.modeToggle} onPress={handleSwitchMode}>
@@ -868,24 +884,47 @@ export default function FlashcardsScreen() {
         onResetProgress={handleResetProgress}
       />
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.xs,
+  },
+  headerBackButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 17,
+    fontWeight: '600',
+    color: colors.text,
+    marginHorizontal: spacing.xs,
+  },
+  headerSettingsButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
     padding: spacing.lg,
-  },
-  headerRightWrap: {
-    marginRight: spacing.xs,
-  },
-  headerSettingsButton: {
-    padding: spacing.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 8,
   },
   header: {
     alignItems: 'center',

@@ -11,6 +11,7 @@ import { upsertUserSettings } from '@/supabase/queries';
 import { logger } from '@/utils/logger';
 
 const ONBOARDING_KEY = '@lingoleaf:onboarding_completed';
+const TERMS_ACCEPTED_KEY = '@lingoleaf:terms_accepted_at';
 
 interface Props {
   children: React.ReactNode;
@@ -53,13 +54,16 @@ export function OnboardingWrapper({ children }: Props) {
         });
       }
 
+      // Record terms acceptance (user cannot complete step 7 without accepting)
+      await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, new Date().toISOString());
       // Mark onboarding as completed
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       setShowOnboarding(false);
       logger.info('Onboarding completed', data);
     } catch (error) {
       logger.error('Failed to complete onboarding:', error);
-      // Still close the modal even if save fails
+      // Still close the modal even if save fails (terms were accepted in UI)
+      await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, new Date().toISOString());
       await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       setShowOnboarding(false);
     }

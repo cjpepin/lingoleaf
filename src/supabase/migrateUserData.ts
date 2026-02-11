@@ -50,17 +50,22 @@ export async function migrateUserDataIfNeeded(
 
     if (!response.ok) {
       const body = await response.text();
-      let errBody: { error?: string } = {};
-      try {
-        errBody = JSON.parse(body);
-      } catch {
-        errBody = { error: body };
-      }
       logger.error('Migration Edge Function error', {
         status: response.status,
-        error: errBody.error ?? response.statusText,
+        statusText: response.statusText,
+        body,
+        hint: response.status === 401
+          ? 'Gateway 401 — function likely needs redeployment with --no-verify-jwt'
+          : undefined,
       });
-      throw new Error(errBody.error ?? `Migration failed: ${response.status}`);
+      let errMsg = `Migration failed: ${response.status}`;
+      try {
+        const parsed = JSON.parse(body);
+        if (parsed.error) errMsg = parsed.error;
+        else if (parsed.message) errMsg = parsed.message;
+        else if (parsed.msg) errMsg = parsed.msg;
+      } catch { /* raw text */ }
+      throw new Error(errMsg);
     }
 
     const data = await response.json();

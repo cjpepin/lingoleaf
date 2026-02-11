@@ -17,8 +17,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@/navigation/types';
 import type { Book } from '@/supabase/types';
-import { fetchBooks } from '@/supabase/queries';
-import { cleanupOrphanedCache } from '@/supabase/storage';
+import { fetchBooks, fetchUserBooksLastRead } from '@/supabase/queries';
+import { cleanupOrphanedCache, runAutoRemoveDownloads } from '@/supabase/storage';
 import { BookGridItem } from '@/components/BookGridItem';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuthStore } from '@/state/useAuthStore';
@@ -35,14 +35,14 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 export default function LibraryScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { user } = useAuthStore();
-  const { loadSettings } = useSettingsStore();
+  const { loadSettings, autoRemoveDownloadsAfterDays } = useSettingsStore();
   const { width: windowWidth } = useWindowDimensions();
   const [books, setBooks] = useState<Book[]>([]);
   const booksRef = useRef<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [sourceLang, setSourceLang] = useState<string>('');
+  const [sourceLangs, setSourceLangs] = useState<string[]>([]);
   const [subjectFilters, setSubjectFilters] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -69,7 +69,7 @@ export default function LibraryScreen() {
   }, [windowWidth]);
 
   const rows: LibraryRow[] = useMemo(() => {
-    return buildAdRows(books, { columns: grid().columns, adEveryRows: 4 });
+    return buildAdRows(books, { columns: grid().columns, adEveryRows: 3 });
   }, [books, grid]);
 
   const loadBooks = useCallback(
@@ -77,7 +77,7 @@ export default function LibraryScreen() {
       reset: boolean = false,
       opts?: {
         runCleanup?: boolean;
-        override?: { search?: string; language?: string; subjects?: string[] };
+        override?: { search?: string; languages?: string[]; subjects?: string[] };
       }
     ) => {
       const seq = ++requestSeq.current;
@@ -89,13 +89,13 @@ export default function LibraryScreen() {
 
         const o = opts?.override;
         const effectiveSearch = o?.search ?? search;
-        const effectiveLang = o?.language ?? sourceLang;
+        const effectiveLangs = o?.languages ?? sourceLangs;
         const effectiveSubjects = o?.subjects ?? subjectFilters;
 
         const offset = reset ? 0 : booksRef.current.length;
         const data = await fetchBooks({
           search: effectiveSearch.trim().length > 0 ? effectiveSearch.trim() : undefined,
-          language: effectiveLang.trim().length > 0 ? effectiveLang.trim() : undefined,
+          languages: effectiveLangs.length > 0 ? effectiveLangs : undefined,
           subjects: effectiveSubjects.length > 0 ? effectiveSubjects : undefined,
           limit: pageSize,
           offset,
@@ -119,6 +119,12 @@ export default function LibraryScreen() {
           const validBookIds = data.map((book) => book.id);
           cleanupOrphanedCache(validBookIds).catch((err) => logger.warn('Cache cleanup failed', err));
         }
+        // Auto-remove downloads for books not read within setting (e.g. 2 weeks)
+        if (reset && user && autoRemoveDownloadsAfterDays > 0) {
+          fetchUserBooksLastRead(user.id)
+            .then((lastRead) => runAutoRemoveDownloads(autoRemoveDownloadsAfterDays, lastRead))
+            .catch((err) => logger.warn('Auto-remove downloads failed', err));
+        }
         hasLoadedOnceRef.current = true;
       } catch (error) {
         logger.error('Failed to load books:', error);
@@ -128,7 +134,7 @@ export default function LibraryScreen() {
         setLoadingMore(false);
       }
     },
-    [search, sourceLang, subjectFilters]
+    [search, sourceLangs, subjectFilters]
   );
 
   // Single initial load: get settings first, then load books with default lang.
@@ -140,13 +146,13 @@ export default function LibraryScreen() {
     (async () => {
       try {
         const settings = await loadSettings(user.id);
-        const lang = settings?.goal_langs?.[0] ?? '';
+        const goalLangs = settings?.goal_langs ?? [];
         await loadBooks(true, {
-          override: { language: lang || undefined },
+          override: { languages: goalLangs.length > 0 ? goalLangs : undefined },
           runCleanup: true,
         });
-        if (lang) {
-          setSourceLang(lang);
+        if (goalLangs.length > 0) {
+          setSourceLangs(goalLangs);
           hasSetDefaultLangRef.current = true;
         }
       } catch (err) {
@@ -217,23 +223,25 @@ export default function LibraryScreen() {
         numColumns={1}
         keyboardShouldPersistTaps="always"
         ListHeaderComponent={
+          <>
           <LibraryHeader
             title={t('library.library')}
             search={search}
             onChangeSearch={setSearch}
-            language={sourceLang}
+            languages={sourceLangs}
             subjects={subjectFilters}
-            onApplyFilters={({ language, subjects }) => {
-              setSourceLang(language);
+            onApplyFilters={({ languages, subjects }) => {
+              setSourceLangs(languages);
               setSubjectFilters(subjects);
-              loadBooks(true, { runCleanup: true, override: { search, language, subjects } });
+              loadBooks(true, { runCleanup: true, override: { search, languages, subjects } });
             }}
             onResetFilters={() => {
-              setSourceLang('');
+              setSourceLangs([]);
               setSubjectFilters([]);
-              loadBooks(true, { runCleanup: true, override: { search, language: '', subjects: [] } });
+              loadBooks(true, { runCleanup: true, override: { search, languages: [], subjects: [] } });
             }}
           />
+          </>
         }
         ListEmptyComponent={
           loading ? (

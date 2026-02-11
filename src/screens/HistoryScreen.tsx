@@ -42,7 +42,7 @@ export default function HistoryScreen() {
   const [hasMore, setHasMore] = useState(true);
 
   const [search, setSearch] = useState('');
-  const [sourceLang, setSourceLang] = useState<string>('');
+  const [sourceLangs, setSourceLangs] = useState<string[]>([]);
   const [subjectFilters, setSubjectFilters] = useState<string[]>([]);
   const hasLoadedOnceRef = useRef(false);
   const hasInitiallyLoadedRef = useRef(false);
@@ -68,16 +68,16 @@ export default function HistoryScreen() {
     | (LibraryRow<BookWithStatus> & { type: 'books' | 'ad' });
   const rows: HistoryRow[] = useMemo(() => {
     const g = grid();
-    const savedRows = buildAdRows(savedForLater, { columns: g.columns, adEveryRows: 4 });
-    const recentRows = buildAdRows(recentlyRead, { columns: g.columns, adEveryRows: 4 });
+    const savedRows = buildAdRows(savedForLater, { columns: g.columns, adEveryRows: 3 });
+    const recentRows = buildAdRows(recentlyRead, { columns: g.columns, adEveryRows: 3 });
     const out: HistoryRow[] = [];
-    if (savedForLater.length > 0) {
-      out.push({ type: 'section', key: 'section-saved', title: t('history.savedForLater') });
-      out.push(...savedRows);
-    }
     if (recentlyRead.length > 0) {
       out.push({ type: 'section', key: 'section-recent', title: t('history.recentlyRead') });
       out.push(...recentRows);
+    }
+    if (savedForLater.length > 0) {
+      out.push({ type: 'section', key: 'section-saved', title: t('history.savedForLater') });
+      out.push(...savedRows);
     }
     return out;
   }, [books, grid, savedForLater, recentlyRead, t]);
@@ -91,7 +91,7 @@ export default function HistoryScreen() {
       reset: boolean = false,
       opts?: {
         runCleanup?: boolean;
-        override?: { search?: string; language?: string; subjects?: string[] };
+        override?: { search?: string; languages?: string[]; subjects?: string[] };
       }
     ) => {
       const seq = ++requestSeq.current;
@@ -108,13 +108,13 @@ export default function HistoryScreen() {
 
         const o = opts?.override;
         const effectiveSearch = o?.search ?? search;
-        const effectiveLang = o?.language ?? sourceLang;
+        const effectiveLangs = o?.languages ?? sourceLangs;
         const effectiveSubjects = o?.subjects ?? subjectFilters;
 
         const offset = reset ? 0 : booksRef.current.length;
         const data = await fetchHistoryBooks(user.id, {
           search: effectiveSearch,
-          language: effectiveLang.trim().length > 0 ? effectiveLang.trim() : undefined,
+          languages: effectiveLangs.length > 0 ? effectiveLangs : undefined,
           subjects: effectiveSubjects.length > 0 ? effectiveSubjects : undefined,
           limit: pageSize,
           offset,
@@ -145,7 +145,7 @@ export default function HistoryScreen() {
         setLoadingMore(false);
       }
     },
-    [search, sourceLang, subjectFilters, user]
+    [search, sourceLangs, subjectFilters, user]
   );
 
   useEffect(() => {
@@ -218,25 +218,27 @@ export default function HistoryScreen() {
         numColumns={1}
         keyboardShouldPersistTaps="always"
         ListHeaderComponent={
+          <>
           <LibraryHeader
             title={t('history.history')}
             ctaLabel={t('history.findANewBook')}
             onPressCta={() => navigation.navigate('Library')}
             search={search}
             onChangeSearch={setSearch}
-            language={sourceLang}
+            languages={sourceLangs}
             subjects={subjectFilters}
-            onApplyFilters={({ language, subjects }) => {
-              setSourceLang(language);
+            onApplyFilters={({ languages, subjects }) => {
+              setSourceLangs(languages);
               setSubjectFilters(subjects);
-              loadBooks(true, { runCleanup: true, override: { search, language, subjects } });
+              loadBooks(true, { runCleanup: true, override: { search, languages, subjects } });
             }}
             onResetFilters={() => {
-              setSourceLang('');
+              setSourceLangs([]);
               setSubjectFilters([]);
-              loadBooks(true, { runCleanup: true, override: { search, language: '', subjects: [] } });
+              loadBooks(true, { runCleanup: true, override: { search, languages: [], subjects: [] } });
             }}
           />
+          </>
         }
         ListEmptyComponent={
           loading ? (

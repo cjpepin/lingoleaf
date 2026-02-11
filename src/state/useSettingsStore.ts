@@ -12,24 +12,38 @@ import { useAppLangStore } from './useAppLangStore';
 
 interface SettingsStore {
   targetLang: string;
+  /** Remove local book files if not read in this many days; 0 = never. */
+  autoRemoveDownloadsAfterDays: number;
   loading: boolean;
-  setTargetLang: (lang: string) => void;
+  /** Pass userId to persist immediately (e.g. when user changes it in profile). */
+  setTargetLang: (lang: string, userId?: string) => void;
   loadSettings: (userId: string) => Promise<UserSettings | null>;
   saveSettings: (userId: string) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsStore>((set, get) => ({
   targetLang: 'en',
+  autoRemoveDownloadsAfterDays: 14,
   loading: false,
 
-  setTargetLang: (lang) => set({ targetLang: lang }),
+  setTargetLang: (lang, userId) => {
+    set({ targetLang: lang });
+    if (userId) {
+      get()
+        .saveSettings(userId)
+        .catch((err) => console.error('Failed to persist target language', err));
+    }
+  },
 
   loadSettings: async (userId) => {
     set({ loading: true });
     try {
       const settings = await fetchUserSettings(userId);
       if (settings) {
-        set({ targetLang: settings.target_lang });
+        set({
+          targetLang: settings.target_lang,
+          autoRemoveDownloadsAfterDays: settings.auto_remove_downloads_after_days ?? 14,
+        });
         useReaderSettingsStore.getState().hydrateFromSettings(settings);
         useFlashcardSettingsStore.getState().hydrateFromSettings(settings);
         useAppLangStore.getState().hydrateFromSettings(settings);
