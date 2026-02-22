@@ -28,6 +28,8 @@ import { useStudyStore } from '@/state/useStudyStore';
 import {
   fetchBook,
   createStudyWord,
+  deleteStudyWord,
+  findStudyWordsByTerm,
   MAX_STUDY_LIST_WORDS,
   translateText,
   fetchUserBook,
@@ -87,7 +89,7 @@ export default function ReaderScreen() {
   const { bookId, localPath } = route.params;
   const { user, isGuest } = useAuthStore();
   const { targetLang, loadSettings } = useSettingsStore();
-  const { currentPage, totalPages, pageLoading, chapterLeftPct, setCurrentPage, setTotalPages, setPageLoading, setChapterLeftPct } = useReaderStore();
+  const { currentPage, totalPages, pageLoading, chapterLeftPct, setCurrentPage, setTotalPages, setPageLoading, setChapterLeftPct, setChapterDisplayed, chapterPage, chapterTotal } = useReaderStore();
   const upgradePrompt = useUpgradePromptStore();
   const studyStore = useStudyStore();
   
@@ -194,6 +196,18 @@ export default function ReaderScreen() {
   const tapNavJustMade = useRef(false);
   const lastSavedCfi = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pageTurnTimesRef = useRef<number[]>([]);
+  const getSecondsPerPage = useCallback((): number | null => {
+    const times = pageTurnTimesRef.current;
+    if (times.length < 3) return null;
+    const intervals: number[] = [];
+    for (let i = 1; i < times.length; i++) {
+      const secs = (times[i] - times[i - 1]) / 1000;
+      if (secs > 1 && secs < 300) intervals.push(secs);
+    }
+    if (intervals.length === 0) return null;
+    return intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  }, []);
   const sessionStartRef = useRef<number | null>(null);
   const pendingRemoteCfiRef = useRef<string | null>(null);
   const resumeGuardRef = useRef<{ expectedCfi: string; expectedIndex0: number | null; expiresAt: number } | null>(null);
@@ -642,11 +656,38 @@ export default function ReaderScreen() {
       setHighlights((prev) => prev.filter((x) => x.id !== h.id));
       setActiveHighlight(null);
       await deleteUserBookHighlight(user.id, book.id, h.id);
+
+      // Offer to delete associated study words (keep translation cache intact)
+      try {
+        const associated = await findStudyWordsByTerm(user.id, book.id, h.selected_text);
+        if (associated.length > 0) {
+          Alert.alert(
+            t('reader.deleteStudyWordTitle'),
+            t('reader.deleteStudyWordMessage', { term: h.selected_text }),
+            [
+              { text: t('reader.keepWord'), style: 'cancel' },
+              {
+                text: t('reader.deleteWord'),
+                style: 'destructive',
+                onPress: async () => {
+                  for (const word of associated) {
+                    await deleteStudyWord(word.id);
+                    if (word.list_id) studyStore.adjustListCount(word.list_id, -1);
+                    studyStore.adjustAllCount(-1);
+                  }
+                },
+              },
+            ]
+          );
+        }
+      } catch (e) {
+        logger.warn('Failed to check associated study words', e);
+      }
     } catch (error) {
       logger.error('Failed to delete highlight:', error);
       setSnackbar({ visible: true, message: t('reader.failedToDeleteHighlight'), type: 'error' });
     }
-  }, [book, deleteUserBookHighlight, removeAnnotationByCfi, t, user]);
+  }, [book, deleteUserBookHighlight, removeAnnotationByCfi, studyStore, t, user]);
 
   const handleChangeHighlightColor = useCallback(async (h: UserBookHighlight, newColor: HighlightColor) => {
     if (!user || !book) return;
@@ -1131,16 +1172,30 @@ export default function ReaderScreen() {
       displayed: loc?.start?.displayed ?? null,
     });
     const cfi = loc?.start?.cfi;
-    const displayedPage = loc?.start?.displayed?.page;
-    const displayedTotal = loc?.start?.displayed?.total;
-    logger.info('Location displayed', { displayedPage, displayedTotal });
+    const locDisplayed = loc?.start?.displayed;
+    logger.info('Location displayed', { page: locDisplayed?.page, total: locDisplayed?.total });
+
+    // Update chapter-level page data immediately (before any early returns)
+    if (locDisplayed && typeof locDisplayed.page === 'number' && typeof locDisplayed.total === 'number' && locDisplayed.total > 0) {
+      setChapterDisplayed(locDisplayed.page, locDisplayed.total);
+      const now = Date.now();
+      const times = pageTurnTimesRef.current;
+      if (times.length === 0 || now - times[times.length - 1] > 500) {
+        times.push(now);
+        if (times.length > 12) times.shift();
+      }
+    }
+
+    // Track current section for chapter label
+    if (currentSection?.href) {
+      setCurrentSectionHref(currentSection.href);
+    }
 
     // Update page counter from the reader's generated location index (0-based).
     let idx0: number | undefined = loc?.start?.location;
     if (typeof idx0 !== 'number' || !Number.isFinite(idx0) || idx0 < 0) {
-      const disp = loc?.start?.displayed;
-      if (disp && typeof disp.page === 'number' && typeof disp.total === 'number' && disp.total > 0) {
-        idx0 = Math.max(0, disp.page - 1);
+      if (locDisplayed && typeof locDisplayed.page === 'number' && typeof locDisplayed.total === 'number' && locDisplayed.total > 0) {
+        idx0 = Math.max(0, locDisplayed.page - 1);
       } else if (typeof progress === 'number' && Number.isFinite(progress) && progress >= 0) {
         const total = typeof totalLocs === 'number' && totalLocs > 0 ? totalLocs : 1;
         idx0 = Math.min(total - 1, Math.floor((progress / 100) * total));
@@ -1166,8 +1221,8 @@ export default function ReaderScreen() {
         return;
       }
       const newPage = Math.floor(idx0) + 1;
-      const displayedPage = useReaderStore.getState().currentPage;
-      if (newPage !== displayedPage) {
+      const storePage = useReaderStore.getState().currentPage;
+      if (newPage !== storePage) {
         setCurrentPage(newPage);
       }
       setPageLoading(false);
@@ -1187,18 +1242,13 @@ export default function ReaderScreen() {
       scheduleSaveReadingProgress(cfi);
     }
 
-    // Track current section for chapter label
-    if (currentSection?.href) {
-      setCurrentSectionHref(currentSection.href);
-    }
-
     logger.debug('📄 Location changed', {
       startLocationIndex: loc?.start?.location ?? null,
       progress,
       sectionHref: currentSection?.href ?? null,
-      displayed: loc?.start?.displayed,
+      displayed: locDisplayed,
     });
-  }, [bookId, currentPage, scheduleSaveReadingProgress, setChapterLeftPct, setCurrentPage, setPageLoading, setTotalPages, user?.id]);
+  }, [bookId, currentPage, scheduleSaveReadingProgress, setChapterDisplayed, setChapterLeftPct, setCurrentPage, setPageLoading, setTotalPages, user?.id]);
 
   const handleGoToHref = useCallback(
     (href: string) => {
@@ -1565,7 +1615,9 @@ export default function ReaderScreen() {
             currentPage={currentPage}
             totalPages={totalPages}
             pageLoading={pageLoading}
-            chapterLeftPct={chapterLeftPct}
+            chapterPage={chapterPage}
+            chapterTotal={chapterTotal}
+            getSecondsPerPage={getSecondsPerPage}
           />
         )}
       </Animated.View>

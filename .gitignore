@@ -28,6 +28,9 @@ yarn-error.log*
 .env.local
 .env*.local
 
+# Supabase temp files (may contain connection strings)
+supabase/.temp/
+
 # IDE
 .vscode/
 .idea/

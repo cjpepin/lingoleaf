@@ -328,11 +328,17 @@ export const READER_INJECTED_JAVASCRIPT = `
       patchIframes();
       new MutationObserver(patchIframes).observe(document.documentElement, { childList: true, subtree: true });
       
+      // Fast initial patching (first 10s)
       let count = 0;
       const interval = setInterval(() => {
         patchIframes();
         if (++count > 100) clearInterval(interval);
       }, 100);
+
+      // Persistent low-frequency backstop: re-patch iframes every 2s indefinitely.
+      // Catches cases where epub.js reloads iframe content (chapter navigation)
+      // without adding/removing the iframe element from the DOM.
+      setInterval(function() { patchIframes(); }, 2000);
 
       // Offset of a document's viewport relative to main window (for iframe content)
       function getIframeOffsetForDoc(doc) {

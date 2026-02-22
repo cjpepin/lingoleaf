@@ -26,6 +26,17 @@ interface TranslationResponse {
   same_language?: boolean;
 }
 
+const VALID_LANGS = new Set([
+  'af','am','ar','az','be','bg','bn','bs','ca','ceb','co','cs','cy','da','de',
+  'el','en','eo','es','et','eu','fa','fi','fil','fr','fy','ga','gd','gl','gu',
+  'ha','haw','he','hi','hmn','hr','ht','hu','hy','id','ig','is','it','ja','jv',
+  'ka','kk','km','kn','ko','ku','ky','la','lb','lo','lt','lv','mg','mi','mk',
+  'ml','mn','mr','ms','mt','my','ne','nl','no','ny','or','pa','pl','ps','pt',
+  'ro','ru','rw','sd','si','sk','sl','sm','sn','so','sq','sr','st','su','sv',
+  'sw','ta','te','tg','th','tk','tl','tr','tt','ug','uk','ur','uz','vi','xh',
+  'yi','yo','zh','zh-CN','zh-TW','zu',
+]);
+
 serve(async (req) => {
   // CORS headers
   if (req.method === 'OPTIONS') {
@@ -39,6 +50,44 @@ serve(async (req) => {
   }
 
   try {
+    // ── Auth check: require a valid Supabase JWT ──
+    const authHeader = req.headers.get('Authorization') ?? '';
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing Authorization header' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    const supabaseAdmin = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
+    const { data: userData, error: authErr } = await supabaseAdmin.auth.getUser(token);
+    if (authErr || !userData?.user?.id) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired session' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ── Rate limit: max 200 non-cached translations per user per hour ──
+    const userId = userData.user.id;
+    const RATE_LIMIT = 200;
+    const WINDOW_MS = 60 * 60 * 1000; // 1 hour
+    const now = Date.now();
+    const { data: rl } = await supabaseAdmin
+      .from('user_settings')
+      .select('translate_count, translate_window_start')
+      .eq('user_id', userId)
+      .single();
+    const windowStart = rl?.translate_window_start ? Date.parse(rl.translate_window_start) : 0;
+    const count = (rl?.translate_count as number) ?? 0;
+    const inWindow = now - windowStart < WINDOW_MS;
+    if (inWindow && count >= RATE_LIMIT) {
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Try again later.' }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Parse request
     const { source_lang, target_lang, text }: TranslationRequest = await req.json();
 
@@ -46,6 +95,14 @@ serve(async (req) => {
     if (!source_lang || !target_lang || !text) {
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate language codes against allowlist
+    if (!VALID_LANGS.has(source_lang) || !VALID_LANGS.has(target_lang)) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid language code' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -62,11 +119,8 @@ serve(async (req) => {
     // Normalize for cache key
     const term_normalized = term.toLowerCase();
 
-    // Initialize Supabase client with service role
-    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_ROLE_KEY!);
-
     // Check cache
-    const { data: cached, error: cacheError } = await supabase
+    const { data: cached, error: cacheError } = await supabaseAdmin
       .from('translation_cache')
       .select('translation')
       .eq('source_lang', source_lang)
@@ -144,12 +198,20 @@ serve(async (req) => {
     }
 
     // Store in cache (use detected language for cache key)
-    await supabase.from('translation_cache').insert({
+    await supabaseAdmin.from('translation_cache').insert({
       source_lang: detectedLang,
       target_lang,
       term_normalized,
       translation,
     });
+
+    // Increment rate-limit counter (only for cache misses that hit Google API)
+    const newCount = inWindow ? count + 1 : 1;
+    const newWindow = inWindow ? new Date(windowStart).toISOString() : new Date(now).toISOString();
+    await supabaseAdmin
+      .from('user_settings')
+      .update({ translate_count: newCount, translate_window_start: newWindow })
+      .eq('user_id', userId);
 
     const response: TranslationResponse = {
       term,

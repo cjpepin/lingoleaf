@@ -173,8 +173,16 @@ function restoreHighlights(cfiRanges: string[]) {
 }
 ```
 
-### Testing Strategy (MVP)
-- Manual testing for MVP
+### Testing Strategy
+- **Every code change must include corresponding test additions/updates**
+- Stack: `jest-expo`, `@testing-library/react-native`, `react-test-renderer`
+- Tests live in `src/__tests__/` (mirroring the module they test)
+- Run: `npm test` (all), `npm run test:watch` (dev), `npm run test:coverage` (report)
+- Global mocks live in `src/__tests__/setup.ts`
+- Unit tests: pure functions, Zustand stores, helpers (synchronous, no mocks needed)
+- Component tests: render with `@testing-library/react-native`, assert text/state
+- Integration tests: test flows across multiple modules (queries, stores, screens)
+- All tests **must pass** before deploying to production
 - Add error boundaries for crash prevention
 - Log errors for debugging
 - Test on real iOS device before considering done

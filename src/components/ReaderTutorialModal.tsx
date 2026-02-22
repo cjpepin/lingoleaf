@@ -17,6 +17,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { TutorialTooltip } from './TutorialTooltip';
+import { AdBanner } from './ads/AdBanner';
 import { useTranslation } from '@/i18n/useTranslation';
 
 const TOTAL_STEPS = 7;
@@ -113,6 +114,9 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
         <View style={styles.pageIndicator}>
           <Text style={styles.pageText}>3 / 42</Text>
         </View>
+        <View style={styles.chapterIndicator}>
+          <Text style={styles.pageText}>8 pgs left in chapter</Text>
+        </View>
 
         {/* Edge tap zones */}
         {showEdgePulse && (
@@ -206,6 +210,9 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
               <View style={styles.sheetListBtn}>
                 <Text style={styles.sheetListBtnText}>My vocab list</Text>
                 <Text style={styles.sheetChevron}>›</Text>
+              </View>
+              <View style={styles.sheetAdContainer}>
+                <AdBanner />
               </View>
               <View style={styles.sheetSaveBtn}>
                 <Text style={styles.sheetSaveBtnText}>Save to list</Text>
@@ -329,6 +336,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#555555',
+  },
+  chapterIndicator: {
+    position: 'absolute',
+    top: 100,
+    right: spacing.sm,
+    zIndex: 2,
   },
 
   // Edge tap zones
@@ -574,6 +587,10 @@ const styles = StyleSheet.create({
   sheetChevron: {
     ...typography.h2,
     color: colors.textSecondary,
+  },
+  sheetAdContainer: {
+    marginBottom: spacing.md,
+    marginHorizontal: -spacing.lg,
   },
   sheetSaveBtn: {
     backgroundColor: colors.primary,

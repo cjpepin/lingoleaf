@@ -177,6 +177,7 @@ export function LibraryHeader({
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
+            maxLength={100}
           />
         </View>
         <Pressable style={styles.filtersButton} onPress={() => setFiltersVisible(true)}>

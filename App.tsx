@@ -45,7 +45,9 @@ export default function App() {
     // Handle deep links for email confirmation
     const handleDeepLink = async (event: { url: string }) => {
       const url = event.url;
-      logger.info('Deep link received:', url);
+      const safeUrl = url.replace(/access_token=[^&]+/g, 'access_token=REDACTED')
+        .replace(/refresh_token=[^&]+/g, 'refresh_token=REDACTED');
+      logger.info('Deep link received:', safeUrl);
 
       // Check if this is a Supabase auth callback
       if (url.includes('#access_token=') || url.includes('?access_token=')) {

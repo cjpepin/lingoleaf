@@ -24,6 +24,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AdBanner } from '@/components/ads/AdBanner';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useStudyStore } from '@/state/useStudyStore';
 import {
@@ -870,6 +871,8 @@ export default function FlashcardsScreen() {
           </View>
         </>
       )}
+
+      <AdBanner />
 
       <FlashcardSettingsModal
         visible={settingsVisible}

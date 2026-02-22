@@ -103,6 +103,12 @@ export default function AdminScreen() {
         return;
       }
 
+      const MAX_FILE_SIZE_MB = 50;
+      if (file.size && file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        Alert.alert('File Too Large', `Maximum file size is ${MAX_FILE_SIZE_MB}MB.`);
+        return;
+      }
+
       const fileName = file.name || 'Untitled';
       const inferredTitle = fileName.replace(/\.epub$/i, '');
 

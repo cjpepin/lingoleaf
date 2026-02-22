@@ -300,6 +300,7 @@ export default function StudyScreen() {
               onChangeText={setRenameName}
               placeholder={t('translate.listName')}
               placeholderTextColor={colors.textSecondary}
+              maxLength={50}
             />
             <TouchableOpacity
               style={styles.inlineDangerRow}
@@ -416,6 +417,7 @@ export default function StudyScreen() {
             placeholder={lists.length >= 5 ? t('study.listLimitReached') : t('study.newListName')}
             placeholderTextColor={colors.textSecondary}
             editable={lists.length < 5}
+            maxLength={50}
           />
           <TouchableOpacity
             style={[styles.createButton, (lists.length >= 5 || createName.trim().length === 0) && styles.disabled]}

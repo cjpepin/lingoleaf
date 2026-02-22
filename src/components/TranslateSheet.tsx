@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
+import { AdBanner } from '@/components/ads/AdBanner';
 import type { VocabList } from '@/supabase/types';
 
 interface Props {
@@ -111,6 +112,10 @@ export function TranslateSheet({
                 ) : null}
               </View>
               
+              <View style={styles.adContainer}>
+                <AdBanner />
+              </View>
+
               <View style={styles.actions}>
                 <TouchableOpacity
                   style={[styles.button, styles.buttonPrimary]}
@@ -148,6 +153,7 @@ export function TranslateSheet({
                       value={newListName}
                       onChangeText={setNewListName}
                       autoFocus
+                      maxLength={50}
                     />
                     <View style={styles.newListActions}>
                       <TouchableOpacity
@@ -414,6 +420,10 @@ const styles = StyleSheet.create({
   pickerCloseText: {
     ...typography.button,
     color: colors.text,
+  },
+  adContainer: {
+    marginBottom: spacing.md,
+    marginHorizontal: -spacing.lg,
   },
   actions: {
     gap: spacing.sm,

@@ -511,6 +511,19 @@ export async function createStudyWord(word: Omit<StudyWord, 'id' | 'created_at'>
   return data;
 }
 
+export async function findStudyWordsByTerm(userId: string, bookId: string, term: string): Promise<StudyWord[]> {
+  const normalized = term.toLowerCase().trim();
+  if (!normalized) return [];
+  const { data, error } = await supabase
+    .from('study_words')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('book_id', bookId)
+    .eq('term_normalized', normalized);
+  if (error) throw error;
+  return (data ?? []) as StudyWord[];
+}
+
 export async function deleteStudyWord(id: string): Promise<void> {
   const { error } = await supabase
     .from('study_words')
@@ -679,9 +692,8 @@ export async function upsertUserSettings(settings: Partial<Omit<UserSettings, 'c
   return data;
 }
 
-export async function deleteUserAccount(userId: string): Promise<void> {
-  // Delete user account (cascades to all related data via RLS)
-  const { error } = await supabase.auth.admin.deleteUser(userId);
+export async function deleteUserAccount(_userId: string): Promise<void> {
+  const { error } = await supabase.rpc('soft_delete_user_account');
   if (error) throw error;
 }
 
@@ -864,6 +876,12 @@ export async function fetchHistoryBooks(userId: string, filters?: BookFilters): 
   if (error) throw error;
 
   const rows = (data ?? []) as Row[];
+  // Sort by last_read_at descending client-side as a safety net
+  rows.sort((a, b) => {
+    const aTime = a.user_books?.[0]?.last_read_at ?? '';
+    const bTime = b.user_books?.[0]?.last_read_at ?? '';
+    return bTime.localeCompare(aTime);
+  });
   return rows.map((r) => {
     const { user_books: ub } = r;
     const { user_books: _ub, ...book } = r;
