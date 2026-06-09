@@ -35,7 +35,7 @@
     "expo-document-picker": "~13.0.3",
     "expo-file-system": "~18.0.0",
     "expo-notifications": "~0.29.14",
-    "expo-sharing": "~13.0.1",
+    "expo-sharing": "~56.0.16",
     "expo-status-bar": "~2.0.0",
     "expo-updates": "~0.27.5",
     "expo-web-browser": "~14.0.2",
