@@ -1,0 +1,78 @@
+{
+  "expo": {
+    "name": "LingoLeaf",
+    "slug": "lingoleaf",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/lingoleaf_app_icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "lingoleaf",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F5F0"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lingoleaf.app",
+      "associatedDomains": [
+        "applinks:lingoleafapp.com"
+      ],
+      "infoPlist": {
+        "GADApplicationIdentifier": "ca-app-pub-3940256099942544~1458002511",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/lingoleaf_app_icon.png",
+        "backgroundColor": "#F5F5F0"
+      },
+      "package": "com.lingoleaf.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "lingoleafapp.com",
+              "pathPrefix": "/auth"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-file-system",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/lingoleaf_icon.png",
+          "color": "#2E5E4E",
+          "defaultChannel": "daily-goals"
+        }
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "ios_app_id": "ca-app-pub-3940256099942544~1458002511",
+          "android_app_id": "ca-app-pub-3940256099942544~3347511713"
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
+  }
+}

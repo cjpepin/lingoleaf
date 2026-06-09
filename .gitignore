@@ -1,0 +1,53 @@
+# Expo
+.expo/
+dist/
+web-build/
+
+# EAS local build artifacts
+build/
+
+# Native
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+ios/
+android/
+
+# Test coverage
+coverage/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env*.local
+credentials.json
+credentials/
+creds/
+
+# Supabase temp files (may contain connection strings)
+supabase/.temp/
+.metadata_backfill_checkpoint.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.ipa
+*~
+.DS_Store
+
+**/setup-eas-secrets.sh
+
+# build/
+build/

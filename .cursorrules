@@ -1,0 +1,37 @@
+# LingoLeaf Cursor Rules
+
+## Project Context
+This is a React Native (Expo) language learning app with EPUB reader, translation, and vocabulary features.
+
+## Code Style
+- Follow AGENTS.md guidelines strictly
+- TypeScript with strict mode
+- Functional components with hooks
+- Zustand for global state
+- Centralized Supabase queries in queries.ts
+
+## File Organization
+- One component per file
+- Co-locate types with usage
+- Use @ alias for src imports
+- Keep files under 200 lines
+
+## Key Patterns
+- Early returns for loading/error states
+- Explicit error handling (no silent failures)
+- Use theme tokens (never hardcode colors)
+- Memoize expensive computations
+- Log errors with logger utility
+
+## Security
+- Never expose service role key in client
+- Trust RLS policies
+- Validate user input
+- Use signed URLs for private storage
+
+## MVP Constraints
+- iOS-first development
+- Ship working over perfect
+- Manual testing for MVP
+- Defer non-essential features
+

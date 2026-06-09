@@ -1,0 +1,7 @@
+-- Deprecated migration placeholder.
+--
+-- This file originally duplicated the policy statements in
+-- `004_global_library_storage_policies.sql`, which created avoidable schema bloat
+-- and could cause duplicate-policy errors in fresh environments.
+--
+-- Keep this file as a no-op for migration history compatibility.
