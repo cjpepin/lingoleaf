@@ -1,0 +1,156 @@
+diff --git a/node_modules/react-native-webview/apple/RNCWebViewImpl.m b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
+index 9726fd3..1b552b3 100644
+--- a/node_modules/react-native-webview/apple/RNCWebViewImpl.m
++++ b/node_modules/react-native-webview/apple/RNCWebViewImpl.m
+@@ -56,6 +56,34 @@ NSString *const CUSTOM_SELECTOR = @"_CUSTOM_SELECTOR_";
+ @end
+ @implementation RNCWKWebView
+ #if !TARGET_OS_OSX
+++ (void)load {
++    static dispatch_once_t onceToken;
++    dispatch_once(&onceToken, ^{
++        // Swizzle WKContentView canPerformAction:withSender: to suppress native edit menu
++        Class wkContentViewClass = NSClassFromString(@"WKContentView");
++        if (!wkContentViewClass) return;
++        SEL canPerformSel = @selector(canPerformAction:withSender:);
++        Method originalMethod = class_getInstanceMethod(wkContentViewClass, canPerformSel);
++        if (!originalMethod) return;
++        IMP originalIMP = method_getImplementation(originalMethod);
++        IMP newIMP = imp_implementationWithBlock(^BOOL(id _self, SEL action, id sender) {
++            UIView *view = (UIView *)_self;
++            while (view != nil) {
++                if ([view isKindOfClass:[RNCWKWebView class]]) {
++                    RNCWKWebView *wv = (RNCWKWebView *)view;
++                    if (!wv.menuItems || wv.menuItems.count == 0) {
++                        return NO;
++                    }
++                    break;
++                }
++                view = view.superview;
++            }
++            return ((BOOL(*)(id, SEL, SEL, id))originalIMP)(_self, canPerformSel, action, sender);
++        });
++        method_setImplementation(originalMethod, newIMP);
++    });
++}
++
+ - (NSString *)stringFromAction:(SEL) action {
+   NSString *sel = NSStringFromSelector(action);
+ 
+@@ -88,12 +116,30 @@ NSString *const CUSTOM_SELECTOR = @"_CUSTOM_SELECTOR_";
+   }
+   
+   if (!self.menuItems) {
+-      return [super canPerformAction:action withSender:sender];
++      // Allow selection detection but return NO to suppress menu
++      return NO;
+   }
+ 
+   return NO;
+ }
+ - (void)buildMenuWithBuilder:(id<UIMenuBuilder>)builder API_AVAILABLE(ios(13.0))  {
++    if (!self.menuItems || self.menuItems.count == 0) {
++      // Actively remove ALL system menus so Speak/Spell/Lookup never appear
++      if (@available(iOS 16.0, *)) {
++        [builder removeMenuForIdentifier:UIMenuLookup];
++      }
++      [builder removeMenuForIdentifier:UIMenuStandardEdit];
++      [builder removeMenuForIdentifier:UIMenuFormat];
++      [builder removeMenuForIdentifier:UIMenuFind];
++      [builder removeMenuForIdentifier:UIMenuReplace];
++      [builder removeMenuForIdentifier:UIMenuShare];
++      [builder removeMenuForIdentifier:UIMenuTextStyle];
++      [builder removeMenuForIdentifier:UIMenuTextStylePasteboard];
++      [builder removeMenuForIdentifier:UIMenuSpelling];
++      [builder removeMenuForIdentifier:UIMenuSpellingPanel];
++      [builder removeMenuForIdentifier:UIMenuSpellingOptions];
++      return;
++    }
+     if (@available(iOS 16.0, *)) {
+       if(self.menuItems){
+         [builder removeMenuForIdentifier:UIMenuLookup];
+@@ -250,7 +296,7 @@ RCTAutoInsetsProtocol>
+ // Listener for long presses
+ - (void)startLongPress:(UILongPressGestureRecognizer *)pressSender
+ {
+-    if (pressSender.state != UIGestureRecognizerStateEnded || !self.menuItems) {
++    if (pressSender.state != UIGestureRecognizerStateEnded || !self.menuItems || self.menuItems.count == 0) {
+         return;
+     }
+     if (@available(iOS 16.0, *)) {
+@@ -285,6 +331,9 @@ RCTAutoInsetsProtocol>
+ - (UIMenu *)editMenuInteraction:(UIEditMenuInteraction *)interaction menuForConfiguration:(UIEditMenuConfiguration *)configuration suggestedActions:(NSArray<UIMenuElement *> *)suggestedActions API_AVAILABLE(ios(16.0))
+ {
+   NSMutableArray<UICommand *> *menuItems = [NSMutableArray new];
++  if (!self.menuItems || self.menuItems.count == 0) {
++    return [UIMenu menuWithChildren:@[]];
++  }
+   for(NSDictionary *menuItem in self.menuItems) {
+     NSString *menuItemLabel = [RCTConvert NSString:menuItem[@"label"]];
+     NSString *menuItemKey = [RCTConvert NSString:menuItem[@"key"]];
+@@ -415,6 +464,13 @@ RCTAutoInsetsProtocol>
+ - (WKWebViewConfiguration *)setUpWkWebViewConfig
+ {
+   WKWebViewConfiguration *wkWebViewConfig = [WKWebViewConfiguration new];
++#if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 180000 /* iOS 18 */
++  if (@available(iOS 18.0, *)) {
++    if ([wkWebViewConfig respondsToSelector:@selector(writingToolsBehavior)]) {
++      wkWebViewConfig.writingToolsBehavior = UIWritingToolsBehaviorNone;
++    }
++  }
++#endif
+   WKPreferences *prefs = [[WKPreferences alloc]init];
+   BOOL _prefsUsed = NO;
+   if (!_javaScriptEnabled) {
+@@ -504,6 +560,27 @@ RCTAutoInsetsProtocol>
+   return wkWebViewConfig;
+ }
+ 
++
++// Strip UIEditMenuInteraction from WKContentView subviews
++- (void)_llStripEditMenuInteractions:(UIView *)root {
++#if !TARGET_OS_OSX
++  if (@available(iOS 16.0, *)) {
++    for (UIView *subview in root.subviews) {
++      NSString *className = NSStringFromClass([subview class]);
++      if ([className containsString:@"ContentView"]) {
++        NSArray *interactions = [subview.interactions copy];
++        for (id<UIInteraction> interaction in interactions) {
++          if ([interaction isKindOfClass:[UIEditMenuInteraction class]]) {
++            [subview removeInteraction:interaction];
++          }
++        }
++      }
++      [self _llStripEditMenuInteractions:subview];
++    }
++  }
++#endif
++}
++
+ - (void)didMoveToWindow
+ {
+   if (self.window != nil && _webView == nil) {
+@@ -555,6 +632,11 @@ RCTAutoInsetsProtocol>
+ #endif
+ 
+     [self addSubview:_webView];
++    if (!_menuItems || _menuItems.count == 0) {
++      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
++        [self _llStripEditMenuInteractions:self->_webView];
++      });
++    }
+     [self setHideKeyboardAccessoryView: _savedHideKeyboardAccessoryView];
+     [self setKeyboardDisplayRequiresUserAction: _savedKeyboardDisplayRequiresUserAction];
+     [self visitSource];
+@@ -1532,6 +1614,11 @@ RCTAutoInsetsProtocol>
+ - (void)webView:(WKWebView *)webView
+ didFinishNavigation:(WKNavigation *)navigation
+ {
++#if !TARGET_OS_OSX
++  if (!_menuItems || _menuItems.count == 0) {
++    [self _llStripEditMenuInteractions:webView];
++  }
++#endif
+   if (_ignoreSilentHardwareSwitch) {
+     [self forceIgnoreSilentHardwareSwitch:true];
+   }
