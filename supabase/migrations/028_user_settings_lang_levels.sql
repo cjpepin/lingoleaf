@@ -6,15 +6,15 @@ DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'user_settings' AND column_name = 'known_lang_levels'
+    WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings' AND column_name = 'known_lang_levels'
   ) THEN
-    ALTER TABLE user_settings ADD COLUMN known_lang_levels JSONB DEFAULT '{}';
+    ALTER TABLE lingoleaf.user_settings ADD COLUMN known_lang_levels JSONB DEFAULT '{}';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'user_settings' AND column_name = 'goal_lang_levels'
+    WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings' AND column_name = 'goal_lang_levels'
   ) THEN
-    ALTER TABLE user_settings ADD COLUMN goal_lang_levels JSONB DEFAULT '{}';
+    ALTER TABLE lingoleaf.user_settings ADD COLUMN goal_lang_levels JSONB DEFAULT '{}';
   END IF;
 END $$;
 

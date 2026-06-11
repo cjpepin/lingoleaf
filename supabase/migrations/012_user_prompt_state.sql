@@ -1,6 +1,6 @@
 -- Track upgrade prompt state so we don't nag users.
 
-CREATE TABLE IF NOT EXISTS user_prompt_state (
+CREATE TABLE IF NOT EXISTS lingoleaf.user_prompt_state (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   last_upgrade_prompt_at TIMESTAMPTZ,
   upgrade_prompt_dismiss_count INT NOT NULL DEFAULT 0,
@@ -9,20 +9,20 @@ CREATE TABLE IF NOT EXISTS user_prompt_state (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE user_prompt_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.user_prompt_state ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view their own prompt state"
-  ON user_prompt_state FOR SELECT
+  ON lingoleaf.user_prompt_state FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can upsert their own prompt state"
-  ON user_prompt_state FOR INSERT
+  ON lingoleaf.user_prompt_state FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own prompt state"
-  ON user_prompt_state FOR UPDATE
+  ON lingoleaf.user_prompt_state FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);

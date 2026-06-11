@@ -6,6 +6,9 @@
 import { create } from 'zustand';
 import { supabase } from '@/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
+import { isDemoMode } from '@/demo/config';
+import { DEMO_USER } from '@/demo/demoUser';
+import { ensureDemoHydrated } from '@/demo/localRepository';
 import { reset, track } from '@/analytics/client';
 import { AUTH_EMAIL_REDIRECT_URL } from '@/utils/authDeepLink';
 import {
@@ -204,6 +207,27 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   initialize: async () => {
+    if (isDemoMode()) {
+      set({ loading: true, authError: null });
+      try {
+        await ensureDemoHydrated();
+        set({
+          session: null,
+          user: DEMO_USER,
+          isGuest: true,
+          loading: false,
+          authError: null,
+        });
+      } catch (error) {
+        console.error('Failed to initialize demo mode:', error);
+        set({
+          loading: false,
+          authError: (error as Error)?.message ?? 'Failed to initialize demo mode',
+        });
+      }
+      return;
+    }
+
     set({ loading: true, authError: null });
     const maxRetries = 3;
     const baseDelayMs = 1000;

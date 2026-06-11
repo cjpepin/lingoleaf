@@ -6,4 +6,5 @@ Format: `[Date] [Type] Description (files affected)`
 
 ## 2026-06-09
 
-- [2026-06-09] [DOCS] Initial public open-source release — showcase README, SECURITY.md, MIT license, CI, secret scanning script (README.md, SECURITY.md, LICENSE, .github/, scripts/security-check.sh, .env.example)
+- [2026-06-09] [FEAT] Add web demo export for /lingoleaf/demo portfolio embed with epubjs reader, demo Supabase seed, and setup scripts (src/demo/, src/screens/ReaderScreen.web.tsx, supabase/demo/seed.sql, scripts/export-web-demo.sh, scripts/setup-demo-supabase.sh, .env.demo.example, README.md)
+- [2026-06-09] [STYLE] Wrap web demo in iPhone-style device frame with Dynamic Island for portfolio presentation (src/demo/WebDemoDeviceFrame.tsx, App.tsx)

@@ -23,6 +23,55 @@ A React Native (Expo) language-learning app: read EPUBs in foreign languages, tr
 
 **Stack:** Expo 52 · TypeScript · React Navigation · Zustand · Supabase · `@epubjs-react-native`
 
+## Web demo (portfolio embed)
+
+Host the browser demo at **`/lingoleaf/demo`** on your portfolio site. This uses **Expo Web export**, not Expo Snack — Snack cannot run the native EPUB reader, AdMob, or RevenueCat modules.
+
+### 1. Provision demo Supabase (greenfield)
+
+```bash
+chmod +x scripts/setup-demo-supabase.sh
+./scripts/setup-demo-supabase.sh your-project-ref
+```
+
+This applies all migrations in [`supabase/migrations/`](./supabase/migrations/) and runs [`supabase/demo/seed.sql`](./supabase/demo/seed.sql) with public-domain demo books.
+
+Enable **Auth → Anonymous sign-ins** in Supabase for guest demo access.
+
+### 2. Build static web assets
+
+```bash
+cp .env.demo.example .env.demo
+# Fill EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_KEY
+npm install
+npx expo install react-dom react-native-web @expo/metro-runtime
+npm run export:web-demo
+```
+
+Output lands in `dist/web-demo/`. Deploy that folder to your site at `/lingoleaf/demo`.
+
+Local preview:
+
+```bash
+npm run web:demo
+```
+
+### 3. Configure your portfolio host
+
+- Serve the exported bundle under `/lingoleaf/demo`
+- Add SPA fallback to `index.html` for client-side routes
+- Optional auth callback env vars in `.env.demo`:
+  - `EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN=https://yourdomain.com/lingoleaf/demo/auth`
+
+### Web demo vs native
+
+| Feature | Web demo | iOS app |
+| ------- | -------- | ------- |
+| Library / study / garden | Yes | Yes |
+| EPUB reading | Yes (epubjs paginated reader) | Yes (native WebView reader + selection) |
+| Inline translate on selection | Limited | Full |
+| Premium / ads | Disabled | Full |
+
 ## Try the demo
 
 1. Clone the repo and install dependencies (see [Developer setup](#developer-setup)).

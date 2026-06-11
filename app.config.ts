@@ -41,6 +41,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   }
 
   const projectId = (config.extra as any)?.eas?.projectId ?? '';
+  const webBasePath = env('EXPO_PUBLIC_WEB_BASE_PATH', '/lingoleaf/demo');
   return {
     ...config,
     // Ensure required ExpoConfig fields are always present for type-safety.
@@ -48,6 +49,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: config.slug ?? 'lingoleaf',
     version: config.version ?? '1.0.0',
     scheme: config.scheme ?? 'lingoleaf',
+    experiments: {
+      ...(config.experiments ?? {}),
+      baseUrl: webBasePath,
+    },
+    web: {
+      ...(config.web ?? {}),
+      bundler: 'metro',
+      output: 'single',
+      favicon: './assets/favicon.png',
+    },
     // EAS Update (required for production builds when expo-updates is installed)
     updates: projectId ? { url: `https://u.expo.dev/${projectId}` } : undefined,
     runtimeVersion: { policy: 'appVersion' },

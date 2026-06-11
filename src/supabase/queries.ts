@@ -3,6 +3,19 @@
  * All database operations go through here
  */
 
+import { isDemoMode } from '@/demo/config';
+import {
+  demoCreateStudyWord,
+  demoFetchBook,
+  demoFetchBooks,
+  demoFetchHistoryBooks,
+  demoFetchStudyWords,
+  demoFetchUserBook,
+  demoFetchUserBooksLastRead,
+  demoFetchVocabLists,
+  demoTranslateText,
+  demoUpsertUserBook,
+} from '@/demo/localRepository';
 import { logger } from '@/utils/logger';
 import { track } from '@/analytics/client';
 import { supabase } from './client';
@@ -63,6 +76,32 @@ export interface BookFilters {
 }
 
 export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
+  if (isDemoMode()) {
+    let books = await demoFetchBooks();
+    const search = filters?.search?.trim().toLowerCase();
+    if (search) {
+      books = books.filter(
+        (book) =>
+          book.title.toLowerCase().includes(search) ||
+          (book.author ?? '').toLowerCase().includes(search),
+      );
+    }
+    const language = filters?.language?.trim();
+    if (language) {
+      books = books.filter((book) => book.source_lang === language);
+    }
+    if (typeof filters?.limit === 'number' && filters.limit > 0) {
+      const offset =
+        typeof filters.cursor === 'number' && filters.cursor >= 0
+          ? filters.cursor
+          : typeof filters.offset === 'number' && filters.offset >= 0
+            ? filters.offset
+            : 0;
+      books = books.slice(offset, offset + filters.limit);
+    }
+    return books;
+  }
+
   let query = supabase.from('books').select('*');
 
   const search = filters?.search?.trim();
@@ -192,6 +231,12 @@ export async function fetchAvailableTags(language?: string): Promise<string[]> {
 }
 
 export async function fetchBook(id: string): Promise<Book> {
+  if (isDemoMode()) {
+    const book = await demoFetchBook(id);
+    if (!book) throw new Error('Book not found');
+    return book;
+  }
+
   const { data, error } = await supabase
     .from('books')
     .select('*')
@@ -475,6 +520,10 @@ export async function upsertStudyWordReview(
 }
 
 export async function fetchStudyWords(userId: string, listId?: string | null): Promise<StudyWord[]> {
+  if (isDemoMode()) {
+    return demoFetchStudyWords(userId, listId);
+  }
+
   let query = supabase
     .from('study_words')
     .select('*')
@@ -598,6 +647,10 @@ export async function upsertUserPromptState(
 export const MAX_STUDY_LIST_WORDS = 512;
 
 export async function createStudyWord(word: Omit<StudyWord, 'id' | 'created_at'>): Promise<StudyWord> {
+  if (isDemoMode()) {
+    return demoCreateStudyWord(word);
+  }
+
   const { data, error } = await supabase
     .from('study_words')
     .upsert(word, {
@@ -613,6 +666,10 @@ export async function createStudyWord(word: Omit<StudyWord, 'id' | 'created_at'>
 export async function findStudyWordsByTerm(userId: string, bookId: string, term: string): Promise<StudyWord[]> {
   const normalized = term.toLowerCase().trim();
   if (!normalized) return [];
+  if (isDemoMode()) {
+    const rows = await demoFetchStudyWords(userId, undefined, bookId);
+    return rows.filter((row) => row.term_normalized === normalized);
+  }
   const { data, error } = await supabase
     .from('study_words')
     .select('*')
@@ -646,6 +703,10 @@ export async function moveStudyWordToList(wordId: string, listId: string | null)
 
 // Vocab Lists
 export async function fetchVocabLists(userId: string): Promise<VocabList[]> {
+  if (isDemoMode()) {
+    return demoFetchVocabLists(userId);
+  }
+
   const { data, error } = await supabase
     .from('vocab_lists')
     .select('*')
@@ -1617,6 +1678,10 @@ export async function reactivateUserAccount(): Promise<void> {
 
 // Translation
 export async function translateText(request: TranslationRequest): Promise<TranslationResponse> {
+  if (isDemoMode()) {
+    return demoTranslateText(request);
+  }
+
   const { data, error } = await supabase.functions.invoke('translate', {
     body: request,
   });
@@ -1663,6 +1728,10 @@ export async function generateStudyPackMetadata(
 
 // User Books (per-user per-book metadata)
 export async function fetchUserBook(userId: string, bookId: string): Promise<UserBook | null> {
+  if (isDemoMode()) {
+    return demoFetchUserBook(bookId);
+  }
+
   const { data, error } = await supabase
     .from('user_books')
     .select('*')
@@ -1678,6 +1747,15 @@ export async function upsertUserBook(
   progress: Pick<UserBook, 'user_id' | 'book_id'> &
     Partial<Pick<UserBook, 'last_cfi' | 'highlights' | 'status'>>
 ): Promise<UserBook> {
+  if (isDemoMode()) {
+    return demoUpsertUserBook({
+      book_id: progress.book_id,
+      last_cfi: progress.last_cfi,
+      highlights: progress.highlights,
+      status: progress.status,
+    });
+  }
+
   const payload: Record<string, unknown> = {
     ...progress,
     updated_at: new Date().toISOString(),
@@ -1722,6 +1800,10 @@ export async function setUserBookReading(userId: string, bookId: string): Promis
 export async function fetchUserBooksLastRead(
   userId: string
 ): Promise<Array<{ book_id: string; last_read_at: string | null }>> {
+  if (isDemoMode()) {
+    return demoFetchUserBooksLastRead();
+  }
+
   const { data, error } = await supabase
     .from('user_books')
     .select('book_id, last_read_at')
@@ -1770,6 +1852,10 @@ export async function hasReadingHistory(userId: string): Promise<boolean> {
 }
 
 export async function fetchHistoryBooks(userId: string, filters?: BookFilters): Promise<BookWithStatus[]> {
+  if (isDemoMode()) {
+    return demoFetchHistoryBooks(filters);
+  }
+
   let query = supabase
     .from('books')
     .select('*, user_books!inner(user_id,last_read_at,status)')

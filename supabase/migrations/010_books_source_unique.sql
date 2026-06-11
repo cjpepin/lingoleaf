@@ -7,6 +7,6 @@ DROP INDEX IF EXISTS idx_books_source_source_id;
 -- - Allows multiple rows with NULL source_id (Postgres treats NULLs as distinct)
 -- - Enables upsert(onConflict: 'source,source_id')
 CREATE UNIQUE INDEX IF NOT EXISTS idx_books_source_source_id_unique
-  ON books(source, source_id);
+  ON lingoleaf.books(source, source_id);
 
 

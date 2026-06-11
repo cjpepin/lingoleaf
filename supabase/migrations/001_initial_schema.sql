@@ -1,12 +1,23 @@
 -- LingoLeaf Initial Schema
 -- Creates all tables and RLS policies
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- Dedicated app schema (public is reserved for the root portfolio project).
+create schema if not exists lingoleaf;
+
+grant usage on schema lingoleaf to postgres, anon, authenticated, service_role;
+
+alter default privileges in schema lingoleaf
+  grant all on tables to anon, authenticated, service_role;
+
+alter default privileges in schema lingoleaf
+  grant all on sequences to anon, authenticated, service_role;
+
+alter default privileges in schema lingoleaf
+  grant all on functions to anon, authenticated, service_role;
 
 -- Books table
-CREATE TABLE books (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE lingoleaf.books (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL,
   author TEXT,
   storage_path TEXT NOT NULL,
@@ -16,10 +27,10 @@ CREATE TABLE books (
 );
 
 -- Highlights table
-CREATE TABLE highlights (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE lingoleaf.highlights (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  book_id UUID NOT NULL REFERENCES lingoleaf.books(id) ON DELETE CASCADE,
   cfi_range TEXT NOT NULL,
   selected_text TEXT NOT NULL,
   context_snippet TEXT,
@@ -27,15 +38,15 @@ CREATE TABLE highlights (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes for highlights
-CREATE INDEX idx_highlights_user_book ON highlights(user_id, book_id);
-CREATE UNIQUE INDEX idx_highlights_unique ON highlights(user_id, book_id, cfi_range);
+-- Create indexes for lingoleaf.highlights
+CREATE INDEX idx_highlights_user_book ON lingoleaf.highlights(user_id, book_id);
+CREATE UNIQUE INDEX idx_highlights_unique ON lingoleaf.highlights(user_id, book_id, cfi_range);
 
 -- Study words table
-CREATE TABLE study_words (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE lingoleaf.study_words (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  book_id UUID NOT NULL REFERENCES lingoleaf.books(id) ON DELETE CASCADE,
   source_lang TEXT NOT NULL,
   target_lang TEXT NOT NULL,
   term TEXT NOT NULL,
@@ -45,13 +56,13 @@ CREATE TABLE study_words (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes for study_words
-CREATE INDEX idx_study_words_user ON study_words(user_id, created_at DESC);
-CREATE INDEX idx_study_words_user_book ON study_words(user_id, book_id);
-CREATE UNIQUE INDEX idx_study_words_unique ON study_words(user_id, book_id, source_lang, target_lang, term_normalized);
+-- Create indexes for lingoleaf.study_words
+CREATE INDEX idx_study_words_user ON lingoleaf.study_words(user_id, created_at DESC);
+CREATE INDEX idx_study_words_user_book ON lingoleaf.study_words(user_id, book_id);
+CREATE UNIQUE INDEX idx_study_words_unique ON lingoleaf.study_words(user_id, book_id, source_lang, target_lang, term_normalized);
 
 -- Translation cache table
-CREATE TABLE translation_cache (
+CREATE TABLE lingoleaf.translation_cache (
   source_lang TEXT NOT NULL,
   target_lang TEXT NOT NULL,
   term_normalized TEXT NOT NULL,
@@ -61,7 +72,7 @@ CREATE TABLE translation_cache (
 );
 
 -- User settings table
-CREATE TABLE user_settings (
+CREATE TABLE lingoleaf.user_settings (
   user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   target_lang TEXT NOT NULL DEFAULT 'en',
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -69,63 +80,63 @@ CREATE TABLE user_settings (
 );
 
 -- Enable RLS
-ALTER TABLE books ENABLE ROW LEVEL SECURITY;
-ALTER TABLE highlights ENABLE ROW LEVEL SECURITY;
-ALTER TABLE study_words ENABLE ROW LEVEL SECURITY;
-ALTER TABLE translation_cache ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.books ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.highlights ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.study_words ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.translation_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lingoleaf.user_settings ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for books (readable by authenticated users)
+-- RLS Policies for lingoleaf.books (readable by authenticated users)
 CREATE POLICY "Books are viewable by authenticated users"
-  ON books FOR SELECT
+  ON lingoleaf.books FOR SELECT
   TO authenticated
   USING (true);
 
--- RLS Policies for highlights (user owns their data)
+-- RLS Policies for lingoleaf.highlights (user owns their data)
 CREATE POLICY "Users can view their own highlights"
-  ON highlights FOR SELECT
+  ON lingoleaf.highlights FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can create their own highlights"
-  ON highlights FOR INSERT
+  ON lingoleaf.highlights FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete their own highlights"
-  ON highlights FOR DELETE
+  ON lingoleaf.highlights FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);
 
--- RLS Policies for study_words (user owns their data)
+-- RLS Policies for lingoleaf.study_words (user owns their data)
 CREATE POLICY "Users can view their own study words"
-  ON study_words FOR SELECT
+  ON lingoleaf.study_words FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can create their own study words"
-  ON study_words FOR INSERT
+  ON lingoleaf.study_words FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can delete their own study words"
-  ON study_words FOR DELETE
+  ON lingoleaf.study_words FOR DELETE
   TO authenticated
   USING (auth.uid() = user_id);
 
--- RLS Policies for user_settings
+-- RLS Policies for lingoleaf.user_settings
 CREATE POLICY "Users can view their own settings"
-  ON user_settings FOR SELECT
+  ON lingoleaf.user_settings FOR SELECT
   TO authenticated
   USING (auth.uid() = user_id);
 
 CREATE POLICY "Users can insert their own settings"
-  ON user_settings FOR INSERT
+  ON lingoleaf.user_settings FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can update their own settings"
-  ON user_settings FOR UPDATE
+  ON lingoleaf.user_settings FOR UPDATE
   TO authenticated
   USING (auth.uid() = user_id);
 

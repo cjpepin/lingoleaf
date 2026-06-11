@@ -1,14 +1,14 @@
--- Premium entitlement flags on user_settings (project uses user_settings as per-user profile row)
+-- Premium entitlement flags on lingoleaf.user_settings (project uses lingoleaf.user_settings as per-user profile row)
 
 DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
-    WHERE table_name = 'user_settings'
+    WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings'
       AND column_name = 'is_premium'
   ) THEN
-    ALTER TABLE user_settings
+    ALTER TABLE lingoleaf.user_settings
       ADD COLUMN is_premium BOOLEAN NOT NULL DEFAULT false;
   END IF;
 END $$;
@@ -18,10 +18,10 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
-    WHERE table_name = 'user_settings'
+    WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings'
       AND column_name = 'premium_plan'
   ) THEN
-    ALTER TABLE user_settings
+    ALTER TABLE lingoleaf.user_settings
       ADD COLUMN premium_plan TEXT;
   END IF;
 END $$;
@@ -31,16 +31,16 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM information_schema.columns
-    WHERE table_name = 'user_settings'
+    WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings'
       AND column_name = 'premium_updated_at'
   ) THEN
-    ALTER TABLE user_settings
+    ALTER TABLE lingoleaf.user_settings
       ADD COLUMN premium_updated_at TIMESTAMPTZ;
   END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_user_settings_is_premium
-  ON user_settings(is_premium)
+  ON lingoleaf.user_settings(is_premium)
   WHERE is_premium = true;
 
 COMMENT ON COLUMN user_settings.is_premium IS 'Premium entitlement flag for the signed-in user';

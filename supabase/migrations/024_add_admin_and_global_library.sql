@@ -1,17 +1,17 @@
--- Add admin column to user_settings
+-- Add admin column to lingoleaf.user_settings
 -- Run this in Supabase SQL Editor
 
 -- Add admin column if it doesn't exist
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                 WHERE table_name='user_settings' AND column_name='admin') THEN
-    ALTER TABLE user_settings ADD COLUMN admin BOOLEAN DEFAULT false;
+                 WHERE table_schema = 'lingoleaf' AND table_name = 'user_settings' AND column_name='admin') THEN
+    ALTER TABLE lingoleaf.user_settings ADD COLUMN admin BOOLEAN DEFAULT false;
   END IF;
 END $$;
 
 -- Update existing rows to have default value
-UPDATE user_settings
+UPDATE lingoleaf.user_settings
 SET admin = COALESCE(admin, false)
 WHERE admin IS NULL;
 
@@ -32,8 +32,8 @@ COMMENT ON COLUMN user_settings.admin IS 'Whether the user has admin privileges'
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
-                 WHERE table_name='books' AND column_name='is_general') THEN
-    ALTER TABLE books ADD COLUMN is_general BOOLEAN DEFAULT false;
+                 WHERE table_schema = 'lingoleaf' AND table_name = 'books' AND column_name='is_general') THEN
+    ALTER TABLE lingoleaf.books ADD COLUMN is_general BOOLEAN DEFAULT false;
   END IF;
 END $$;
 
@@ -41,5 +41,5 @@ END $$;
 COMMENT ON COLUMN books.is_general IS 'Whether the book is available to all users in the general library';
 
 -- Create index for faster general book queries
-CREATE INDEX IF NOT EXISTS idx_books_is_general ON books(is_general) WHERE is_general = true;
+CREATE INDEX IF NOT EXISTS idx_books_is_general ON lingoleaf.books(is_general) WHERE is_general = true;
 

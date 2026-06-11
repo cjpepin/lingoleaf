@@ -1,13 +1,13 @@
--- Add language preference columns to user_settings
+-- Add language preference columns to lingoleaf.user_settings
 -- Supports multiple known and goal languages
 
-ALTER TABLE user_settings
+ALTER TABLE lingoleaf.user_settings
   ADD COLUMN native_lang VARCHAR(10) DEFAULT 'en',
   ADD COLUMN known_langs TEXT[] DEFAULT ARRAY['en'],
   ADD COLUMN goal_langs TEXT[] DEFAULT ARRAY[]::TEXT[];
 
 -- Update existing rows to have default values
-UPDATE user_settings
+UPDATE lingoleaf.user_settings
 SET 
   native_lang = 'en',
   known_langs = ARRAY['en'],

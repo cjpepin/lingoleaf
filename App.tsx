@@ -5,14 +5,16 @@
 
 import 'react-native-gesture-handler';
 import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { AppState, View, Text, StyleSheet, Alert } from 'react-native';
 import { ReaderProvider } from '@epubjs-react-native/core';
 import { RootNavigator } from './src/navigation';
 import { useAuthStore } from './src/state/useAuthStore';
 import { useAppLangStore } from './src/state/useAppLangStore';
 import { OnboardingWrapper } from './src/components/OnboardingWrapper';
-import mobileAds from 'react-native-google-mobile-ads';
+import { DemoBanner } from './src/components/DemoBanner';
+import { WebDemoDeviceFrame } from './src/demo/WebDemoDeviceFrame';
+import { isWebDemo, isWebPlatform, isDemoMode } from './src/demo/config';
 import { logger } from './src/utils/logger';
 import { supabaseConfigured, supabase } from './src/supabase/client';
 import { colors, spacing, typography } from './src/theme';
@@ -25,7 +27,7 @@ import { t as translate } from './src/i18n/translations';
 import { parseTrustedAuthCallback, redactAuthTokens } from './src/utils/authDeepLink';
 import { clearPendingEmailConfirmation } from './src/utils/pendingEmailConfirmation';
 
-export default function App() {
+function AppShell() {
   const initialize = useAuthStore((state) => state.initialize);
   const user = useAuthStore((state) => state.user);
   const isGuest = useAuthStore((state) => state.isGuest);
@@ -36,6 +38,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isDemoMode()) {
+      initialize();
+      return;
+    }
     if (!supabaseConfigured) {
       logger.error('Missing Supabase environment variables. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_KEY for production builds.');
       return;
@@ -44,13 +50,16 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isWebPlatform()) return;
     void analyticsClient.init();
     initializeNotificationHandler();
   }, []);
 
   useEffect(() => {
+    if (isWebPlatform()) return;
+    const { AppState } = require('react-native');
     const appStartAt = Date.now();
-    const sub = AppState.addEventListener('change', (nextState) => {
+    const sub = AppState.addEventListener('change', (nextState: string) => {
       if (nextState !== 'background' && nextState !== 'inactive') return;
       track('session_ended', {
         duration_ms: Math.max(0, Date.now() - appStartAt),
@@ -70,7 +79,7 @@ export default function App() {
   }, [isGuest, user?.id]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (isWebPlatform() || !user?.id) return;
     let canceled = false;
     (async () => {
       try {
@@ -95,11 +104,14 @@ export default function App() {
   }, [appLang, user?.id]);
 
   useEffect(() => {
-    // Ensure AdMob is initialized (some setups won't render ads until init completes).
-    mobileAds()
+    if (isWebPlatform()) return;
+    // Lazy-load native ads SDK so web bundles do not import it.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mobileAds = require('react-native-google-mobile-ads').default;
+    void mobileAds()
       .initialize()
-      .then((s) => logger.info('MobileAds initialized', { status: s }))
-      .catch((e) => logger.warn('MobileAds init failed', e));
+      .then((status: unknown) => logger.info('MobileAds initialized', { status }))
+      .catch((error: unknown) => logger.warn('MobileAds init failed', error));
   }, []);
 
   useEffect(() => {
@@ -152,7 +164,7 @@ export default function App() {
     };
   }, []);
 
-  if (!supabaseConfigured) {
+  if (!isDemoMode() && !supabaseConfigured) {
     return (
       <View style={styles.configContainer}>
         <StatusBar style="dark" />
@@ -167,16 +179,27 @@ export default function App() {
     );
   }
 
-  return (
-    <ReaderProvider>
+  const content = (
+    <>
       <StatusBar style="dark" />
+      {isWebDemo() ? <DemoBanner /> : null}
       <PremiumProvider>
         <OnboardingWrapper>
           <RootNavigator />
         </OnboardingWrapper>
       </PremiumProvider>
-    </ReaderProvider>
+    </>
   );
+
+  if (isWebPlatform()) {
+    return <WebDemoDeviceFrame>{content}</WebDemoDeviceFrame>;
+  }
+
+  return <ReaderProvider>{content}</ReaderProvider>;
+}
+
+export default function App() {
+  return <AppShell />;
 }
 
 const styles = StyleSheet.create({

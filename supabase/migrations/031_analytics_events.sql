@@ -2,7 +2,7 @@
 
 create extension if not exists pgcrypto;
 
-create table if not exists public.analytics_events (
+create table if not exists lingoleaf.analytics_events (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   user_id uuid null references auth.users(id) on delete set null,
@@ -17,12 +17,12 @@ create table if not exists public.analytics_events (
   locale text
 );
 
-create index if not exists analytics_events_created_at_idx on public.analytics_events (created_at desc);
-create index if not exists analytics_events_user_id_idx on public.analytics_events (user_id);
-create index if not exists analytics_events_event_name_idx on public.analytics_events (event_name);
-create index if not exists analytics_events_install_id_idx on public.analytics_events (install_id);
+create index if not exists analytics_events_created_at_idx on lingoleaf.analytics_events (created_at desc);
+create index if not exists analytics_events_user_id_idx on lingoleaf.analytics_events (user_id);
+create index if not exists analytics_events_event_name_idx on lingoleaf.analytics_events (event_name);
+create index if not exists analytics_events_install_id_idx on lingoleaf.analytics_events (install_id);
 
-create table if not exists public.analytics_event_failures (
+create table if not exists lingoleaf.analytics_event_failures (
   id uuid primary key default gen_random_uuid(),
   created_at timestamptz not null default now(),
   user_id uuid null references auth.users(id) on delete set null,
@@ -31,16 +31,16 @@ create table if not exists public.analytics_event_failures (
   payload jsonb
 );
 
-alter table public.analytics_events enable row level security;
-alter table public.analytics_event_failures enable row level security;
+alter table lingoleaf.analytics_events enable row level security;
+alter table lingoleaf.analytics_event_failures enable row level security;
 
-grant insert, select on public.analytics_events to anon, authenticated;
-grant insert, select on public.analytics_event_failures to anon, authenticated;
+grant insert, select on lingoleaf.analytics_events to anon, authenticated;
+grant insert, select on lingoleaf.analytics_event_failures to anon, authenticated;
 
 -- Insert allowed for authenticated users (own user id or anonymous user_id null) and anon (user_id null only).
-drop policy if exists analytics_events_insert on public.analytics_events;
+drop policy if exists analytics_events_insert on lingoleaf.analytics_events;
 create policy analytics_events_insert
-  on public.analytics_events
+  on lingoleaf.analytics_events
   for insert
   to anon, authenticated
   with check (
@@ -49,16 +49,16 @@ create policy analytics_events_insert
   );
 
 -- Select only own rows (for debug/dev tooling).
-drop policy if exists analytics_events_select_own on public.analytics_events;
+drop policy if exists analytics_events_select_own on lingoleaf.analytics_events;
 create policy analytics_events_select_own
-  on public.analytics_events
+  on lingoleaf.analytics_events
   for select
   to authenticated
   using (user_id = auth.uid());
 
-drop policy if exists analytics_failures_insert on public.analytics_event_failures;
+drop policy if exists analytics_failures_insert on lingoleaf.analytics_event_failures;
 create policy analytics_failures_insert
-  on public.analytics_event_failures
+  on lingoleaf.analytics_event_failures
   for insert
   to anon, authenticated
   with check (
@@ -66,19 +66,19 @@ create policy analytics_failures_insert
     or (auth.role() = 'authenticated' and (user_id is null or user_id = auth.uid()))
   );
 
-drop policy if exists analytics_failures_select_own on public.analytics_event_failures;
+drop policy if exists analytics_failures_select_own on lingoleaf.analytics_event_failures;
 create policy analytics_failures_select_own
-  on public.analytics_event_failures
+  on lingoleaf.analytics_event_failures
   for select
   to authenticated
   using (user_id = auth.uid());
 
 -- Optional RPC fallback if you prefer DB RPC over Edge Function.
-create or replace function public.analytics_ingest_batch(p_events jsonb)
+create or replace function lingoleaf.analytics_ingest_batch(p_events jsonb)
 returns integer
 language plpgsql
 security definer
-set search_path = public
+set search_path = lingoleaf
 as $$
 declare
   inserted_count integer := 0;
@@ -87,7 +87,7 @@ begin
     return 0;
   end if;
 
-  insert into public.analytics_events (
+  insert into lingoleaf.analytics_events (
     user_id,
     event_name,
     event_version,
@@ -117,4 +117,4 @@ begin
 end;
 $$;
 
-grant execute on function public.analytics_ingest_batch(jsonb) to anon, authenticated;
+grant execute on function lingoleaf.analytics_ingest_batch(jsonb) to anon, authenticated;

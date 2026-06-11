@@ -1,0 +1,10 @@
+# LingoLeaf mobile/demo Supabase project.
+# App tables live in the lingoleaf schema; public is reserved for the root portfolio project.
+
+[api]
+schemas = ["lingoleaf", "public", "graphql_public"]
+extra_search_path = ["lingoleaf", "extensions"]
+max_rows = 1000
+
+[db]
+major_version = 15

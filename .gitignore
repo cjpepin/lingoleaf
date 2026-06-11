@@ -5,6 +5,7 @@ web-build/
 
 # EAS local build artifacts
 build/
+dist/web-demo/
 
 # Native
 *.orig.*
@@ -30,6 +31,7 @@ yarn-error.log*
 .env
 .env.local
 .env*.local
+.env.demo
 credentials.json
 credentials/
 creds/

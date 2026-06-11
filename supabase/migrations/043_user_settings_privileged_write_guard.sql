@@ -1,9 +1,9 @@
--- Guard privileged/server-managed user_settings columns from direct client writes.
+-- Guard privileged/server-managed lingoleaf.user_settings columns from direct client writes.
 
-create or replace function public.guard_user_settings_privileged_columns()
+create or replace function lingoleaf.guard_user_settings_privileged_columns()
 returns trigger
 language plpgsql
-set search_path = public, pg_temp
+set search_path = lingoleaf, pg_temp
 as $$
 begin
   -- Allow service-role calls, migrations, and security-definer helpers to manage these fields.
@@ -57,9 +57,9 @@ begin
 end;
 $$;
 
-drop trigger if exists guard_user_settings_privileged_columns on public.user_settings;
+drop trigger if exists guard_user_settings_privileged_columns on lingoleaf.user_settings;
 
 create trigger guard_user_settings_privileged_columns
-before insert or update on public.user_settings
+before insert or update on lingoleaf.user_settings
 for each row
-execute function public.guard_user_settings_privileged_columns();
+execute function lingoleaf.guard_user_settings_privileged_columns();

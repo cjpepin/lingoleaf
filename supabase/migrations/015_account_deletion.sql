@@ -1,24 +1,24 @@
 -- Account deletion support
--- Add deleted_at column to auth.users metadata (via user_settings proxy)
+-- Add deleted_at column to auth.users metadata (via lingoleaf.user_settings proxy)
 -- and create a helper function for soft-delete
 
--- Add deleted_at to user_settings (our proxy for user metadata)
-ALTER TABLE user_settings
+-- Add deleted_at to lingoleaf.user_settings (our proxy for user metadata)
+ALTER TABLE lingoleaf.user_settings
   ADD COLUMN deleted_at TIMESTAMPTZ DEFAULT NULL;
 
 -- Create index for filtering out deleted users
-CREATE INDEX idx_user_settings_deleted ON user_settings(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_user_settings_deleted ON lingoleaf.user_settings(deleted_at) WHERE deleted_at IS NOT NULL;
 
 -- Helper function to soft-delete a user account
 -- This marks the user as deleted and signs them out
-CREATE OR REPLACE FUNCTION soft_delete_user_account()
+CREATE OR REPLACE FUNCTION lingoleaf.soft_delete_user_account()
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 BEGIN
-  -- Mark user as deleted in user_settings
-  INSERT INTO user_settings (user_id, deleted_at, updated_at)
+  -- Mark user as deleted in lingoleaf.user_settings
+  INSERT INTO lingoleaf.user_settings (user_id, deleted_at, updated_at)
   VALUES (auth.uid(), NOW(), NOW())
   ON CONFLICT (user_id)
   DO UPDATE SET
@@ -32,6 +32,6 @@ END;
 $$;
 
 -- Grant execute permission to authenticated users
-GRANT EXECUTE ON FUNCTION soft_delete_user_account() TO authenticated;
+GRANT EXECUTE ON FUNCTION lingoleaf.soft_delete_user_account() TO authenticated;
 
 

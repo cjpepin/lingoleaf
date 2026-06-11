@@ -9,7 +9,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Alert, Image, TouchableOpacity, InteractionManager, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -189,7 +189,15 @@ export default function BookDetailsScreen() {
         setUserBookStatus('reading');
       }
       let localPath: string;
-      if (book.epub_url) {
+      if (Platform.OS === 'web') {
+        if (book.epub_url) {
+          localPath = book.epub_url;
+        } else if (book.storage_path) {
+          localPath = await getSignedUrl(book.storage_path);
+        } else {
+          throw new Error('No download source for book');
+        }
+      } else if (book.epub_url) {
         localPath = await downloadExternalBook(book.id, book.epub_url);
       } else if (book.storage_path) {
         localPath = await downloadBook(book.id, book.storage_path);

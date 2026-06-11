@@ -1,28 +1,29 @@
 -- Storage policies for general-library bucket
--- Run this in Supabase SQL Editor after creating the general-library bucket
+-- Replaces 004_global_library_storage_policies.sql (duplicate version "004" fix).
+-- Idempotent so re-push is safe if policies were created before schema_migrations insert failed.
 
--- Allow authenticated users to upload to general-library
+DROP POLICY IF EXISTS "Authenticated users can upload to general-library" ON storage.objects;
 CREATE POLICY "Authenticated users can upload to general-library"
 ON storage.objects
 FOR INSERT
 TO authenticated
 WITH CHECK (bucket_id = 'general-library');
 
--- Allow authenticated users to read from general-library
+DROP POLICY IF EXISTS "Authenticated users can read from general-library" ON storage.objects;
 CREATE POLICY "Authenticated users can read from general-library"
 ON storage.objects
 FOR SELECT
 TO authenticated
 USING (bucket_id = 'general-library');
 
--- Allow public read access to general-library (optional - for public books)
+DROP POLICY IF EXISTS "Public can read from general-library" ON storage.objects;
 CREATE POLICY "Public can read from general-library"
 ON storage.objects
 FOR SELECT
 TO public
 USING (bucket_id = 'general-library');
 
--- Allow authenticated users to update their own uploads (optional)
+DROP POLICY IF EXISTS "Authenticated users can update general-library" ON storage.objects;
 CREATE POLICY "Authenticated users can update general-library"
 ON storage.objects
 FOR UPDATE
@@ -30,10 +31,9 @@ TO authenticated
 USING (bucket_id = 'general-library')
 WITH CHECK (bucket_id = 'general-library');
 
--- Allow authenticated users to delete from general-library (admin only in practice)
+DROP POLICY IF EXISTS "Authenticated users can delete from general-library" ON storage.objects;
 CREATE POLICY "Authenticated users can delete from general-library"
 ON storage.objects
 FOR DELETE
 TO authenticated
 USING (bucket_id = 'general-library');
-

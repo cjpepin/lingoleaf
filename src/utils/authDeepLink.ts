@@ -1,7 +1,8 @@
-const TRUSTED_HTTPS_HOST = 'lingoleafapp.com';
-const TRUSTED_AUTH_PATH = '/auth';
+const TRUSTED_HTTPS_HOST = process.env.EXPO_PUBLIC_AUTH_CALLBACK_HOST?.trim() || 'lingoleafapp.com';
+const TRUSTED_AUTH_PATH = process.env.EXPO_PUBLIC_AUTH_CALLBACK_PATH?.trim() || '/auth';
 
-export const AUTH_EMAIL_REDIRECT_URL = `https://${TRUSTED_HTTPS_HOST}${TRUSTED_AUTH_PATH}`;
+export const AUTH_EMAIL_REDIRECT_URL = process.env.EXPO_PUBLIC_AUTH_CALLBACK_ORIGIN?.trim()
+  || `https://${TRUSTED_HTTPS_HOST}${TRUSTED_AUTH_PATH}`;
 
 function normalizePath(pathname: string): string {
   const trimmed = pathname.trim();

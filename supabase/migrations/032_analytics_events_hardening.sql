@@ -2,22 +2,40 @@
 
 create extension if not exists pgcrypto;
 
+create or replace function lingoleaf.is_app_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = lingoleaf
+as $$
+  select exists (
+    select 1
+    from lingoleaf.user_settings
+    where user_id = auth.uid()
+      and admin = true
+  );
+$$;
+
+revoke all on function lingoleaf.is_app_admin() from public;
+grant execute on function lingoleaf.is_app_admin() to authenticated;
+
 -- Remove direct analytics reads from client roles; keep inserts for ingestion.
-revoke select on table public.analytics_events from anon, authenticated;
-revoke select on table public.analytics_event_failures from anon, authenticated;
-grant insert on table public.analytics_events to anon, authenticated;
-grant insert on table public.analytics_event_failures to anon, authenticated;
+revoke select on table lingoleaf.analytics_events from anon, authenticated;
+revoke select on table lingoleaf.analytics_event_failures from anon, authenticated;
+grant insert on table lingoleaf.analytics_events to anon, authenticated;
+grant insert on table lingoleaf.analytics_event_failures to anon, authenticated;
 
 -- Remove legacy per-user read policies; reads should only go through admin RPCs.
-drop policy if exists analytics_events_select_own on public.analytics_events;
-drop policy if exists analytics_failures_select_own on public.analytics_event_failures;
+drop policy if exists analytics_events_select_own on lingoleaf.analytics_events;
+drop policy if exists analytics_failures_select_own on lingoleaf.analytics_event_failures;
 
 -- Harden batch ingest: never trust caller user_id.
-create or replace function public.analytics_ingest_batch(p_events jsonb)
+create or replace function lingoleaf.analytics_ingest_batch(p_events jsonb)
 returns integer
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = lingoleaf, pg_temp
 as $$
 declare
   inserted_count integer := 0;
@@ -31,7 +49,7 @@ begin
     return 0;
   end if;
 
-  insert into public.analytics_events (
+  insert into lingoleaf.analytics_events (
     user_id,
     event_name,
     event_version,
@@ -69,19 +87,19 @@ begin
 end;
 $$;
 
-revoke all on function public.analytics_ingest_batch(jsonb) from public;
-revoke all on function public.analytics_ingest_batch(jsonb) from anon, authenticated;
-grant execute on function public.analytics_ingest_batch(jsonb) to anon, authenticated;
+revoke all on function lingoleaf.analytics_ingest_batch(jsonb) from public;
+revoke all on function lingoleaf.analytics_ingest_batch(jsonb) from anon, authenticated;
+grant execute on function lingoleaf.analytics_ingest_batch(jsonb) to anon, authenticated;
 
 -- Admin-only aggregate dashboard payload.
-create or replace function public.analytics_admin_dashboard(
+create or replace function lingoleaf.analytics_admin_dashboard(
   p_from timestamptz default (now() - interval '30 days'),
   p_to timestamptz default now()
 )
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = lingoleaf, pg_temp
 as $$
 declare
   from_ts timestamptz := coalesce(p_from, now() - interval '30 days');
@@ -91,8 +109,8 @@ begin
     raise exception 'Only authenticated users can access analytics dashboard data.';
   end if;
 
-  if not public.is_forum_admin() then
-    raise exception 'Only forum admins can access analytics dashboard data.';
+  if not lingoleaf.is_app_admin() then
+    raise exception 'Only app admins can access analytics dashboard data.';
   end if;
 
   if from_ts >= to_ts then
@@ -105,22 +123,22 @@ begin
     'totals', jsonb_build_object(
       'events', (
         select count(*)::bigint
-        from public.analytics_events e
+        from lingoleaf.analytics_events e
         where e.created_at >= from_ts and e.created_at <= to_ts
       ),
       'failures', (
         select count(*)::bigint
-        from public.analytics_event_failures f
+        from lingoleaf.analytics_event_failures f
         where f.created_at >= from_ts and f.created_at <= to_ts
       ),
       'users', (
         select count(distinct e.user_id)::bigint
-        from public.analytics_events e
+        from lingoleaf.analytics_events e
         where e.created_at >= from_ts and e.created_at <= to_ts and e.user_id is not null
       ),
       'installs', (
         select count(distinct e.install_id)::bigint
-        from public.analytics_events e
+        from lingoleaf.analytics_events e
         where e.created_at >= from_ts and e.created_at <= to_ts and coalesce(e.install_id, '') <> ''
       )
     ),
@@ -128,7 +146,7 @@ begin
       select jsonb_agg(row_to_json(t))
       from (
         select e.event_name, count(*)::bigint as count
-        from public.analytics_events e
+        from lingoleaf.analytics_events e
         where e.created_at >= from_ts and e.created_at <= to_ts
         group by e.event_name
         order by count(*) desc, e.event_name asc
@@ -145,13 +163,13 @@ begin
         from generate_series(date_trunc('day', from_ts), date_trunc('day', to_ts), interval '1 day') as d(day)
         left join (
           select date_trunc('day', e.created_at) as day, count(*) as events
-          from public.analytics_events e
+          from lingoleaf.analytics_events e
           where e.created_at >= from_ts and e.created_at <= to_ts
           group by 1
         ) ev on ev.day = d.day
         left join (
           select date_trunc('day', f.created_at) as day, count(*) as failures
-          from public.analytics_event_failures f
+          from lingoleaf.analytics_event_failures f
           where f.created_at >= from_ts and f.created_at <= to_ts
           group by 1
         ) fl on fl.day = d.day
@@ -162,12 +180,12 @@ begin
 end;
 $$;
 
-revoke all on function public.analytics_admin_dashboard(timestamptz, timestamptz) from public;
-revoke all on function public.analytics_admin_dashboard(timestamptz, timestamptz) from anon, authenticated;
-grant execute on function public.analytics_admin_dashboard(timestamptz, timestamptz) to authenticated;
+revoke all on function lingoleaf.analytics_admin_dashboard(timestamptz, timestamptz) from public;
+revoke all on function lingoleaf.analytics_admin_dashboard(timestamptz, timestamptz) from anon, authenticated;
+grant execute on function lingoleaf.analytics_admin_dashboard(timestamptz, timestamptz) to authenticated;
 
 -- Admin-only recent events without properties payload.
-create or replace function public.analytics_admin_recent_events(
+create or replace function lingoleaf.analytics_admin_recent_events(
   p_limit integer default 50,
   p_from timestamptz default (now() - interval '30 days'),
   p_to timestamptz default now()
@@ -185,7 +203,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = public, pg_temp
+set search_path = lingoleaf, pg_temp
 as $$
 declare
   bounded_limit integer := least(greatest(coalesce(p_limit, 50), 1), 200);
@@ -196,8 +214,8 @@ begin
     raise exception 'Only authenticated users can access analytics dashboard data.';
   end if;
 
-  if not public.is_forum_admin() then
-    raise exception 'Only forum admins can access analytics dashboard data.';
+  if not lingoleaf.is_app_admin() then
+    raise exception 'Only app admins can access analytics dashboard data.';
   end if;
 
   if from_ts >= to_ts then
@@ -215,13 +233,13 @@ begin
     e.app_version,
     e.platform,
     e.locale
-  from public.analytics_events e
+  from lingoleaf.analytics_events e
   where e.created_at >= from_ts and e.created_at <= to_ts
   order by e.created_at desc
   limit bounded_limit;
 end;
 $$;
 
-revoke all on function public.analytics_admin_recent_events(integer, timestamptz, timestamptz) from public;
-revoke all on function public.analytics_admin_recent_events(integer, timestamptz, timestamptz) from anon, authenticated;
-grant execute on function public.analytics_admin_recent_events(integer, timestamptz, timestamptz) to authenticated;
+revoke all on function lingoleaf.analytics_admin_recent_events(integer, timestamptz, timestamptz) from public;
+revoke all on function lingoleaf.analytics_admin_recent_events(integer, timestamptz, timestamptz) from anon, authenticated;
+grant execute on function lingoleaf.analytics_admin_recent_events(integer, timestamptz, timestamptz) to authenticated;

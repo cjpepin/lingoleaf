@@ -9,6 +9,7 @@ import { NavigationContainer, createNavigationContainerRef } from '@react-naviga
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import type { RootStackParamList, TabParamList } from './types';
+import { isWebDemo, webLinkingPrefix } from '@/demo/config';
 import { useAuthStore } from '@/state/useAuthStore';
 import { useSettingsStore } from '@/state/useSettingsStore';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -40,6 +41,30 @@ import { useAdUpsellStore } from '@/state/useAdUpsellStore';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 const navigationRef = createNavigationContainerRef<RootStackParamList>();
+
+const webDemoLinking = {
+  prefixes: [webLinkingPrefix()],
+  config: {
+    screens: {
+      MainTabs: {
+        screens: {
+          Library: 'library',
+          History: 'history',
+          Home: '',
+          Study: 'study',
+          Profile: 'profile',
+        },
+      },
+      Reader: 'reader/:bookId',
+      BookDetails: 'book/:bookId',
+      Auth: 'auth',
+      Paywall: 'paywall',
+      Settings: 'settings',
+      MyProgressScreen: 'progress',
+      Flashcards: 'flashcards',
+    },
+  },
+};
 
 function MainTabs() {
   const t = useTranslation();
@@ -148,6 +173,7 @@ export function RootNavigator() {
   return (
     <NavigationContainer
       ref={navigationRef}
+      linking={isWebDemo() ? webDemoLinking : undefined}
       onReady={() => {
         const route = navigationRef.getCurrentRoute();
         const routeName = route?.name ?? 'unknown';
