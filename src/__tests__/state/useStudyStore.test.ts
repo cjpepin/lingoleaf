@@ -89,6 +89,8 @@ describe('useStudyStore', () => {
       const word = mockWord('w1', 'l1');
       useStudyStore.getState().upsertWordInCache('l1', word);
       expect(useStudyStore.getState().wordsByList['l1']).toHaveLength(1);
+      expect(useStudyStore.getState().counts['l1']).toBe(1);
+      expect(useStudyStore.getState().allCount).toBe(1);
     });
 
     it('upsertWordInCache updates existing word', () => {
@@ -106,6 +108,8 @@ describe('useStudyStore', () => {
       useStudyStore.getState().removeWordFromCache('l1', 'w1');
       expect(useStudyStore.getState().wordsByList['l1']).toHaveLength(1);
       expect(useStudyStore.getState().wordsByList['l1'][0].id).toBe('w2');
+      expect(useStudyStore.getState().counts['l1']).toBe(1);
+      expect(useStudyStore.getState().allCount).toBe(1);
     });
 
     it('no-ops for null listId', () => {

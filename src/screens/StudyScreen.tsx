@@ -178,21 +178,23 @@ export default function StudyScreen() {
   const loadListsAndCounts = useCallback(
     async (opts?: { force?: boolean }): Promise<void> => {
       if (!user) return;
-      studyStore.hydrateForUser(user.id);
-      await studyStore.refreshListsAndCounts(user.id, opts);
+      const store = useStudyStore.getState();
+      store.hydrateForUser(user.id);
+      await store.refreshListsAndCounts(user.id, opts);
     },
-    [studyStore, user]
+    [user]
   );
 
   const loadWordsForActiveList = useCallback(
     async (opts?: { force?: boolean }): Promise<void> => {
       if (!user || !activeListId) return;
-      studyStore.hydrateForUser(user.id);
-      await studyStore.refreshWordsForList(user.id, activeListId, opts);
-      const cached = studyStore.getCachedWords(activeListId);
+      const store = useStudyStore.getState();
+      store.hydrateForUser(user.id);
+      await store.refreshWordsForList(user.id, activeListId, opts);
+      const cached = store.getCachedWords(activeListId);
       if (cached) setWords(cached);
     },
-    [activeListId, studyStore, user]
+    [activeListId, user]
   );
 
   const reload = useCallback(async (): Promise<void> => {
@@ -204,17 +206,18 @@ export default function StudyScreen() {
     try {
       const [nextFocusPack] = await Promise.all([
         loadFocusPack(user.id, t).catch(() => null),
-        loadListsAndCounts(),
+        loadListsAndCounts({ force: true }),
       ]);
       setFocusPack(nextFocusPack);
-      if (mode === 'detail') await loadWordsForActiveList();
+      if (mode === 'detail') await loadWordsForActiveList({ force: true });
     } catch (e) {
       logger.error('Failed to load study data', e);
       Alert.alert(t('common.error'), t('study.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [loadListsAndCounts, loadWordsForActiveList, mode, t, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t stable unless app language changes
+  }, [loadListsAndCounts, loadWordsForActiveList, mode, user]);
 
   useFocusEffect(
     useCallback(() => {
@@ -433,9 +436,7 @@ export default function StudyScreen() {
             setWords((prev) => prev.filter((w) => w.id !== word.id));
             if (activeListId) {
               studyStore.removeWordFromCache(activeListId, word.id);
-              studyStore.adjustListCount(activeListId, -1);
             }
-            studyStore.adjustAllCount(-1);
           } catch (e) {
             logger.error('Failed to delete word', e);
             Alert.alert(t('common.error'), t('msg.failedToSave'));
@@ -460,8 +461,6 @@ export default function StudyScreen() {
         if (activeListId && updated.list_id !== activeListId) {
           setWords((prev) => prev.filter((w) => w.id !== word.id));
           studyStore.removeWordFromCache(activeListId, word.id);
-          studyStore.adjustListCount(activeListId, -1);
-          studyStore.adjustListCount(toListId, 1);
           studyStore.upsertWordInCache(toListId, updated);
         } else {
           setWords((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));

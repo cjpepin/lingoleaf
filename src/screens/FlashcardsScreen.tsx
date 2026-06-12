@@ -99,7 +99,6 @@ export default function FlashcardsScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { user } = useAuthStore();
-  const studyStore = useStudyStore();
   const loadSettings = useSettingsStore((s) => s.loadSettings);
   const getFlashcardSettings = useFlashcardSettingsStore((s) => s.getSettings);
   const preferredStudyMethod = useFlashcardSettingsStore((s) => s.preferredStudyMethod);
@@ -216,11 +215,12 @@ export default function FlashcardsScreen() {
         setCompletionVisible(false);
         return ordered;
       }
-      studyStore.hydrateForUser(user.id);
+      const store = useStudyStore.getState();
+      store.hydrateForUser(user.id);
       if (listId) {
-        await studyStore.refreshWordsForList(user.id, listId, { force: false });
+        await store.refreshWordsForList(user.id, listId, { force: false });
       }
-      const cached = listId ? studyStore.getCachedWords(listId) : null;
+      const cached = listId ? store.getCachedWords(listId) : null;
       const data = cached ?? (await fetchStudyWords(user.id, listId));
       setWords(data);
       const newStats = await fetchFlashcardStats(user.id, listId);
@@ -233,7 +233,7 @@ export default function FlashcardsScreen() {
       logger.error('Failed to load flashcards', e);
       throw e;
     }
-  }, [focusPackWordIds, isFocusPackSession, listId, studyStore, user]);
+  }, [focusPackWordIds, isFocusPackSession, listId, user]);
 
   // Omit t from deps so load is stable; otherwise t (new ref every render) causes this effect to
   // re-run every render, calling loadQueue() and resetting flipped/index (rating row disappears).
@@ -634,13 +634,13 @@ export default function FlashcardsScreen() {
       setQueue((prev) => prev.map(update));
       // Update cache so starred state persists when leaving/returning to screen
       if (listId) {
-        studyStore.upsertWordInCache(listId, updatedWord);
+        useStudyStore.getState().upsertWordInCache(listId, updatedWord);
       }
     } catch (e) {
       logger.error('Failed to update starred', e);
       Alert.alert(t('common.error'), t('flashcards.failedToSaveStarred'));
     }
-  }, [current, listId, studyStore, t, user]);
+  }, [current, listId, t, user]);
 
   const handleSwitchMode = useCallback(async () => {
     if (isFocusPackSession) return;

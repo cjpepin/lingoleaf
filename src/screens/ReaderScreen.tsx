@@ -984,8 +984,7 @@ export default function ReaderScreen() {
                 onPress: async () => {
                   for (const word of associated) {
                     await deleteStudyWord(word.id);
-                    if (word.list_id) studyStore.adjustListCount(word.list_id, -1);
-                    studyStore.adjustAllCount(-1);
+                    if (word.list_id) studyStore.removeWordFromCache(word.list_id, word.id);
                   }
                 },
               },
@@ -1191,8 +1190,6 @@ export default function ReaderScreen() {
 
       // Optimistically update the study store cache
       studyStore.upsertWordInCache(selectedListId, newWord);
-      studyStore.adjustListCount(selectedListId, 1);
-      studyStore.adjustAllCount(1);
 
       touchVocabList(selectedListId).catch(() => {});
       track('vocab_saved', {

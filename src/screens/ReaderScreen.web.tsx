@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { RootStackParamList } from '@/navigation/types';
@@ -12,7 +12,7 @@ import { WebEpubReader } from '@/demo/WebEpubReader';
 import { fetchBook } from '@/supabase/queries';
 import { getSignedUrl } from '@/supabase/storage';
 import type { Book } from '@/supabase/types';
-import { colors, spacing, typography } from '@/theme';
+import { colors } from '@/theme';
 import { logger } from '@/utils/logger';
 import { resolveDemoEpubSrc } from '@/demo/demoApi';
 
@@ -65,44 +65,17 @@ export default function ReaderScreen() {
   }
 
   return (
-    <View style={styles.root}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back}>
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-      </View>
-      <WebEpubReader
-        src={readerSrc}
-        title={book?.title}
-        bookId={bookId}
-        sourceLang={book?.source_lang ?? 'es'}
-        targetLang="en"
-      />
-    </View>
+    <WebEpubReader
+      src={readerSrc}
+      title={book?.title}
+      bookId={bookId}
+      sourceLang={book?.source_lang ?? 'es'}
+      onBack={() => navigation.goBack()}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  back: {
-    alignSelf: 'flex-start',
-  },
-  backText: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '600',
-  },
   center: {
     flex: 1,
     alignItems: 'center',

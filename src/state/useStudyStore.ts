@@ -126,9 +126,12 @@ const createStudyStoreState: StateCreator<StudyStore> = (set, get) => ({
     if (!listId) return;
     set((s) => {
       const prev = s.wordsByList[listId] ?? [];
-      const next = prev.some((w) => w.id === word.id) ? prev.map((w) => (w.id === word.id ? word : w)) : [word, ...prev];
+      const exists = prev.some((w) => w.id === word.id);
+      const next = exists ? prev.map((w) => (w.id === word.id ? word : w)) : [word, ...prev];
       return {
         wordsByList: { ...s.wordsByList, [listId]: next },
+        counts: exists ? s.counts : { ...s.counts, [listId]: (s.counts[listId] ?? 0) + 1 },
+        allCount: exists ? s.allCount : s.allCount + 1,
       };
     });
   },
@@ -137,8 +140,15 @@ const createStudyStoreState: StateCreator<StudyStore> = (set, get) => ({
     if (!listId) return;
     set((s) => {
       const prev = s.wordsByList[listId] ?? [];
+      const existed = prev.some((w) => w.id === wordId);
       const next = prev.filter((w) => w.id !== wordId);
-      return { wordsByList: { ...s.wordsByList, [listId]: next } };
+      return {
+        wordsByList: { ...s.wordsByList, [listId]: next },
+        counts: existed
+          ? { ...s.counts, [listId]: Math.max(0, (s.counts[listId] ?? 0) - 1) }
+          : s.counts,
+        allCount: existed ? Math.max(0, s.allCount - 1) : s.allCount,
+      };
     });
   },
 
