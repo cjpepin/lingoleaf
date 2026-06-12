@@ -1,53 +1,62 @@
 {
-  "version": "lingoleaf-demo-v2",
+  "version": "lingoleaf-demo-v4",
   "stores": {
     "books": [
       {
         "id": "11111111-1111-4111-8111-111111111101",
         "value": {
           "id": "11111111-1111-4111-8111-111111111101",
-          "title": "Don Quijote (Demo Excerpt)",
-          "author": "Miguel de Cervantes",
-          "storage_path": "demo/don-quixote.epub",
+          "title": "Don Quijote",
+          "author": "Cervantes Saavedra, Miguel de",
+          "storage_path": null,
+          "cover_path": null,
+          "cover_url": "https://www.gutenberg.org/cache/epub/2000/pg2000.cover.medium.jpg",
           "source_lang": "es",
-          "epub_url": "https://www.gutenberg.org/ebooks/2000.epub.noimages",
+          "epub_url": "https://www.gutenberg.org/ebooks/2000.epub3.images",
+          "source": "gutenberg",
+          "source_id": "2000",
           "is_general": true,
-          "description": "Public-domain Spanish classic used for the LingoLeaf web demo.",
-          "subjects_text": "Fiction, Adventure, Spanish Literature",
-          "created_at": "2025-01-01T00:00:00.000Z",
-          "cover_path": null
+          "description": "\"Don Quijote\" by Miguel de Cervantes Saavedra is a Spanish novel published in two parts in 1605 and 1615. A minor nobleman reads so many chivalric romances that he loses his sanity and decides to become a knight-errant.",
+          "subjects_text": "Knights and knighthood -- Spain -- Fiction, Picaresque literature, Romances, Historical fiction, Adventure stories, Knights and knighthood -- Fiction, Spain -- Social life and customs -- 16th century -- Fiction, Spain -- Fiction, Cervantes Saavedra, Miguel de, 1547-1616 -- Translations into English",
+          "created_at": "2025-01-01T00:00:00.000Z"
         }
       },
       {
         "id": "11111111-1111-4111-8111-111111111102",
         "value": {
           "id": "11111111-1111-4111-8111-111111111102",
-          "title": "Les Misérables (Demo Excerpt)",
-          "author": "Victor Hugo",
-          "storage_path": "demo/les-miserables.epub",
+          "title": "Les misérables Tome I: Fantine",
+          "author": "Hugo, Victor",
+          "storage_path": null,
+          "cover_path": null,
+          "cover_url": "https://www.gutenberg.org/cache/epub/17489/pg17489.cover.medium.jpg",
           "source_lang": "fr",
-          "epub_url": "https://www.gutenberg.org/ebooks/135.epub.noimages",
+          "epub_url": "https://www.gutenberg.org/ebooks/17489.epub3.images",
+          "source": "gutenberg",
+          "source_id": "17489",
           "is_general": true,
-          "description": "Public-domain French novel used for the LingoLeaf web demo.",
-          "subjects_text": "Fiction, Historical, French Literature",
-          "created_at": "2025-01-01T00:00:00.000Z",
-          "cover_path": null
+          "description": "\"Les misérables Tome I: Fantine\" by Victor Hugo is a French epic historical novel first published in 1862. Set between 1815 and the 1832 June Rebellion in Paris, it follows ex-convict Jean Valjean's struggle for redemption.",
+          "subjects_text": "Epic literature, Ex-convicts -- Fiction, Historical fiction, Orphans -- Fiction, Paris (France) -- Fiction",
+          "created_at": "2025-01-01T00:00:00.000Z"
         }
       },
       {
         "id": "11111111-1111-4111-8111-111111111103",
         "value": {
           "id": "11111111-1111-4111-8111-111111111103",
-          "title": "Pride and Prejudice (Demo Excerpt)",
-          "author": "Jane Austen",
-          "storage_path": "demo/pride-and-prejudice.epub",
+          "title": "Pride and Prejudice",
+          "author": "Austen, Jane",
+          "storage_path": null,
+          "cover_path": null,
+          "cover_url": "https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg",
           "source_lang": "en",
-          "epub_url": "https://www.gutenberg.org/ebooks/1342.epub.noimages",
+          "epub_url": "https://www.gutenberg.org/ebooks/1342.epub3.images",
+          "source": "gutenberg",
+          "source_id": "1342",
           "is_general": true,
-          "description": "Public-domain English novel used for the LingoLeaf web demo.",
-          "subjects_text": "Fiction, Romance, English Literature",
-          "created_at": "2025-01-01T00:00:00.000Z",
-          "cover_path": null
+          "description": "\"Pride and Prejudice\" by Jane Austen is a novel published in 1813. It follows Elizabeth Bennet, who must learn to see past first impressions and hasty judgments.",
+          "subjects_text": "Courtship -- Fiction, Domestic fiction, England -- Fiction, Love stories, Sisters -- Fiction, Young women -- Fiction, England -- Social life and customs -- 19th century -- Fiction",
+          "created_at": "2025-01-01T00:00:00.000Z"
         }
       }
     ],
@@ -332,7 +341,7 @@
           "started_at": "2025-06-09T18:00:00.000Z",
           "ended_at": "2025-06-09T18:30:00.000Z",
           "minutes": 30,
-          "book_title": "Don Quijote (Demo Excerpt)",
+          "book_title": "Don Quijote",
           "created_at": "2025-06-09T18:00:00.000Z"
         }
       },
@@ -345,7 +354,7 @@
           "started_at": "2025-06-08T07:15:00.000Z",
           "ended_at": "2025-06-08T07:40:00.000Z",
           "minutes": 25,
-          "book_title": "Don Quijote (Demo Excerpt)",
+          "book_title": "Don Quijote",
           "created_at": "2025-06-08T07:15:00.000Z"
         }
       },
@@ -358,7 +367,7 @@
           "started_at": "2025-06-07T20:00:00.000Z",
           "ended_at": "2025-06-07T20:45:00.000Z",
           "minutes": 45,
-          "book_title": "Don Quijote (Demo Excerpt)",
+          "book_title": "Don Quijote",
           "created_at": "2025-06-07T20:00:00.000Z"
         }
       },
@@ -371,7 +380,7 @@
           "started_at": "2025-06-05T21:00:00.000Z",
           "ended_at": "2025-06-05T21:20:00.000Z",
           "minutes": 20,
-          "book_title": "Les Misérables (Demo Excerpt)",
+          "book_title": "Les misérables Tome I: Fantine",
           "created_at": "2025-06-05T21:00:00.000Z"
         }
       },
@@ -384,7 +393,7 @@
           "started_at": "2025-06-03T09:00:00.000Z",
           "ended_at": "2025-06-03T09:25:00.000Z",
           "minutes": 25,
-          "book_title": "Don Quijote (Demo Excerpt)",
+          "book_title": "Don Quijote",
           "created_at": "2025-06-03T09:00:00.000Z"
         }
       },
@@ -397,7 +406,7 @@
           "started_at": "2025-05-28T21:30:00.000Z",
           "ended_at": "2025-05-28T22:00:00.000Z",
           "minutes": 30,
-          "book_title": "Les Misérables (Demo Excerpt)",
+          "book_title": "Les misérables Tome I: Fantine",
           "created_at": "2025-05-28T21:30:00.000Z"
         }
       },
@@ -410,8 +419,78 @@
           "started_at": "2025-05-27T06:30:00.000Z",
           "ended_at": "2025-05-27T07:00:00.000Z",
           "minutes": 30,
-          "book_title": "Don Quijote (Demo Excerpt)",
+          "book_title": "Don Quijote",
           "created_at": "2025-05-27T06:30:00.000Z"
+        }
+      }
+    ],
+    "user_settings": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "value": {
+          "user_id": "00000000-0000-4000-8000-000000000001",
+          "target_lang": "en",
+          "native_lang": "en",
+          "known_langs": ["en"],
+          "goal_langs": ["es", "fr"],
+          "daily_reading_goal_minutes": 15,
+          "daily_words_saved_goal": 10,
+          "daily_words_learned_goal": 5,
+          "primary_goal": "reading_minutes",
+          "goal_priority": ["reading_minutes", "words_saved", "words_learned"],
+          "auto_remove_downloads_after_days": 14,
+          "app_lang": "en",
+          "created_at": "2025-05-01T12:00:00.000Z",
+          "updated_at": "2025-06-09T18:30:00.000Z"
+        }
+      }
+    ],
+    "user_garden_state": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "value": {
+          "user_id": "00000000-0000-4000-8000-000000000001",
+          "total_gp": 85,
+          "stage": "sprout",
+          "freshness": "fresh",
+          "streak_days": 4,
+          "last_goal_completed_on": "2025-06-09",
+          "last_activity_on": "2025-06-09",
+          "unlocks": [],
+          "created_at": "2025-05-01T12:00:00.000Z",
+          "updated_at": "2025-06-09T18:30:00.000Z"
+        }
+      }
+    ],
+    "user_garden_daily_progress": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001:2025-06-09",
+        "value": {
+          "user_id": "00000000-0000-4000-8000-000000000001",
+          "day": "2025-06-09",
+          "reading_minutes": 30,
+          "saved_count": 1,
+          "learned_count": 2,
+          "gp_awarded": 12,
+          "goal_completed": true,
+          "streak_bonus_awarded": false,
+          "created_at": "2025-06-09T18:00:00.000Z",
+          "updated_at": "2025-06-09T18:30:00.000Z"
+        }
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000001:2025-06-08",
+        "value": {
+          "user_id": "00000000-0000-4000-8000-000000000001",
+          "day": "2025-06-08",
+          "reading_minutes": 25,
+          "saved_count": 0,
+          "learned_count": 1,
+          "gp_awarded": 8,
+          "goal_completed": true,
+          "streak_bonus_awarded": false,
+          "created_at": "2025-06-08T07:15:00.000Z",
+          "updated_at": "2025-06-08T07:40:00.000Z"
         }
       }
     ]

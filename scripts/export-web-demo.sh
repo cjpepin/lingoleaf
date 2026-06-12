@@ -25,6 +25,11 @@ export EXPO_PUBLIC_WEB_BASE_PATH="${EXPO_PUBLIC_WEB_BASE_PATH:-/lingoleaf/demo}"
 echo "Building web demo with base path: $EXPO_PUBLIC_WEB_BASE_PATH"
 npx expo export --platform web --output-dir "$OUTPUT_DIR"
 
+PATCH_SCRIPT="$ROOT_DIR/scripts/patch-web-demo-import-meta.sh"
+if [[ -f "$PATCH_SCRIPT" ]]; then
+  bash "$PATCH_SCRIPT" "$OUTPUT_DIR"
+fi
+
 cat <<EOF
 
 Web demo build complete: $OUTPUT_DIR

@@ -14,7 +14,9 @@ import { useAppLangStore } from './src/state/useAppLangStore';
 import { OnboardingWrapper } from './src/components/OnboardingWrapper';
 import { DemoBanner } from './src/components/DemoBanner';
 import { WebDemoDeviceFrame } from './src/demo/WebDemoDeviceFrame';
-import { isWebDemo, isWebPlatform, isDemoMode } from './src/demo/config';
+import { isWebDemo, isWebPlatform, isDemoMode, isEmbedMode } from './src/demo/config';
+import { useWebDemoFontsReady } from './src/demo/useWebDemoFonts';
+import { AppLoadingSplash } from './src/components/AppLoadingSplash';
 import { logger } from './src/utils/logger';
 import { supabaseConfigured, supabase } from './src/supabase/client';
 import { colors, spacing, typography } from './src/theme';
@@ -28,6 +30,7 @@ import { parseTrustedAuthCallback, redactAuthTokens } from './src/utils/authDeep
 import { clearPendingEmailConfirmation } from './src/utils/pendingEmailConfirmation';
 
 function AppShell() {
+  const fontsReady = useWebDemoFontsReady();
   const initialize = useAuthStore((state) => state.initialize);
   const user = useAuthStore((state) => state.user);
   const isGuest = useAuthStore((state) => state.isGuest);
@@ -164,6 +167,10 @@ function AppShell() {
     };
   }, []);
 
+  if (isWebDemo() && !fontsReady) {
+    return <AppLoadingSplash />;
+  }
+
   if (!isDemoMode() && !supabaseConfigured) {
     return (
       <View style={styles.configContainer}>
@@ -182,7 +189,7 @@ function AppShell() {
   const content = (
     <>
       <StatusBar style="dark" />
-      {isWebDemo() ? <DemoBanner /> : null}
+      {isWebDemo() && !isEmbedMode() ? <DemoBanner /> : null}
       <PremiumProvider>
         <OnboardingWrapper>
           <RootNavigator />

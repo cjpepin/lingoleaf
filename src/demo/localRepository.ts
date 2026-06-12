@@ -2,11 +2,11 @@ import {
   demoSessionId,
   hydrateIfEmpty,
   listStoreRecords,
-  openDemoDb,
   putStoreRecord,
   type DemoSeedPayload,
 } from '@portfolio/demo-local';
 import seed from './seed.json';
+import { getDb } from './demoDb';
 import type { BookFilters } from '@/supabase/queries';
 import type {
   Book,
@@ -22,18 +22,6 @@ import type {
 type BookWithStatus = Book & { status: UserBookStatus };
 import { DEMO_USER_ID } from './demoUser';
 import { demoApiBase, demoTranslate } from './demoApi';
-
-const APP_ID = 'lingoleaf';
-const SCHEMA_VERSION = 1;
-
-let dbPromise: ReturnType<typeof openDemoDb> | null = null;
-
-async function getDb() {
-  if (!dbPromise) {
-    dbPromise = openDemoDb(APP_ID, SCHEMA_VERSION);
-  }
-  return dbPromise;
-}
 
 export async function ensureDemoHydrated(): Promise<void> {
   const db = await getDb();

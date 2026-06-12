@@ -9,6 +9,7 @@ import {
   demoFetchBook,
   demoFetchBooks,
   demoFetchHistoryBooks,
+  demoFetchReadingSessions,
   demoFetchStudyWords,
   demoFetchUserBook,
   demoFetchUserBooksLastRead,
@@ -16,6 +17,15 @@ import {
   demoTranslateText,
   demoUpsertUserBook,
 } from '@/demo/localRepository';
+import {
+  demoFetchGardenDailyProgress,
+  demoFetchOrCreateGardenState,
+  demoFetchRecentGardenGoalCompletion,
+  demoFetchUserSettings,
+  demoUpsertGardenDailyProgress,
+  demoUpsertGardenState,
+  demoUpsertUserSettings,
+} from '@/demo/demoProfileRepository';
 import { logger } from '@/utils/logger';
 import { track } from '@/analytics/client';
 import { supabase } from './client';
@@ -552,6 +562,11 @@ export async function setStudyWordStarred(studyWordId: string, starred: boolean)
 }
 
 export async function countStudyWordsForList(userId: string, listId: string): Promise<number> {
+  if (isDemoMode()) {
+    const words = await demoFetchStudyWords(userId, listId);
+    return words.length;
+  }
+
   const { count, error } = await supabase
     .from('study_words')
     .select('id', { count: 'exact', head: true })
@@ -585,6 +600,11 @@ export async function deleteAllStudyWordReviews(userId: string): Promise<void> {
 }
 
 export async function countAllStudyWords(userId: string): Promise<number> {
+  if (isDemoMode()) {
+    const words = await demoFetchStudyWords(userId);
+    return words.length;
+  }
+
   const { count, error } = await supabase
     .from('study_words')
     .select('id', { count: 'exact', head: true })
@@ -804,6 +824,12 @@ export async function touchVocabList(listId: string): Promise<void> {
 
 // User Settings
 export async function fetchUserSettings(userId: string): Promise<UserSettings | null> {
+  if (isDemoMode()) {
+    const settings = await demoFetchUserSettings(userId);
+    if (settings) return settings;
+    return demoUpsertUserSettings({ user_id: userId });
+  }
+
   const { data, error } = await supabase
     .from('user_settings')
     .select('*')
@@ -824,6 +850,11 @@ export async function fetchUserSettings(userId: string): Promise<UserSettings | 
 }
 
 export async function checkIsAdmin(userId: string): Promise<boolean> {
+  if (isDemoMode()) {
+    const settings = await demoFetchUserSettings(userId);
+    return settings?.admin === true;
+  }
+
   logger.info('Checking admin status for userId:', userId);
   
   const { data, error } = await supabase
@@ -905,6 +936,10 @@ export async function upsertUserPremiumStatus(
 
 export async function upsertUserSettings(settings: ClientUserSettingsUpsert): Promise<UserSettings> {
   const sanitized = sanitizeMutableUserSettingsInput(settings);
+  if (isDemoMode()) {
+    return demoUpsertUserSettings(sanitized);
+  }
+
   const { data, error } = await supabase
     .from('user_settings')
     .upsert({
@@ -1311,6 +1346,16 @@ export async function fetchProgressTimeline(
 }
 
 export async function fetchTodayReadingMinutes(userId: string, timeZone: string): Promise<number> {
+  if (isDemoMode()) {
+    const sessions = await demoFetchReadingSessions(userId);
+    const today = todayDateKey(timeZone);
+    return sessions.reduce((sum, row) => {
+      const sessionDate = resolveSessionDate(row.ended_at, row.started_at);
+      if (!sessionDate || toDateKey(sessionDate, timeZone) !== today) return sum;
+      return sum + Math.max(0, row.minutes ?? 0);
+    }, 0);
+  }
+
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from('reading_sessions')
@@ -1345,6 +1390,10 @@ export interface GardenSnapshot {
 }
 
 async function fetchOrCreateGardenState(userId: string): Promise<UserGardenState> {
+  if (isDemoMode()) {
+    return demoFetchOrCreateGardenState(userId);
+  }
+
   const { data, error } = await supabase
     .from('user_garden_state')
     .select('*')
@@ -1365,6 +1414,10 @@ async function fetchOrCreateGardenState(userId: string): Promise<UserGardenState
 }
 
 async function fetchGardenDailyProgress(userId: string, day: string): Promise<UserGardenDailyProgress | null> {
+  if (isDemoMode()) {
+    return demoFetchGardenDailyProgress(userId, day);
+  }
+
   const { data, error } = await supabase
     .from('user_garden_daily_progress')
     .select('*')
@@ -1381,6 +1434,10 @@ async function fetchRecentGardenGoalCompletion(
   day: string,
   lookbackDays: number
 ): Promise<{ daysMet: number; daysConsidered: number; completionRate: number }> {
+  if (isDemoMode()) {
+    return demoFetchRecentGardenGoalCompletion(userId, day, lookbackDays);
+  }
+
   const safeDays = Math.max(1, Math.floor(lookbackDays));
   const startDay = addDays(day, -(safeDays - 1));
   const { data, error } = await supabase
@@ -1479,6 +1536,10 @@ export async function fetchGardenSnapshot(userId: string, day: string = localDat
 }
 
 async function upsertGardenDailyProgress(progress: UserGardenDailyProgress): Promise<UserGardenDailyProgress> {
+  if (isDemoMode()) {
+    return demoUpsertGardenDailyProgress(progress);
+  }
+
   const { data, error } = await supabase
     .from('user_garden_daily_progress')
     .upsert({
@@ -1493,6 +1554,10 @@ async function upsertGardenDailyProgress(progress: UserGardenDailyProgress): Pro
 }
 
 async function upsertGardenState(state: UserGardenState): Promise<UserGardenState> {
+  if (isDemoMode()) {
+    return demoUpsertGardenState(state);
+  }
+
   const { data, error } = await supabase
     .from('user_garden_state')
     .upsert({

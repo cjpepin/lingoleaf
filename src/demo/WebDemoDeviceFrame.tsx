@@ -129,11 +129,7 @@ export function WebDemoDeviceFrame({ children }: Props) {
   }
 
   if (embed) {
-    return (
-      <View style={styles.embedPage}>
-        <DeviceFrame frame={frame}>{children}</DeviceFrame>
-      </View>
-    );
+    return <View style={styles.embedBare}>{children}</View>;
   }
 
   return (
@@ -162,6 +158,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#E7ECE8',
     backgroundImage: 'linear-gradient(180deg, #EEF3EF 0%, #D8E4DC 100%)',
   } as Record<string, unknown>,
+  embedBare: {
+    flex: 1,
+    backgroundColor: colors.background,
+    overflow: 'hidden',
+  },
   page: {
     flex: 1,
     minHeight: '100vh' as unknown as number,

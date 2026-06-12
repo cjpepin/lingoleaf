@@ -39,6 +39,17 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     };
   }
 
+  // zustand's ESM build uses import.meta, which breaks Expo's classic-script web export.
+  if (
+    platform === 'web' &&
+    (moduleName === 'zustand' || moduleName.startsWith('zustand/'))
+  ) {
+    return {
+      filePath: require.resolve(moduleName, { paths: [projectRoot] }),
+      type: 'sourceFile',
+    };
+  }
+
   if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
   }
