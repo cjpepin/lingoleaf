@@ -1,5 +1,8 @@
 /**
  * Web demo configuration for portfolio embedding at /lingoleaf/demo.
+ *
+ * Browser demo data is hydrated from src/demo/seed.json — kept in sync with
+ * supabase/demo/seed.sql (lingoleaf schema). Writes stay in IndexedDB per session.
  */
 
 import { Platform } from 'react-native';

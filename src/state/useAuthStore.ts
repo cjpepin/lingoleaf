@@ -9,6 +9,7 @@ import type { User, Session } from '@supabase/supabase-js';
 import { isDemoMode } from '@/demo/config';
 import { DEMO_USER } from '@/demo/demoUser';
 import { ensureDemoHydrated } from '@/demo/localRepository';
+import { useStudyStore } from '@/state/useStudyStore';
 import { reset, track } from '@/analytics/client';
 import { AUTH_EMAIL_REDIRECT_URL } from '@/utils/authDeepLink';
 import {
@@ -211,6 +212,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ loading: true, authError: null });
       try {
         await ensureDemoHydrated();
+        useStudyStore.getState().clear();
         set({
           session: null,
           user: DEMO_USER,

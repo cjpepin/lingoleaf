@@ -30,6 +30,37 @@ import {
   demoUpsertGardenState,
   demoUpsertUserSettings,
 } from '@/demo/demoProfileRepository';
+import {
+  demoCountAllUserHighlights,
+  demoCreateVocabList,
+  demoDeleteStudyWord,
+  demoDeleteUserAccount,
+  demoDeleteVocabList,
+  demoFetchBookTitlesByIds,
+  demoFetchDistinctBookLanguages,
+  demoFetchDistinctBookSubjects,
+  demoFetchDistinctBookTags,
+  demoFetchMostRecentVocabList,
+  demoFetchUserPromptState,
+  demoGenerateStudyPackMetadata,
+  demoHasReadingHistory,
+  demoIsUserSoftDeleted,
+  demoMoveStudyWordToList,
+  demoPremiumStatus,
+  demoReactivateUserAccount,
+  demoRecordReadingSession,
+  demoRecordVocabReviewed,
+  demoRenameVocabList,
+  demoSetStudyWordStarred,
+  demoSetUserBookReading,
+  demoTouchVocabList,
+  demoUpsertUserPromptState,
+} from '@/demo/demoMutations';
+import {
+  demoFetchProgressStats,
+  demoFetchProgressTimeline,
+  demoFetchProgressTrendSnapshot,
+} from '@/demo/demoProgressRepository';
 import { logger } from '@/utils/logger';
 import { track } from '@/analytics/client';
 import { supabase } from './client';
@@ -213,6 +244,10 @@ export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
 
 /** Fetches distinct subject/genre values for filter. When language is set, only subjects for books in that language. */
 export async function fetchBookSubjects(language?: string): Promise<string[]> {
+  if (isDemoMode()) {
+    return demoFetchDistinctBookSubjects(language);
+  }
+
   const pLang = language?.trim() ? language.trim() : null;
   const { data, error } = await supabase.rpc('get_distinct_book_subjects', { p_lang: pLang });
   if (error) {
@@ -224,6 +259,10 @@ export async function fetchBookSubjects(language?: string): Promise<string[]> {
 
 /** Fetches distinct language codes for filter. When subjects are set, only languages that have books in those subjects. */
 export async function fetchBookLanguages(subjects?: string[]): Promise<string[]> {
+  if (isDemoMode()) {
+    return demoFetchDistinctBookLanguages(subjects);
+  }
+
   const pSubjects = subjects?.length ? subjects.map((s) => String(s).trim()).filter(Boolean) : null;
   const { data, error } = await supabase.rpc('get_distinct_book_languages', { p_subjects: pSubjects });
   if (error) {
@@ -235,6 +274,10 @@ export async function fetchBookLanguages(subjects?: string[]): Promise<string[]>
 
 /** Fetches distinct tags for books, optionally scoped to a language. */
 export async function fetchAvailableTags(language?: string): Promise<string[]> {
+  if (isDemoMode()) {
+    return demoFetchDistinctBookTags(language);
+  }
+
   const pLang = language?.trim() ? language.trim() : null;
   const { data, error } = await supabase.rpc('get_distinct_book_tags', { p_lang: pLang });
   if (error) {
@@ -265,6 +308,10 @@ export async function fetchBookTitlesByIds(bookIds: string[]): Promise<Record<st
   const ids = Array.from(new Set(bookIds.map((id) => id.trim()).filter(Boolean)));
   if (ids.length === 0) return {};
 
+  if (isDemoMode()) {
+    return demoFetchBookTitlesByIds(ids);
+  }
+
   const { data, error } = await supabase
     .from('books')
     .select('id,title')
@@ -280,6 +327,10 @@ export async function fetchBookTitlesByIds(bookIds: string[]): Promise<Record<st
 }
 
 export async function createBook(book: Omit<Book, 'id' | 'created_at'>): Promise<Book> {
+  if (isDemoMode()) {
+    throw new Error('Creating catalog books is not available in the portfolio demo.');
+  }
+
   const { data, error } = await supabase
     .from('books')
     .insert(book)
@@ -291,6 +342,10 @@ export async function createBook(book: Omit<Book, 'id' | 'created_at'>): Promise
 }
 
 export async function updateBook(id: string, updates: Partial<Omit<Book, 'id' | 'created_at'>>): Promise<Book> {
+  if (isDemoMode()) {
+    throw new Error('Updating catalog books is not available in the portfolio demo.');
+  }
+
   const { data, error } = await supabase
     .from('books')
     .update(updates)
@@ -596,6 +651,11 @@ export async function fetchStudyWords(userId: string, listId?: string | null): P
 }
 
 export async function setStudyWordStarred(studyWordId: string, starred: boolean): Promise<void> {
+  if (isDemoMode()) {
+    await demoSetStudyWordStarred(studyWordId, starred);
+    return;
+  }
+
   const { data, error } = await supabase
     .from('study_words')
     .update({ starred })
@@ -671,6 +731,10 @@ export async function countAllStudyWords(userId: string): Promise<number> {
 }
 
 export async function countAllUserHighlights(userId: string): Promise<number> {
+  if (isDemoMode()) {
+    return demoCountAllUserHighlights(userId);
+  }
+
   const { data, error } = await supabase
     .from('user_books')
     .select('highlights')
@@ -687,6 +751,10 @@ export async function countAllUserHighlights(userId: string): Promise<number> {
 
 // Upgrade prompt state (anti-spam)
 export async function fetchUserPromptState(userId: string): Promise<UserPromptState | null> {
+  if (isDemoMode()) {
+    return demoFetchUserPromptState(userId);
+  }
+
   const { data, error } = await supabase
     .from('user_prompt_state')
     .select('*')
@@ -701,6 +769,10 @@ export async function upsertUserPromptState(
   state: Pick<UserPromptState, 'user_id'> &
     Partial<Pick<UserPromptState, 'last_upgrade_prompt_at' | 'upgrade_prompt_dismiss_count' | 'upgrade_prompt_last_reason'>>
 ): Promise<UserPromptState> {
+  if (isDemoMode()) {
+    return demoUpsertUserPromptState(state);
+  }
+
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('user_prompt_state')
@@ -757,6 +829,11 @@ export async function findStudyWordsByTerm(userId: string, bookId: string, term:
 }
 
 export async function deleteStudyWord(id: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoDeleteStudyWord(id);
+    return;
+  }
+
   const { error } = await supabase
     .from('study_words')
     .delete()
@@ -766,6 +843,10 @@ export async function deleteStudyWord(id: string): Promise<void> {
 }
 
 export async function moveStudyWordToList(wordId: string, listId: string | null): Promise<StudyWord> {
+  if (isDemoMode()) {
+    return demoMoveStudyWordToList(wordId, listId);
+  }
+
   const { data, error } = await supabase
     .from('study_words')
     .update({ list_id: listId })
@@ -795,6 +876,10 @@ export async function fetchVocabLists(userId: string): Promise<VocabList[]> {
 }
 
 export async function fetchMostRecentVocabList(userId: string): Promise<VocabList | null> {
+  if (isDemoMode()) {
+    return demoFetchMostRecentVocabList(userId);
+  }
+
   const { data, error } = await supabase
     .from('vocab_lists')
     .select('*')
@@ -818,6 +903,10 @@ export async function createVocabList(
   options?: CreateVocabListOptions
 ): Promise<VocabList> {
   const maxLists = options?.maxLists ?? 5;
+
+  if (isDemoMode()) {
+    return demoCreateVocabList(userId, name, maxLists);
+  }
 
   // Enforce max list count (app-level)
   const { count, error: countError } = await supabase
@@ -847,6 +936,10 @@ export async function createVocabList(
 }
 
 export async function renameVocabList(listId: string, name: string): Promise<VocabList> {
+  if (isDemoMode()) {
+    return demoRenameVocabList(listId, name);
+  }
+
   const { data, error } = await supabase
     .from('vocab_lists')
     .update({
@@ -862,11 +955,21 @@ export async function renameVocabList(listId: string, name: string): Promise<Voc
 }
 
 export async function deleteVocabList(listId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoDeleteVocabList(listId);
+    return;
+  }
+
   const { error } = await supabase.from('vocab_lists').delete().eq('id', listId);
   if (error) throw error;
 }
 
 export async function touchVocabList(listId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoTouchVocabList(listId);
+    return;
+  }
+
   const { error } = await supabase
     .from('vocab_lists')
     .update({
@@ -942,6 +1045,10 @@ export interface PremiumStatus {
 }
 
 export async function syncUserPremiumEntitlement(): Promise<PremiumStatus> {
+  if (isDemoMode()) {
+    return demoPremiumStatus();
+  }
+
   const { data, error } = await supabase.functions.invoke('premium-entitlement-sync', {
     body: {},
   });
@@ -961,6 +1068,10 @@ export async function syncUserPremiumEntitlement(): Promise<PremiumStatus> {
 }
 
 export async function fetchUserPremiumStatus(userId: string): Promise<PremiumStatus> {
+  if (isDemoMode()) {
+    return demoPremiumStatus();
+  }
+
   const { data, error } = await supabase
     .from('user_settings')
     .select('is_premium,premium_plan')
@@ -1012,6 +1123,11 @@ export async function upsertUserSettings(settings: ClientUserSettingsUpsert): Pr
 export async function recordReadingSession(
   session: Omit<ReadingSession, 'id' | 'created_at'>
 ): Promise<void> {
+  if (isDemoMode()) {
+    await demoRecordReadingSession(session);
+    return;
+  }
+
   const { error } = await supabase
     .from('reading_sessions')
     .insert(session);
@@ -1019,6 +1135,11 @@ export async function recordReadingSession(
 }
 
 export async function recordVocabReviewed(userId: string, vocabId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoRecordVocabReviewed(userId, vocabId);
+    return;
+  }
+
   const { error } = await supabase
     .from('vocab_reviews')
     .insert({
@@ -1181,6 +1302,11 @@ export async function fetchProgressStats(
   range: ProgressRange,
   timeZone: string
 ): Promise<ProgressStats> {
+  if (isDemoMode()) {
+    const flashcardStats = await fetchFlashcardStats(userId, null);
+    return demoFetchProgressStats(userId, range, timeZone, flashcardStats.learned ?? 0);
+  }
+
   const days = daysForRange(range);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   let readingRows: Array<{ minutes: number; started_at: string | null; ended_at: string | null }> = [];
@@ -1303,6 +1429,10 @@ export async function fetchProgressStats(
 }
 
 export async function fetchProgressTrendSnapshot(userId: string, range: ProgressRange): Promise<ProgressTrendSnapshot> {
+  if (isDemoMode()) {
+    return demoFetchProgressTrendSnapshot(userId, range);
+  }
+
   const windowDays = daysForRange(range);
   const currentWindow = buildWindow(windowDays, 0);
   const previousWindow = buildWindow(windowDays * 2, windowDays);
@@ -1323,6 +1453,10 @@ export async function fetchProgressTimeline(
   range: ProgressRange,
   timeZone: string
 ): Promise<ProgressTimeline> {
+  if (isDemoMode()) {
+    return demoFetchProgressTimeline(userId, range, timeZone);
+  }
+
   const windowDays = chartDaysForRange(range);
   const today = todayDateKey(timeZone);
   const startDay = addDays(today, -(windowDays - 1));
@@ -1777,11 +1911,20 @@ export async function applyGardenProgress(
 }
 
 export async function deleteUserAccount(_userId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoDeleteUserAccount(_userId);
+    return;
+  }
+
   const { error } = await supabase.rpc('soft_delete_user_account');
   if (error) throw error;
 }
 
 export async function isUserSoftDeleted(userId: string): Promise<boolean> {
+  if (isDemoMode()) {
+    return demoIsUserSoftDeleted(userId);
+  }
+
   const { data, error } = await supabase
     .from('user_settings')
     .select('deleted_at')
@@ -1793,6 +1936,11 @@ export async function isUserSoftDeleted(userId: string): Promise<boolean> {
 }
 
 export async function reactivateUserAccount(): Promise<void> {
+  if (isDemoMode()) {
+    await demoReactivateUserAccount();
+    return;
+  }
+
   const { error } = await supabase.rpc('reactivate_user_account');
   if (error) throw error;
 }
@@ -1832,6 +1980,10 @@ export async function translateText(request: TranslationRequest): Promise<Transl
 export async function generateStudyPackMetadata(
   request: StudyPackMetadataRequest
 ): Promise<StudyPackMetadataResponse> {
+  if (isDemoMode()) {
+    return demoGenerateStudyPackMetadata(request);
+  }
+
   const { data, error } = await supabase.functions.invoke('study-pack-metadata', {
     body: request,
   });
@@ -1902,6 +2054,10 @@ export async function saveBookForLater(userId: string, bookId: string): Promise<
 
 /** Mark a book as reading and update last_read_at (e.g. when starting from "Saved for later"). */
 export async function setUserBookReading(userId: string, bookId: string): Promise<UserBook> {
+  if (isDemoMode()) {
+    return demoSetUserBookReading(userId, bookId);
+  }
+
   const { data, error } = await supabase
     .from('user_books')
     .update({
@@ -1962,6 +2118,10 @@ export async function updateUserBookHighlightTranslation(userId: string, bookId:
 }
 
 export async function hasReadingHistory(userId: string): Promise<boolean> {
+  if (isDemoMode()) {
+    return demoHasReadingHistory(userId);
+  }
+
   const { count, error } = await supabase
     .from('user_books')
     .select('book_id', { count: 'exact', head: true })

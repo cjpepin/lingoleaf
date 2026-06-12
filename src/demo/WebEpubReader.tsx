@@ -8,6 +8,7 @@ import ePub from 'epubjs';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
 import { isWebDemo } from '@/demo/config';
+import { loadEpubSourceForWeb } from '@/demo/demoApi';
 import {
   addUserBookHighlight,
   createStudyWord,
@@ -47,7 +48,8 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', targetLan
       try {
         setLoading(true);
         setError(null);
-        book = ePub(src);
+        const bookSource = await loadEpubSourceForWeb(src);
+        book = ePub(bookSource);
         const rendition = book.renderTo(node, {
           width: '100%',
           height: '100%',
@@ -76,7 +78,11 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', targetLan
       } catch (err) {
         logger.error('Web EPUB reader failed', err);
         if (!disposed) {
-          setError('Could not load this book in the web demo.');
+          const message =
+            err instanceof Error && err.message.includes('Demo EPUB')
+              ? err.message
+              : 'Could not load this book in the web demo.';
+          setError(message);
           setLoading(false);
         }
       }
