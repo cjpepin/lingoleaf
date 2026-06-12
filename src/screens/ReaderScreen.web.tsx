@@ -14,6 +14,7 @@ import { getSignedUrl } from '@/supabase/storage';
 import type { Book } from '@/supabase/types';
 import { colors, spacing, typography } from '@/theme';
 import { logger } from '@/utils/logger';
+import { resolveDemoEpubSrc } from '@/demo/demoApi';
 
 type ReaderRoute = RouteProp<RootStackParamList, 'Reader'>;
 
@@ -34,9 +35,13 @@ export default function ReaderScreen() {
         setBook(next);
 
         if (initialLocalPath) {
-          setReaderSrc(initialLocalPath);
+          setReaderSrc(
+            initialLocalPath.includes('/api/demo/epub')
+              ? initialLocalPath
+              : resolveDemoEpubSrc(initialLocalPath, next?.source_id),
+          );
         } else if (next.epub_url) {
-          setReaderSrc(next.epub_url);
+          setReaderSrc(resolveDemoEpubSrc(next.epub_url, next.source_id));
         } else if (next.storage_path) {
           setReaderSrc(await getSignedUrl(next.storage_path));
         }

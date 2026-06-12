@@ -1,5 +1,6 @@
 import {
   demoSessionId,
+  deleteStoreRecord,
   hydrateIfEmpty,
   listStoreRecords,
   putStoreRecord,
@@ -12,12 +13,22 @@ import type {
   Book,
   ReadingSession,
   StudyWord,
+  StudyWordReview,
   TranslationRequest,
   TranslationResponse,
   UserBook,
   UserBookStatus,
   VocabList,
 } from '@/supabase/types';
+
+type FlashcardRating = 'again' | 'hard' | 'good' | 'easy';
+
+interface FlashcardIntervalSettings {
+  intervalHardMin: number;
+  intervalGoodMin: number;
+  intervalEasyMin: number;
+  multiplier: number;
+}
 
 type BookWithStatus = Book & { status: UserBookStatus };
 import { DEMO_USER_ID } from './demoUser';
@@ -85,6 +96,79 @@ export async function demoCreateStudyWord(input: Omit<StudyWord, 'id' | 'user_id
   };
   await putStoreRecord(db, 'study_words', id, row);
   return row;
+}
+
+export async function demoFetchStudyWordReviews(wordIds: string[]): Promise<StudyWordReview[]> {
+  await ensureDemoHydrated();
+  const db = await getDb();
+  const ids = new Set(wordIds.filter(Boolean));
+  if (ids.size === 0) return [];
+  const rows = await listStoreRecords<StudyWordReview>(db, 'study_word_reviews');
+  return rows.filter((row) => ids.has(row.study_word_id));
+}
+
+export async function demoUpsertStudyWordReview(
+  studyWordId: string,
+  rating: FlashcardRating,
+  settings: FlashcardIntervalSettings,
+): Promise<void> {
+  await ensureDemoHydrated();
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const existing = (await demoFetchStudyWordReviews([studyWordId]))[0] ?? null;
+  const prevInterval = existing?.interval_minutes ?? 0;
+  const reviewCount = (existing?.review_count ?? 0) + 1;
+
+  let intervalMinutes: number;
+  let nextReviewAt: string;
+
+  if (rating === 'again') {
+    intervalMinutes = 0;
+    nextReviewAt = now;
+  } else if (rating === 'hard') {
+    intervalMinutes = settings.intervalHardMin;
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  } else if (rating === 'good') {
+    intervalMinutes =
+      prevInterval >= settings.intervalGoodMin
+        ? Math.round(prevInterval * settings.multiplier)
+        : settings.intervalGoodMin;
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  } else {
+    intervalMinutes =
+      prevInterval >= settings.intervalEasyMin
+        ? Math.round(prevInterval * settings.multiplier)
+        : settings.intervalEasyMin;
+    nextReviewAt = new Date(Date.now() + intervalMinutes * 60 * 1000).toISOString();
+  }
+
+  const next: StudyWordReview = {
+    study_word_id: studyWordId,
+    next_review_at: nextReviewAt,
+    interval_minutes: intervalMinutes,
+    last_rating: rating,
+    review_count: reviewCount,
+    created_at: existing?.created_at ?? now,
+    updated_at: now,
+  };
+  await putStoreRecord(db, 'study_word_reviews', studyWordId, next);
+}
+
+export async function demoDeleteStudyWordReviewsForList(userId: string, listId: string): Promise<void> {
+  const words = await demoFetchStudyWords(userId, listId);
+  await demoDeleteStudyWordReviewsByIds(words.map((word) => word.id));
+}
+
+export async function demoDeleteAllStudyWordReviews(userId: string): Promise<void> {
+  const words = await demoFetchStudyWords(userId);
+  await demoDeleteStudyWordReviewsByIds(words.map((word) => word.id));
+}
+
+async function demoDeleteStudyWordReviewsByIds(wordIds: string[]): Promise<void> {
+  if (wordIds.length === 0) return;
+  await ensureDemoHydrated();
+  const db = await getDb();
+  await Promise.all(wordIds.map((id) => deleteStoreRecord(db, 'study_word_reviews', id)));
 }
 
 export async function demoFetchStudyWords(userId?: string, listId?: string | null, bookId?: string): Promise<StudyWord[]> {

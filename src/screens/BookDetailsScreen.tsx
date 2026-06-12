@@ -26,6 +26,7 @@ import { Button } from '@/components/ui/Button';
 import { AdBanner } from '@/components/ads/AdBanner';
 import { useTranslation } from '@/i18n/useTranslation';
 import { hashAnalyticsId, track } from '@/analytics/client';
+import { resolveDemoEpubSrc } from '@/demo/demoApi';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -148,7 +149,7 @@ export default function BookDetailsScreen() {
   }, [book]);
 
   useEffect(() => {
-    if (!bookId) return;
+    if (!bookId || Platform.OS === 'web') return;
     let cancelled = false;
     FileSystem.getInfoAsync(getLocalBookPath(bookId)).then((info) => {
       if (!cancelled) setIsDownloaded(info.exists && (info.size ?? 0) > 0);
@@ -191,7 +192,7 @@ export default function BookDetailsScreen() {
       let localPath: string;
       if (Platform.OS === 'web') {
         if (book.epub_url) {
-          localPath = book.epub_url;
+          localPath = resolveDemoEpubSrc(book.epub_url, book.source_id);
         } else if (book.storage_path) {
           localPath = await getSignedUrl(book.storage_path);
         } else {

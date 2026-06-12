@@ -41,3 +41,25 @@ export async function demoTranslate(request: TranslationRequest): Promise<Transl
 export function shouldUseLocalDemoData(): boolean {
   return isDemoMode();
 }
+
+const GUTENBERG_CACHE_EPUB =
+  /^https:\/\/www\.gutenberg\.org\/cache\/epub\/(\d+)\/pg\1(?:-images-3)?\.epub$/i;
+
+export function resolveDemoEpubSrc(epubUrl: string, sourceId?: string | null): string {
+  const base = demoApiBase();
+  if (!base || !isDemoMode()) {
+    return epubUrl;
+  }
+
+  const fromSourceId = sourceId?.trim();
+  if (fromSourceId) {
+    return `${base}/epub?gutenberg_id=${encodeURIComponent(fromSourceId)}`;
+  }
+
+  const match = epubUrl.match(GUTENBERG_CACHE_EPUB);
+  if (match?.[1]) {
+    return `${base}/epub?gutenberg_id=${encodeURIComponent(match[1])}`;
+  }
+
+  return `${base}/epub?url=${encodeURIComponent(epubUrl)}`;
+}

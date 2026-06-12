@@ -6,15 +6,19 @@
 import { isDemoMode } from '@/demo/config';
 import {
   demoCreateStudyWord,
+  demoDeleteAllStudyWordReviews,
+  demoDeleteStudyWordReviewsForList,
   demoFetchBook,
   demoFetchBooks,
   demoFetchHistoryBooks,
   demoFetchReadingSessions,
+  demoFetchStudyWordReviews,
   demoFetchStudyWords,
   demoFetchUserBook,
   demoFetchUserBooksLastRead,
   demoFetchVocabLists,
   demoTranslateText,
+  demoUpsertStudyWordReview,
   demoUpsertUserBook,
 } from '@/demo/localRepository';
 import {
@@ -383,6 +387,14 @@ function computeFlashcardStats(
 }
 
 export async function fetchFlashcardQueue(userId: string, listId: string): Promise<StudyWord[]> {
+  if (isDemoMode()) {
+    const wordList = await demoFetchStudyWords(userId, listId);
+    if (wordList.length === 0) return [];
+    const reviews = await demoFetchStudyWordReviews(wordList.map((word) => word.id));
+    const reviewByWordId = new Map(reviews.map((review) => [review.study_word_id, review.next_review_at]));
+    return buildFlashcardQueue(wordList, reviewByWordId);
+  }
+
   const { data: words, error } = await supabase
     .from('study_words')
     .select('*')
@@ -411,6 +423,23 @@ export async function fetchFlashcardStats(
   userId: string,
   listId: string | null
 ): Promise<FlashcardStats> {
+  if (isDemoMode()) {
+    const wordList = await demoFetchStudyWords(userId, listId ?? undefined);
+    if (wordList.length === 0) return { unseen: 0, learning: 0, learned: 0 };
+    const reviews = await demoFetchStudyWordReviews(wordList.map((word) => word.id));
+    const reviewByWordId = new Map(reviews.map((review) => [review.study_word_id, review.next_review_at]));
+    const lastRatingByWordId = new Map(
+      reviews
+        .filter((review) => review.last_rating)
+        .map((review) => [review.study_word_id, review.last_rating as string]),
+    );
+    return computeFlashcardStats(
+      wordList.map((word) => word.id),
+      reviewByWordId,
+      lastRatingByWordId,
+    );
+  }
+
   const query = supabase
     .from('study_words')
     .select('id')
@@ -439,6 +468,14 @@ export async function fetchFlashcardStats(
 }
 
 export async function fetchFlashcardQueueAll(userId: string): Promise<StudyWord[]> {
+  if (isDemoMode()) {
+    const wordList = await demoFetchStudyWords(userId);
+    if (wordList.length === 0) return [];
+    const reviews = await demoFetchStudyWordReviews(wordList.map((word) => word.id));
+    const reviewByWordId = new Map(reviews.map((review) => [review.study_word_id, review.next_review_at]));
+    return buildFlashcardQueue(wordList, reviewByWordId);
+  }
+
   const { data: words, error } = await supabase
     .from('study_words')
     .select('*')
@@ -466,6 +503,10 @@ export async function fetchStudyWordReviews(wordIds: string[]): Promise<StudyWor
   const ids = Array.from(new Set(wordIds.filter(Boolean)));
   if (ids.length === 0) return [];
 
+  if (isDemoMode()) {
+    return demoFetchStudyWordReviews(ids);
+  }
+
   const { data, error } = await supabase
     .from('study_word_reviews')
     .select('*')
@@ -480,6 +521,11 @@ export async function upsertStudyWordReview(
   rating: FlashcardRating,
   settings: FlashcardIntervalSettings
 ): Promise<void> {
+  if (isDemoMode()) {
+    await demoUpsertStudyWordReview(studyWordId, rating, settings);
+    return;
+  }
+
   const now = new Date().toISOString();
   let intervalMinutes: number;
   let nextReviewAt: string;
@@ -579,6 +625,11 @@ export async function countStudyWordsForList(userId: string, listId: string): Pr
 
 /** Deletes all study_word_reviews for words in the given list (reset progress). */
 export async function deleteStudyWordReviewsForList(userId: string, listId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoDeleteStudyWordReviewsForList(userId, listId);
+    return;
+  }
+
   const { data: words } = await supabase
     .from('study_words')
     .select('id')
@@ -592,6 +643,11 @@ export async function deleteStudyWordReviewsForList(userId: string, listId: stri
 
 /** Deletes all study_word_reviews for the user (reset progress on "Study all"). */
 export async function deleteAllStudyWordReviews(userId: string): Promise<void> {
+  if (isDemoMode()) {
+    await demoDeleteAllStudyWordReviews(userId);
+    return;
+  }
+
   const { data: words } = await supabase.from('study_words').select('id').eq('user_id', userId);
   const ids = (words ?? []).map((w) => w.id);
   if (ids.length === 0) return;
