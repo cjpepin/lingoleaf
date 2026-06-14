@@ -13,6 +13,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "web:demo": "bash scripts/start-web-demo.sh",
+    "ios:recording": "bash scripts/start-ios-recording.sh",
     "export:web-demo": "bash scripts/export-web-demo.sh",
     "sync:gutendex": "node scripts/sync-gutendex.mjs",
     "ios:build:prod": "./scripts/ios-eas-local-build.sh",

@@ -5,11 +5,13 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
 import { TutorialTooltip } from './TutorialTooltip';
+import { TutorialShell } from './TutorialShell';
+import { useTutorialViewport } from './tutorialLayout';
 import { GardenStageVisual } from '@/components/progress/GardenStageVisual';
 
 const TOTAL_STEPS = 3;
@@ -41,6 +43,7 @@ function MockCover({ title, author, backgroundColor }: MockCoverProps) {
 
 export function HomeTutorialModal({ visible, onComplete, onSkip }: Props) {
   const t = useTranslation();
+  const { compact, s } = useTutorialViewport();
   const [step, setStep] = useState(0);
   const previewScrollRef = useRef<ScrollView | null>(null);
   const cardOffsetsRef = useRef<number[]>([]);
@@ -107,16 +110,16 @@ export function HomeTutorialModal({ visible, onComplete, onSkip }: Props) {
   ];
 
   return (
-    <Modal visible={visible} animationType="fade" presentationStyle="fullScreen">
+    <TutorialShell visible={visible}>
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{t('nav.home')}</Text>
+        <View style={[styles.header, { paddingTop: s(compact ? 44 : 56) }]}>
+          <Text style={[styles.headerTitle, compact && styles.headerTitleCompact]}>{t('nav.home')}</Text>
         </View>
         <View style={styles.previewWrap}>
           <ScrollView
             ref={previewScrollRef}
             style={styles.previewScroll}
-            contentContainerStyle={styles.previewContent}
+            contentContainerStyle={[styles.previewContent, compact && styles.previewContentCompact]}
             showsVerticalScrollIndicator={false}
           >
             <View
@@ -194,7 +197,7 @@ export function HomeTutorialModal({ visible, onComplete, onSkip }: Props) {
           </ScrollView>
         </View>
 
-        <View style={[styles.tooltipWrap, studyHighlighted && styles.tooltipWrapRaised]}>
+        <View style={styles.tooltipWrap}>
           <TutorialTooltip
             title={cur.title}
             description={cur.desc}
@@ -218,7 +221,7 @@ export function HomeTutorialModal({ visible, onComplete, onSkip }: Props) {
           />
         </View>
       </View>
-    </Modal>
+    </TutorialShell>
   );
 }
 
@@ -226,10 +229,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingBottom: spacing.lg,
+    overflow: 'hidden',
   },
   header: {
-    paddingTop: 56,
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
     borderBottomWidth: 1,
@@ -240,8 +242,13 @@ const styles = StyleSheet.create({
     ...typography.h2,
     color: colors.text,
   },
+  headerTitleCompact: {
+    fontSize: 20,
+  },
   previewWrap: {
     flex: 1,
+    minHeight: 0,
+    paddingBottom: 140,
   },
   previewScroll: {
     flex: 1,
@@ -251,6 +258,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     gap: spacing.md,
     paddingBottom: spacing.md,
+  },
+  previewContentCompact: {
+    paddingTop: spacing.sm,
+    gap: spacing.sm,
   },
   card: {
     borderRadius: 12,
@@ -413,9 +424,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   tooltipWrap: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  tooltipWrapRaised: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.sm,
+    zIndex: 10,
   },
 });

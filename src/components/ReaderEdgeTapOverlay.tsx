@@ -25,17 +25,21 @@ export function ReaderEdgeTapOverlay({ onTapLeft, onTapRight, children }: Props)
     pressStartRef.current = Date.now();
   }, []);
 
+  const isShortTap = useCallback(() => {
+    const startedAt = pressStartRef.current;
+    if (startedAt <= 0) return true;
+    return Date.now() - startedAt <= SHORT_TAP_MS;
+  }, []);
+
   const handlePressLeft = useCallback(() => {
-    if (Date.now() - pressStartRef.current < SHORT_TAP_MS) {
-      onTapLeft();
-    }
-  }, [onTapLeft]);
+    if (isShortTap()) onTapLeft();
+    pressStartRef.current = 0;
+  }, [isShortTap, onTapLeft]);
 
   const handlePressRight = useCallback(() => {
-    if (Date.now() - pressStartRef.current < SHORT_TAP_MS) {
-      onTapRight();
-    }
-  }, [onTapRight]);
+    if (isShortTap()) onTapRight();
+    pressStartRef.current = 0;
+  }, [isShortTap, onTapRight]);
 
   return (
     <View style={styles.row}>
@@ -64,13 +68,18 @@ const styles = StyleSheet.create({
   },
   left: {
     width: READER_EDGE_WIDTH,
+    alignSelf: 'stretch',
+    zIndex: 4,
   },
   center: {
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
   },
   right: {
     width: READER_EDGE_WIDTH,
+    alignSelf: 'stretch',
+    zIndex: 4,
   },
 });
 

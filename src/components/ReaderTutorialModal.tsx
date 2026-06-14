@@ -11,12 +11,13 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   Animated,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { TutorialTooltip } from './TutorialTooltip';
+import { TutorialShell } from './TutorialShell';
+import { tutorialTooltipBottom, useTutorialViewport } from './tutorialLayout';
 import { AdBanner } from './ads/AdBanner';
 import { useTranslation } from '@/i18n/useTranslation';
 
@@ -33,6 +34,7 @@ const IOS_SELECTION_BLUE = 'rgba(26, 115, 232, 0.35)';
 
 export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
   const t = useTranslation();
+  const { compact, s, height } = useTutorialViewport();
   const [step, setStep] = useState(0);
   const edgePulse = useRef(new Animated.Value(0.15)).current;
 
@@ -104,13 +106,13 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
   const showNavPanel = step === 5;
   const showEdgePulse = step === 6;
 
-  const tooltipBottom = step === 3 ? 350 : step === 5 ? 500 : 40;
+  const tooltipBottom = tutorialTooltipBottom(step, height, s, compact);
 
   return (
-    <Modal visible={visible} animationType="fade" presentationStyle="fullScreen">
+    <TutorialShell visible={visible}>
       <View style={styles.container}>
         {/* Mock nav bar */}
-        <View style={styles.navBar}>
+        <View style={[styles.navBar, { paddingTop: s(compact ? 44 : 56) }]}>
           <View style={styles.navBackButton}>
             <Feather name="arrow-left" size={22} color={colors.text} />
           </View>
@@ -121,40 +123,40 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
         </View>
 
         {/* Mock page indicator */}
-        <View style={styles.pageIndicator}>
-          <Text style={styles.pageText}>{t('tutorial.readerSamplePage', { current: 3, total: 42 })}</Text>
+        <View style={[styles.pageIndicator, { top: s(compact ? 88 : 100) }]}>
+          <Text style={[styles.pageText, compact && styles.pageTextCompact]}>{t('tutorial.readerSamplePage', { current: 3, total: 42 })}</Text>
         </View>
-        <View style={styles.chapterIndicator}>
-          <Text style={styles.pageText}>{t('reader.pagesLeft', { n: 8 })}</Text>
+        <View style={[styles.chapterIndicator, { top: s(compact ? 88 : 100) }]}>
+          <Text style={[styles.pageText, compact && styles.pageTextCompact]}>{t('reader.pagesLeft', { n: 8 })}</Text>
         </View>
 
         {/* Edge tap zones */}
         {showEdgePulse && (
           <>
-            <Animated.View style={[styles.edgeLeft, { opacity: edgePulse }]} />
-            <Animated.View style={[styles.edgeRight, { opacity: edgePulse }]} />
+            <Animated.View style={[styles.edgeLeft, { top: s(compact ? 88 : 100), bottom: s(compact ? 120 : 160), width: s(28), opacity: edgePulse }]} />
+            <Animated.View style={[styles.edgeRight, { top: s(compact ? 88 : 100), bottom: s(compact ? 120 : 160), width: s(28), opacity: edgePulse }]} />
           </>
         )}
 
         {/* Mock book text */}
-        <View style={styles.pageContent}>
+        <View style={[styles.pageContent, compact && styles.pageContentCompact]}>
           {showMultiHighlights ? (
-            <Text style={styles.bookText}>
+            <Text style={[styles.bookText, compact && styles.bookTextCompact]}>
               {t('tutorial.readerSampleMultiPrefix')}
-              <Text style={[styles.bookText, { backgroundColor: colors.highlightMint }]}>{sampleHighlightOne}</Text>
+              <Text style={[styles.bookText, compact && styles.bookTextCompact, { backgroundColor: colors.highlightMint }]}>{sampleHighlightOne}</Text>
               {t('tutorial.readerSampleMultiMiddle')}
-              <Text style={[styles.bookText, { backgroundColor: colors.highlightYellow }]}>{highlightWord}</Text>
+              <Text style={[styles.bookText, compact && styles.bookTextCompact, { backgroundColor: colors.highlightYellow }]}>{highlightWord}</Text>
               {t('tutorial.readerSampleMultiBridge')}
-              <Text style={[styles.bookText, { backgroundColor: colors.highlightPink }]}>{sampleHighlightThree}</Text>
+              <Text style={[styles.bookText, compact && styles.bookTextCompact, { backgroundColor: colors.highlightPink }]}>{sampleHighlightThree}</Text>
               {t('tutorial.readerSampleMultiSuffix')}
             </Text>
           ) : (
-            <Text style={styles.bookText}>
+            <Text style={[styles.bookText, compact && styles.bookTextCompact]}>
               {sampleTextBefore}
               {showBlueSelection ? (
-                <Text style={[styles.bookText, { backgroundColor: IOS_SELECTION_BLUE }]}>{highlightWord}</Text>
+                <Text style={[styles.bookText, compact && styles.bookTextCompact, { backgroundColor: IOS_SELECTION_BLUE }]}>{highlightWord}</Text>
               ) : showMintSelection ? (
-                <Text style={[styles.bookText, { backgroundColor: colors.highlightMint }]}>{highlightWord}</Text>
+                <Text style={[styles.bookText, compact && styles.bookTextCompact, { backgroundColor: colors.highlightMint }]}>{highlightWord}</Text>
               ) : (
                 <Text>{highlightWord}</Text>
               )}
@@ -165,7 +167,7 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
 
         {/* Mock Selection Toolbar (step 2) */}
         {showToolbar && (
-          <View style={styles.toolbarWrap}>
+          <View style={[styles.toolbarWrap, { top: s(compact ? 180 : 225), right: s(compact ? 48 : 160) }]}>
             <View style={styles.toolbarArrow} />
             <View style={[styles.toolbar, styles.toolbarNoTopBorder]}>
               <View style={styles.toolbarBtn}>
@@ -183,7 +185,7 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
 
         {/* Mock Highlight Action Popup (step 4) — translation section + color row + arrow */}
         {showHighlightPopup && (
-          <View style={styles.highlightPopupWrap}>
+          <View style={[styles.highlightPopupWrap, { top: s(compact ? 120 : 160), right: s(compact ? 48 : 160) }]}>
             <View style={styles.highlightPopupContainer}>
               <View style={styles.highlightPopupArrow} />
               <View style={[styles.highlightPopup, styles.highlightPopupNoTopBorder]}>
@@ -211,20 +213,22 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
         {/* Mock Translate Sheet (step 3) */}
         {showTranslateSheet && (
           <View style={styles.sheetBackdrop}>
-            <View style={styles.sheet}>
+            <View style={[styles.sheet, compact && styles.sheetCompact]}>
               <View style={styles.sheetHandle} />
-              <Text style={styles.sheetLabel}>{t('translate.original')}</Text>
-              <Text style={styles.sheetTerm}>{highlightWord}</Text>
-              <Text style={styles.sheetLabel}>{t('translate.translation')}</Text>
-              <Text style={styles.sheetTranslation}>{sampleTranslation}</Text>
-              <View style={styles.sheetListBtn}>
-                <Text style={styles.sheetListBtnText}>{sampleListName}</Text>
+              <Text style={[styles.sheetLabel, compact && styles.sheetLabelCompact]}>{t('translate.original')}</Text>
+              <Text style={[styles.sheetTerm, compact && styles.sheetTermCompact]}>{highlightWord}</Text>
+              <Text style={[styles.sheetLabel, compact && styles.sheetLabelCompact]}>{t('translate.translation')}</Text>
+              <Text style={[styles.sheetTranslation, compact && styles.sheetTranslationCompact]}>{sampleTranslation}</Text>
+              <View style={[styles.sheetListBtn, compact && styles.sheetListBtnCompact]}>
+                <Text style={[styles.sheetListBtnText, compact && styles.sheetListBtnTextCompact]}>{sampleListName}</Text>
                 <Text style={styles.sheetChevron}>›</Text>
               </View>
-              <View style={styles.sheetAdContainer}>
-                <AdBanner placement="reader_tutorial" />
-              </View>
-              <View style={styles.sheetSaveBtn}>
+              {!compact ? (
+                <View style={styles.sheetAdContainer}>
+                  <AdBanner placement="reader_tutorial" />
+                </View>
+              ) : null}
+              <View style={[styles.sheetSaveBtn, compact && styles.sheetSaveBtnCompact]}>
                 <Text style={styles.sheetSaveBtnText}>{t('translate.saveToList')}</Text>
               </View>
             </View>
@@ -235,7 +239,7 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
         {showNavPanel && (
           <>
             <View style={styles.navDim} />
-            <View style={styles.navPanel}>
+            <View style={[styles.navPanel, { height: compact ? '48%' : '55%' }]}>
               {/* Page strip */}
               <View style={styles.navPageStrip}>
                 {[1, 2, 3, 4, 5].map((p) => (
@@ -301,10 +305,11 @@ export function ReaderTutorialModal({ visible, onComplete, onSkip }: Props) {
             nextLabel={t('tutorial.next')}
             doneLabel={t('tutorial.done')}
             backLabel={t('tutorial.back')}
+            compact={compact}
           />
         </View>
       </View>
-    </Modal>
+    </TutorialShell>
   );
 }
 
@@ -312,6 +317,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+    overflow: 'hidden',
   },
 
   // Nav bar
@@ -319,7 +325,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: 56,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.sm,
     backgroundColor: colors.surface,
@@ -338,7 +343,6 @@ const styles = StyleSheet.create({
   // Page indicator
   pageIndicator: {
     position: 'absolute',
-    top: 100,
     left: spacing.sm,
     zIndex: 2,
   },
@@ -347,9 +351,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#555555',
   },
+  pageTextCompact: {
+    fontSize: 11,
+  },
   chapterIndicator: {
     position: 'absolute',
-    top: 100,
     right: spacing.sm,
     zIndex: 2,
   },
@@ -358,18 +364,12 @@ const styles = StyleSheet.create({
   edgeLeft: {
     position: 'absolute',
     left: 0,
-    top: 100,
-    bottom: 160,
-    width: 28,
     backgroundColor: colors.primary,
     zIndex: 3,
   },
   edgeRight: {
     position: 'absolute',
     right: 0,
-    top: 100,
-    bottom: 160,
-    width: 28,
     backgroundColor: colors.primary,
     zIndex: 3,
   },
@@ -380,18 +380,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl + spacing.sm,
     paddingTop: spacing.xl,
   },
+  pageContentCompact: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
   bookText: {
     fontSize: 18,
     lineHeight: 30,
     color: colors.text,
     fontFamily: 'Georgia',
   },
+  bookTextCompact: {
+    fontSize: 15,
+    lineHeight: 24,
+  },
 
   // Selection toolbar
   toolbarWrap: {
     position: 'absolute',
-    top: 225,
-    right: 160,
     alignSelf: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -443,8 +449,6 @@ const styles = StyleSheet.create({
   // Highlight popup
   highlightPopupWrap: {
     position: 'absolute',
-    top: 160,
-    right: 160,
     zIndex: 10,
   },
   highlightPopupContainer: {
@@ -555,13 +559,10 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
   },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    alignSelf: 'center',
-    marginBottom: spacing.md,
+  sheetCompact: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
   sheetLabel: {
     ...typography.caption,
@@ -569,15 +570,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: spacing.xs,
   },
+  sheetLabelCompact: {
+    fontSize: 10,
+    marginBottom: 2,
+  },
   sheetTerm: {
     ...typography.h2,
     color: colors.text,
     marginBottom: spacing.md,
   },
+  sheetTermCompact: {
+    fontSize: 18,
+    marginBottom: spacing.sm,
+  },
   sheetTranslation: {
     ...typography.h2,
     color: colors.primary,
     marginBottom: spacing.md,
+  },
+  sheetTranslationCompact: {
+    fontSize: 18,
+    marginBottom: spacing.sm,
   },
   sheetListBtn: {
     flexDirection: 'row',
@@ -590,9 +603,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
   },
+  sheetListBtnCompact: {
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
   sheetListBtnText: {
     ...typography.body,
     color: colors.text,
+  },
+  sheetListBtnTextCompact: {
+    fontSize: 13,
   },
   sheetChevron: {
     ...typography.h2,
@@ -607,6 +627,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: spacing.md,
     alignItems: 'center',
+  },
+  sheetSaveBtnCompact: {
+    paddingVertical: spacing.sm,
+  },
+  sheetHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
   },
   sheetSaveBtnText: {
     ...typography.button,
@@ -625,7 +656,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '55%',
     backgroundColor: colors.background,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,

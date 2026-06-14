@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { BannerAd, BannerAdSize } from 'react-native-google-mobile-ads';
+import { areAdsEnabled } from '@/ads/config';
 import { bannerUnitId } from '@/ads/adIds';
 import { colors, spacing } from '@/theme';
 import { track } from '@/analytics/client';
@@ -64,7 +65,7 @@ export function AdBanner({ enabled = true, placement = 'unknown' }: Props) {
     sessionNextInlineCtaEligibleImpression = impressionCount + INLINE_CTA_COOLDOWN_IMPRESSIONS;
   }, [enabled, hydrated, impressionCount, isPremium]);
 
-  if (!enabled || isPremium) return null;
+  if (!enabled || !areAdsEnabled() || isPremium) return null;
 
   if (showInlineCta) {
     return (

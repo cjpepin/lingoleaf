@@ -8,6 +8,7 @@
  * Requires env:
  * - EXPO_PUBLIC_SUPABASE_URL (or SUPABASE_URL)
  * - SUPABASE_SERVICE_ROLE_KEY
+ * - EXPO_PUBLIC_SUPABASE_DB_SCHEMA (optional; defaults to lingoleaf)
  *
  * Usage examples:
  * - node scripts/sync-gutendex.mjs --pages 5
@@ -56,6 +57,115 @@ function toSubjectsText(subjects, bookshelves) {
   return all.length > 0 ? all.join(' • ') : null;
 }
 
+function resolveSupabaseDbSchema() {
+  const raw = process.env.EXPO_PUBLIC_SUPABASE_DB_SCHEMA?.trim();
+  return raw && raw.length > 0 ? raw : 'lingoleaf';
+}
+
+const GUTENDEX_BASE_URL = 'https://gutendex.com';
+const DEFAULT_FETCH_TIMEOUT_MS = 300_000;
+const DEFAULT_MAX_RETRIES = 5;
+const DEFAULT_RETRY_BASE_MS = 2_000;
+const DEFAULT_PAGE_DELAY_MS = 1_000;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status) {
+  return status === 408 || status === 429 || status === 502 || status === 503 || status === 504;
+}
+
+async function fetchGutendex(url, options = {}) {
+  const {
+    maxRetries = Number(process.env.GUTENDEX_MAX_RETRIES ?? DEFAULT_MAX_RETRIES),
+    retryBaseMs = Number(process.env.GUTENDEX_RETRY_BASE_MS ?? DEFAULT_RETRY_BASE_MS),
+    timeoutMs = Number(process.env.GUTENDEX_FETCH_TIMEOUT_MS ?? DEFAULT_FETCH_TIMEOUT_MS),
+  } = options;
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt += 1) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': 'LingoLeaf/1.0 (Gutendex catalog sync; +https://github.com/cjpepin/lingoleaf)',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+
+      if (res.ok) {
+        return res;
+      }
+
+      const body = await res.text().catch(() => '');
+      const detail = body.trim().slice(0, 200);
+      lastError = new Error(
+        `Gutendex fetch failed: ${res.status}${detail ? ` — ${detail}` : ''}`,
+      );
+
+      if (!isRetryableStatus(res.status) || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      const retryAfterHeader = res.headers.get('retry-after');
+      const retryAfterSeconds = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : Number.NaN;
+      const delayMs = Number.isFinite(retryAfterSeconds)
+        ? retryAfterSeconds * 1000
+        : retryBaseMs * 2 ** (attempt - 1);
+
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[gutendex] ${res.status} from ${url}; retry ${attempt}/${maxRetries} in ${Math.round(delayMs / 1000)}s`,
+      );
+      await sleep(delayMs);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      const retryable =
+        err instanceof Error &&
+        (err.name === 'TimeoutError' ||
+          err.name === 'AbortError' ||
+          err.message.includes('fetch failed') ||
+          err.message.includes('ECONNRESET') ||
+          err.message.includes('ETIMEDOUT'));
+
+      if (!retryable || attempt === maxRetries) {
+        throw lastError;
+      }
+
+      const delayMs = retryBaseMs * 2 ** (attempt - 1);
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[gutendex] network error (${lastError.message}); retry ${attempt}/${maxRetries} in ${Math.round(delayMs / 1000)}s`,
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError ?? new Error('Gutendex fetch failed');
+
+}
+
+function formatGutendexError(err) {
+  const message = err instanceof Error ? err.message : String(err);
+  if (
+    message.includes('503') ||
+    message.includes('502') ||
+    message.includes('504') ||
+    message.includes('timeout') ||
+    message.includes('TimeoutError') ||
+    message.includes('AbortError') ||
+    message.includes('fetch failed')
+  ) {
+    return new Error(
+      `Gutendex (gutendex.com) is unavailable right now (${message}). ` +
+        'This is a transient server-side issue — wait a few minutes and re-run, or host your own Gutendex instance.',
+    );
+  }
+  return err instanceof Error ? err : new Error(message);
+}
+
 async function main() {
   const pages = Number(argValue('--pages') ?? '1');
   const lang = (argValue('--lang') ?? argValue('--language'))?.trim() || null;
@@ -67,21 +177,26 @@ async function main() {
     throw new Error('Missing env: EXPO_PUBLIC_SUPABASE_URL (or SUPABASE_URL) and/or SUPABASE_SERVICE_ROLE_KEY');
   }
 
+  const dbSchema = resolveSupabaseDbSchema();
   const supabase = createClient(supabaseUrl, serviceKey, {
+    db: { schema: dbSchema },
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  let nextUrl = `https://gutendex.com/books/?page=1${lang ? `&languages=${encodeURIComponent(lang)}` : ''}`;
+  // eslint-disable-next-line no-console
+  console.log(`[gutendex] target schema: ${dbSchema}.books`);
+
+  let nextUrl = `${GUTENDEX_BASE_URL}/books/?page=1${lang ? `&languages=${encodeURIComponent(lang)}` : ''}`;
   let pageCount = 0;
   let totalUpserts = 0;
+  const pageDelayMs = Number(process.env.GUTENDEX_PAGE_DELAY_MS ?? DEFAULT_PAGE_DELAY_MS);
 
   while (nextUrl && pageCount < pages) {
     pageCount += 1;
     // eslint-disable-next-line no-console
     console.log(`[gutendex] fetching page ${pageCount}: ${nextUrl}`);
 
-    const res = await fetch(nextUrl);
-    if (!res.ok) throw new Error(`Gutendex fetch failed: ${res.status}`);
+    const res = await fetchGutendex(nextUrl);
     const json = await res.json();
 
     const results = Array.isArray(json?.results) ? json.results : [];
@@ -146,6 +261,10 @@ async function main() {
     }
 
     nextUrl = typeof json?.next === 'string' ? json.next : null;
+
+    if (nextUrl && pageCount < pages && pageDelayMs > 0) {
+      await sleep(pageDelayMs);
+    }
   }
 
   // eslint-disable-next-line no-console
@@ -154,7 +273,7 @@ async function main() {
 
 main().catch((err) => {
   // eslint-disable-next-line no-console
-  console.error(err);
+  console.error(formatGutendexError(err));
   process.exit(1);
 });
 

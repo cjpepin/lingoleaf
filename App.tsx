@@ -14,7 +14,9 @@ import { useAppLangStore } from './src/state/useAppLangStore';
 import { OnboardingWrapper } from './src/components/OnboardingWrapper';
 import { DemoBanner } from './src/components/DemoBanner';
 import { WebDemoDeviceFrame } from './src/demo/WebDemoDeviceFrame';
+import { areAdsEnabled } from './src/ads/config';
 import { isWebDemo, isWebPlatform, isDemoMode, isEmbedMode } from './src/demo/config';
+import { ShowcaseTourGate } from './src/demo/ShowcaseTourGate';
 import { useWebDemoFontsReady } from './src/demo/useWebDemoFonts';
 import { AppLoadingSplash } from './src/components/AppLoadingSplash';
 import { logger } from './src/utils/logger';
@@ -107,7 +109,7 @@ function AppShell() {
   }, [appLang, user?.id]);
 
   useEffect(() => {
-    if (isWebPlatform()) return;
+    if (isWebPlatform() || !areAdsEnabled()) return;
     // Lazy-load native ads SDK so web bundles do not import it.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mobileAds = require('react-native-google-mobile-ads').default;
@@ -191,9 +193,11 @@ function AppShell() {
       <StatusBar style="dark" />
       {isWebDemo() && !isEmbedMode() ? <DemoBanner /> : null}
       <PremiumProvider>
-        <OnboardingWrapper>
-          <RootNavigator />
-        </OnboardingWrapper>
+        <ShowcaseTourGate>
+          <OnboardingWrapper>
+            <RootNavigator />
+          </OnboardingWrapper>
+        </ShowcaseTourGate>
       </PremiumProvider>
     </>
   );

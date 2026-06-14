@@ -4,6 +4,7 @@
  */
 
 import { isDemoMode } from '@/demo/config';
+import { filterDemoBooks } from '@/demo/filterDemoBooks';
 import {
   demoCreateStudyWord,
   demoDeleteAllStudyWordReviews,
@@ -122,29 +123,7 @@ export interface BookFilters {
 
 export async function fetchBooks(filters?: BookFilters): Promise<Book[]> {
   if (isDemoMode()) {
-    let books = await demoFetchBooks();
-    const search = filters?.search?.trim().toLowerCase();
-    if (search) {
-      books = books.filter(
-        (book) =>
-          book.title.toLowerCase().includes(search) ||
-          (book.author ?? '').toLowerCase().includes(search),
-      );
-    }
-    const language = filters?.language?.trim();
-    if (language) {
-      books = books.filter((book) => book.source_lang === language);
-    }
-    if (typeof filters?.limit === 'number' && filters.limit > 0) {
-      const offset =
-        typeof filters.cursor === 'number' && filters.cursor >= 0
-          ? filters.cursor
-          : typeof filters.offset === 'number' && filters.offset >= 0
-            ? filters.offset
-            : 0;
-      books = books.slice(offset, offset + filters.limit);
-    }
-    return books;
+    return filterDemoBooks(await demoFetchBooks(), filters);
   }
 
   let query = supabase.from('books').select('*');

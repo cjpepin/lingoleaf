@@ -30,6 +30,22 @@ jest.mock('@/state/useAuthStore', () => ({
   useAuthStore: () => ({ user: { id: 'user-1' } }),
 }));
 
+const mockRefreshListsAndCounts = jest.fn().mockResolvedValue(undefined);
+
+jest.mock('@/state/useStudyStore', () => ({
+  useStudyStore: Object.assign(
+    jest.fn(() => ({ counts: {} })),
+    {
+      getState: () => ({
+        lists: [],
+        counts: {},
+        hydrateForUser: jest.fn(),
+        refreshListsAndCounts: mockRefreshListsAndCounts,
+      }),
+    },
+  ),
+}));
+
 jest.mock('@/premium/PremiumProvider', () => ({
   usePremium: () => ({ isPremium: true }),
 }));
@@ -91,6 +107,7 @@ jest.mock('@/components/ads/AdBanner', () => ({
 describe('HomeScreen focus pack', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRefreshListsAndCounts.mockResolvedValue(undefined);
     mockFetchHistoryBooks.mockResolvedValue([]);
     mockFetchVocabLists.mockResolvedValue([]);
     mockFetchFlashcardStats.mockResolvedValue({ unseen: 0, learning: 0, learned: 0 });

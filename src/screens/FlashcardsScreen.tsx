@@ -16,6 +16,7 @@ import {
   Alert,
   Animated,
   Pressable,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -66,6 +67,8 @@ type FlashcardsRouteProp = RouteProp<RootStackParamList, 'Flashcards'>;
 
 type StarredFilter = 'all' | 'starred' | 'unstarred';
 type SessionMode = StudyMethod;
+
+const EMPTY_WORD_IDS: string[] = [];
 
 function applyStarredFilter(list: StudyWord[], filter: StarredFilter): StudyWord[] {
   if (filter === 'all') return list;
@@ -120,7 +123,10 @@ export default function FlashcardsScreen() {
     packReviewCount,
     packNewCount,
   } = route.params;
-  const focusPackWordIds = requestedWordIds ?? [];
+  const focusPackWordIds = useMemo(
+    () => (requestedWordIds && requestedWordIds.length > 0 ? requestedWordIds : EMPTY_WORD_IDS),
+    [requestedWordIds],
+  );
   const isFocusPackSession = requestedSessionMode === 'focus_pack' && focusPackWordIds.length > 0;
   const isCompletedFocusPackReview = isFocusPackSession && reviewAllWords === true;
   const sessionStorageKey = isFocusPackSession ? `focus_pack_${hashWordIds(focusPackWordIds)}` : (listId ?? FLASHCARD_ALL_KEY);
@@ -143,6 +149,7 @@ export default function FlashcardsScreen() {
 
   const flipAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
+  const useNativeFlip = Platform.OS !== 'web';
 
   const baseWords = mode === 'spaced' ? queue : words;
   const displayWords = useMemo(
@@ -376,15 +383,18 @@ export default function FlashcardsScreen() {
     }
   }, [isCompletedFocusPackReview, isFocusPackSession, listId, loadBrowse, loadQueue, preferredStudyMethod, sessionStorageKey]);
 
-  const handleFlip = useCallback(() => {
-    setFlipped((p) => !p);
+  useEffect(() => {
     Animated.spring(flipAnim, {
-      toValue: flipped ? 0 : 180,
+      toValue: flipped ? 180 : 0,
       friction: 8,
       tension: 10,
-      useNativeDriver: true,
+      useNativeDriver: useNativeFlip,
     }).start();
-  }, [flipped, flipAnim]);
+  }, [flipped, flipAnim, useNativeFlip]);
+
+  const handleFlip = useCallback(() => {
+    setFlipped((p) => !p);
+  }, []);
 
   const advanceWithAnimation = useCallback(
     (nextIndex: number) => {

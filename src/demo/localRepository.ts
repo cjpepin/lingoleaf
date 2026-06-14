@@ -8,7 +8,7 @@ import {
 } from '@portfolio/demo-local';
 import seed from './seed.json';
 import { getDb } from './demoDb';
-import type { BookFilters } from '@/supabase/queries';
+import { filterDemoBooks, type DemoBookFilterInput } from './filterDemoBooks';
 import type {
   Book,
   ReadingSession,
@@ -20,6 +20,8 @@ import type {
   UserBookStatus,
   VocabList,
 } from '@/supabase/types';
+
+export { filterDemoBooks };
 
 type FlashcardRating = 'again' | 'hard' | 'good' | 'easy';
 
@@ -200,7 +202,7 @@ export async function demoFetchReadingSessions(userId?: string): Promise<Reading
     .sort((left, right) => right.started_at.localeCompare(left.started_at));
 }
 
-export async function demoFetchHistoryBooks(filters?: BookFilters): Promise<BookWithStatus[]> {
+export async function demoFetchHistoryBooks(filters?: DemoBookFilterInput): Promise<BookWithStatus[]> {
   await ensureDemoHydrated();
   const db = await getDb();
   const books = await listStoreRecords<Book>(db, 'books');

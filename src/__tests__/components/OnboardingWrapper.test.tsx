@@ -34,12 +34,23 @@ jest.mock('@/components/OnboardingModal', () => ({
   },
 }));
 
+const mockIsShowcaseMode = jest.fn(() => false);
+
+jest.mock('@/demo/config', () => {
+  const actual = jest.requireActual('@/demo/config') as typeof import('@/demo/config');
+  return {
+    ...actual,
+    isShowcaseMode: () => mockIsShowcaseMode(),
+  };
+});
+
 const mockedUpsertUserSettings = upsertUserSettings as jest.MockedFunction<typeof upsertUserSettings>;
 const mockedSyncDailyGoalReminder = syncDailyGoalReminder as jest.MockedFunction<typeof syncDailyGoalReminder>;
 
 describe('OnboardingWrapper', () => {
   beforeEach(async () => {
     onboardingProps = null;
+    mockIsShowcaseMode.mockReturnValue(false);
     mockUseAuthStore.mockReset();
     mockSetTargetLang.mockReset();
     mockedUpsertUserSettings.mockReset();
@@ -60,6 +71,22 @@ describe('OnboardingWrapper', () => {
     await waitFor(() => {
       expect(onboardingProps?.visible).toBe(true);
     });
+  });
+
+  it('skips onboarding in showcase mode', async () => {
+    mockIsShowcaseMode.mockReturnValue(true);
+    mockUseAuthStore.mockReturnValue({ user: null });
+
+    render(
+      <OnboardingWrapper>
+        <Text>App</Text>
+      </OnboardingWrapper>
+    );
+
+    await waitFor(() => {
+      expect(onboardingProps?.visible).toBe(false);
+    });
+    expect(await AsyncStorage.getItem('@lingoleaf:onboarding_completed')).toBe('true');
   });
 
   it('saves native language as target language on completion for signed-in users', async () => {

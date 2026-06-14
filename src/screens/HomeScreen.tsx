@@ -28,6 +28,7 @@ import type { RootStackParamList, TabParamList } from '@/navigation/types';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
 import { useAuthStore } from '@/state/useAuthStore';
+import { useStudyStore } from '@/state/useStudyStore';
 import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/EmptyState';
 import { FocusPackCard } from '@/components/FocusPackCard';
@@ -36,7 +37,6 @@ import { BookGridItem } from '@/components/BookGridItem';
 import type { Book } from '@/supabase/types';
 import { useGardenState } from '@/hooks/useGardenState';
 import {
-  countStudyWordsForList,
   fetchFlashcardStats,
   fetchHistoryBooks,
   fetchVocabLists,
@@ -56,6 +56,7 @@ import { getRecentBooksLayout } from '@/screens/home/recentBooksLayout';
 import { AdBanner } from '@/components/ads/AdBanner';
 import { usePremium } from '@/premium/PremiumProvider';
 import { track } from '@/analytics/client';
+import { HomeTutorial } from '@/components/HomeTutorial';
 
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<TabParamList, 'Home'>,
@@ -137,7 +138,10 @@ export default function HomeScreen() {
     setRecentBooks(recentRead);
     setFocusPack(nextFocusPack);
 
-    const vocabLists = await fetchVocabLists(user.id);
+    const store = useStudyStore.getState();
+    store.hydrateForUser(user.id);
+    await store.refreshListsAndCounts(user.id, { force: true });
+    const vocabLists = store.lists.length > 0 ? store.lists : await fetchVocabLists(user.id);
     if (vocabLists.length === 0) {
       setStudyRows([]);
       setStudyMode('ready');
@@ -157,29 +161,21 @@ export default function HomeScreen() {
       })
     );
     const dueByListId = new Map<string, number>(duePairs);
+    const listCounts = useStudyStore.getState().counts;
 
     const candidates: HomeStudyListCandidate[] = vocabLists.map((list) => ({
       id: list.id,
       name: list.name,
       dueCount: dueByListId.get(list.id) ?? 0,
-      totalWords: 0,
+      totalWords: listCounts[list.id] ?? 0,
       lastUsedAt: list.last_used_at ?? null,
       createdAt: list.created_at,
     }));
 
     const selection = selectHomeStudySection(candidates, 3);
-    const totals = await Promise.all(
-      selection.items.map(async (item) => {
-        try {
-          return await countStudyWordsForList(user.id, item.id);
-        } catch {
-          return 0;
-        }
-      })
-    );
 
     setStudyMode(selection.mode);
-    setStudyRows(selection.items.map((item, index) => ({ ...item, totalWords: totals[index] ?? 0 })));
+    setStudyRows(selection.items);
   }, [t, user?.id]);
 
   const loadAll = useCallback(async () => {
@@ -372,7 +368,7 @@ export default function HomeScreen() {
                     <Text style={styles.studyRowTitle} numberOfLines={1}>{row.name}</Text>
                     <Text style={styles.studyRowMeta}>
                       {studyMode === 'ready'
-                        ? `${row.dueCount} ${t('home.cardsReady')}`
+                        ? `${row.totalWords} ${t('study.words')} · ${row.dueCount} ${t('home.cardsReady')}`
                         : `${row.totalWords} ${t('study.words')}`}
                     </Text>
                   </View>
@@ -399,6 +395,7 @@ export default function HomeScreen() {
           )}
         </View>
       </ScrollView>
+      <HomeTutorial ready={!loading} />
     </View>
   );
 }

@@ -6,6 +6,7 @@
  * - ad row inserted every K book rows (e.g. every 4 rows)
  */
 
+import { areAdsEnabled } from '@/ads/config';
 import type { Book } from '@/supabase/types';
 
 export type LibraryRow<B = Book> =
@@ -21,6 +22,10 @@ export function buildAdRows<B extends Book>(books: B[], opts: { columns: number;
     const chunk = books.slice(i, i + columns);
     const firstId = chunk[0]?.id ?? String(i);
     bookRows.push({ type: 'books', key: `books-${i}-${firstId}`, items: chunk });
+  }
+
+  if (!areAdsEnabled()) {
+    return bookRows;
   }
 
   const out: LibraryRow<B>[] = [];

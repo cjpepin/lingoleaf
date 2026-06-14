@@ -14,6 +14,28 @@ function readEnv(name: string): string {
 
 export const WEB_BASE_PATH = readEnv('EXPO_PUBLIC_WEB_BASE_PATH') || '/lingoleaf/demo';
 
+/** Don Quijote — default book for showcase deep links and recording scripts. */
+export const SHOWCASE_BOOK_ID = '11111111-1111-4111-8111-111111111101';
+
+export type DemoViewMode = 'showcase' | 'explore';
+
+export function readDemoViewModeFromSearch(search: string): DemoViewMode {
+  const normalized = search.startsWith('?') ? search.slice(1) : search;
+  const mode = new URLSearchParams(normalized).get('mode');
+  return mode === 'showcase' ? 'showcase' : 'explore';
+}
+
+export function getDemoViewMode(): DemoViewMode {
+  if (typeof window === 'undefined' || !window.location?.search) {
+    return 'explore';
+  }
+  return readDemoViewModeFromSearch(window.location.search);
+}
+
+export function isShowcaseMode(): boolean {
+  return getDemoViewMode() === 'showcase';
+}
+
 export function isWebPlatform(): boolean {
   return Platform.OS === 'web';
 }

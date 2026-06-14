@@ -25,9 +25,19 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
 (function() {
   function postToHost(payload) {
     try {
-      var host = window.parent || window;
-      if (host && typeof host.__llWebReaderOnMessage === 'function') {
-        host.__llWebReaderOnMessage(payload);
+      var w = window;
+      while (w) {
+        try {
+          if (typeof w.__llWebReaderOnMessage === 'function') {
+            w.__llWebReaderOnMessage(payload);
+            return;
+          }
+          if (typeof w.dispatchEvent === 'function') {
+            w.dispatchEvent(new CustomEvent('ll-web-reader-message', { detail: payload }));
+          }
+        } catch (e) {}
+        if (!w.parent || w.parent === w) break;
+        w = w.parent;
       }
     } catch (e) {}
   }
@@ -55,18 +65,78 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
 
   function getIframeOffsetForDoc(doc) {
     try {
-      if (doc === window.document) return { x: 0, y: 0 };
-      var iframes = window.document.querySelectorAll('iframe');
-      for (var i = 0; i < iframes.length; i++) {
-        try {
-          if (iframes[i].contentDocument === doc || (iframes[i].contentWindow && iframes[i].contentWindow.document === doc)) {
-            var iframeRect = iframes[i].getBoundingClientRect();
-            return { x: iframeRect.left, y: iframeRect.top };
-          }
-        } catch (e) {}
+      var view = doc && doc.defaultView ? doc.defaultView : window;
+      var frame = view && view.frameElement;
+      if (frame && frame.getBoundingClientRect) {
+        var frameRect = frame.getBoundingClientRect();
+        return { x: frameRect.left, y: frameRect.top };
+      }
+      if (doc !== window.document) {
+        var iframes = window.document.querySelectorAll('iframe');
+        for (var i = 0; i < iframes.length; i++) {
+          try {
+            if (iframes[i].contentDocument === doc || (iframes[i].contentWindow && iframes[i].contentWindow.document === doc)) {
+              var iframeRect = iframes[i].getBoundingClientRect();
+              return { x: iframeRect.left, y: iframeRect.top };
+            }
+          } catch (e) {}
+        }
       }
     } catch (e) {}
     return { x: 0, y: 0 };
+  }
+
+  function findHighlightAtPoint(clientX, clientY, doc) {
+    try {
+      var iOff = getIframeOffsetForDoc(doc);
+      var mainX = clientX + iOff.x;
+      var mainY = clientY + iOff.y;
+      var docs = [window.document];
+      var iframes = window.document.querySelectorAll('iframe');
+      for (var i = 0; i < iframes.length; i++) {
+        try {
+          var d = iframes[i].contentDocument || (iframes[i].contentWindow && iframes[i].contentWindow.document);
+          if (d) docs.push(d);
+        } catch (e) {}
+      }
+      for (var di = 0; di < docs.length; di++) {
+        var doff = getIframeOffsetForDoc(docs[di]);
+        var px = mainX - doff.x;
+        var py = mainY - doff.y;
+        var groups = docs[di].querySelectorAll('.epubjs-hl, [ref="epubjs-hl"]');
+        for (var g = 0; g < groups.length; g++) {
+          var group = groups[g];
+          var cfi = (group.dataset && group.dataset.epubcfi) || null;
+          var highlightId = (group.dataset && group.dataset.id) || null;
+          var rects = group.querySelectorAll('rect');
+          for (var r = 0; r < rects.length; r++) {
+            var rect = rects[r].getBoundingClientRect();
+            if (px >= rect.left && px <= rect.right && py >= rect.top && py <= rect.bottom) {
+              return { cfi: cfi, highlightId: highlightId, rect: { x: rect.left + doff.x, y: rect.top + doff.y, width: rect.width, height: rect.height } };
+            }
+          }
+          if (cfi) {
+            var groupRect = group.getBoundingClientRect();
+            if (px >= groupRect.left && px <= groupRect.right && py >= groupRect.top && py <= groupRect.bottom) {
+              return { cfi: cfi, highlightId: highlightId, rect: { x: groupRect.left + doff.x, y: groupRect.top + doff.y, width: groupRect.width, height: groupRect.height } };
+            }
+          }
+        }
+        var marked = docs[di].querySelectorAll('[data-epubcfi]');
+        for (var m = 0; m < marked.length; m++) {
+          var el = marked[m];
+          var elRect = el.getBoundingClientRect();
+          if (px >= elRect.left && px <= elRect.right && py >= elRect.top && py <= elRect.bottom) {
+            return {
+              cfi: el.dataset.epubcfi || null,
+              highlightId: el.dataset.id || null,
+              rect: { x: elRect.left + doff.x, y: elRect.top + doff.y, width: elRect.width, height: elRect.height },
+            };
+          }
+        }
+      }
+    } catch (e) {}
+    return null;
   }
 
   function attachSelectionDebug(doc) {
@@ -130,28 +200,43 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
     if (doc.__llHighlightClick) return;
     function handleHighlightTap(e) {
       try {
-        var target = e.target;
-        for (var i = 0; i < 8 && target; i++) {
-          if (target.dataset && target.dataset.epubcfi) {
-            __llHighlightClickedAt = Date.now();
-            var rect = null;
-            try {
-              var bcr = target.getBoundingClientRect();
-              var iOff = getIframeOffsetForDoc(doc);
-              rect = { x: bcr.left + iOff.x, y: bcr.top + iOff.y, width: bcr.width, height: bcr.height };
-            } catch (_) {}
-            postToHost({
-              type: 'llHighlightClicked',
-              cfi: target.dataset.epubcfi,
-              highlightId: target.dataset.id || null,
-              rect: rect,
-            });
-            e.stopPropagation();
-            e.preventDefault();
-            return;
-          }
-          target = target.parentElement;
+        var clientX = e.clientX;
+        var clientY = e.clientY;
+        if ((clientX == null || clientY == null) && e.changedTouches && e.changedTouches[0]) {
+          clientX = e.changedTouches[0].clientX;
+          clientY = e.changedTouches[0].clientY;
         }
+        if (clientX == null || clientY == null) return;
+        var hit = findHighlightAtPoint(clientX, clientY, doc);
+        if (!hit || !hit.cfi) {
+          var target = e.target;
+          for (var i = 0; i < 8 && target; i++) {
+            if (target.dataset && target.dataset.epubcfi) {
+              hit = {
+                cfi: target.dataset.epubcfi,
+                highlightId: target.dataset.id || null,
+                rect: null,
+              };
+              try {
+                var bcr = target.getBoundingClientRect();
+                var iOff = getIframeOffsetForDoc(doc);
+                hit.rect = { x: bcr.left + iOff.x, y: bcr.top + iOff.y, width: bcr.width, height: bcr.height };
+              } catch (_) {}
+              break;
+            }
+            target = target.parentElement;
+          }
+        }
+        if (!hit || !hit.cfi) return;
+        __llHighlightClickedAt = Date.now();
+        postToHost({
+          type: 'llHighlightClicked',
+          cfi: hit.cfi,
+          highlightId: hit.highlightId,
+          rect: hit.rect,
+        });
+        e.stopPropagation();
+        e.preventDefault();
       } catch (err) {}
     }
     doc.addEventListener('click', handleHighlightTap, true);
@@ -163,16 +248,18 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
   var MAX_TAP_MOVE_PX = 12;
   var SWIPE_THRESHOLD_PX = 48;
 
-  function attachCenterTap(doc) {
+  function attachPointerNav(doc) {
     if (doc.__llCenterTap) return;
-    var touchStartTime = 0;
-    var touchStartX = 0;
-    var touchStartY = 0;
-    var touchStartTarget = null;
+    var pointerStartTime = 0;
+    var pointerStartX = 0;
+    var pointerStartY = 0;
+    var pointerStartTarget = null;
     var lastCenterTap = 0;
+    var activePointerId = null;
 
     function isLinkOrHighlight(el) {
       if (!el) return false;
+      if (el.closest && (el.closest('[data-epubcfi]') || el.closest('.epubjs-hl') || el.closest('[ref="epubjs-hl"]'))) return true;
       for (var i = 0; i < 20 && el; i++) {
         if (el.tagName === 'A') return true;
         if (el.dataset && (el.dataset.epubcfi || el.dataset.highlightId)) return true;
@@ -182,29 +269,43 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
       return false;
     }
 
+    function isTapOnHighlight(clientX, clientY, doc) {
+      if (Date.now() - __llHighlightClickedAt < 500) return true;
+      return Boolean(findHighlightAtPoint(clientX, clientY, doc));
+    }
+
     function inCenterZone(clientX, docWidth) {
       if (docWidth <= 2 * EDGE_MARGIN_PX) return true;
       return clientX >= EDGE_MARGIN_PX && clientX <= docWidth - EDGE_MARGIN_PX;
     }
 
-    doc.addEventListener('touchstart', function(e) {
-      var t = e.changedTouches && e.changedTouches[0];
-      if (t) {
-        touchStartTime = Date.now();
-        touchStartX = t.clientX;
-        touchStartY = t.clientY;
-        touchStartTarget = e.target;
-      }
-    }, { passive: true });
+    function inEdgeZone(clientX, docWidth) {
+      if (docWidth <= 2 * EDGE_MARGIN_PX) return null;
+      if (clientX < EDGE_MARGIN_PX) return 'prev';
+      if (clientX > docWidth - EDGE_MARGIN_PX) return 'next';
+      return null;
+    }
 
-    doc.addEventListener('touchend', function(e) {
-      var t = e.changedTouches && e.changedTouches[0];
-      if (!t) return;
+    function docWidth() {
+      return (doc.documentElement && doc.documentElement.clientWidth) || (doc.body && doc.body.clientWidth) || window.innerWidth;
+    }
+
+    function beginPointer(clientX, clientY, target, pointerId) {
+      pointerStartTime = Date.now();
+      pointerStartX = clientX;
+      pointerStartY = clientY;
+      pointerStartTarget = target;
+      activePointerId = pointerId == null ? 'mouse' : pointerId;
+    }
+
+    function finishPointer(clientX, clientY, target) {
       if (Date.now() - __llHighlightClickedAt < 500) return;
-      var duration = Date.now() - touchStartTime;
-      var dx = t.clientX - touchStartX;
-      var dy = t.clientY - touchStartY;
-      if (dx * dx + dy * dy > MAX_TAP_MOVE_PX * MAX_TAP_MOVE_PX) {
+      if (isTapOnHighlight(clientX, clientY, doc)) return;
+      var duration = Date.now() - pointerStartTime;
+      var dx = clientX - pointerStartX;
+      var dy = clientY - pointerStartY;
+      var moved = dx * dx + dy * dy > MAX_TAP_MOVE_PX * MAX_TAP_MOVE_PX;
+      if (moved) {
         if (duration < 450 && Math.abs(dx) > SWIPE_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy) * 1.2) {
           postToHost({ type: 'llSwipe', direction: dx < 0 ? 'next' : 'prev' });
         }
@@ -215,12 +316,46 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
       try {
         var sel = doc.getSelection ? doc.getSelection() : null;
         if (sel && (sel.toString() || '').trim().length > 0) return;
-        if (isLinkOrHighlight(touchStartTarget || e.target)) return;
-        var docWidth = (doc.documentElement && doc.documentElement.clientWidth) || (doc.body && doc.body.clientWidth) || window.innerWidth;
-        if (!inCenterZone(t.clientX, docWidth)) return;
+        if (isLinkOrHighlight(pointerStartTarget || target)) return;
+        var width = docWidth();
+        var edge = inEdgeZone(clientX, width);
+        if (edge) {
+          postToHost({ type: 'llSwipe', direction: edge });
+          return;
+        }
+        if (!inCenterZone(clientX, width)) return;
         lastCenterTap = Date.now();
         postToHost({ type: 'llCenterTap' });
       } catch (err) {}
+    }
+
+    doc.addEventListener('pointerdown', function(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      beginPointer(e.clientX, e.clientY, e.target, e.pointerId);
+    }, { passive: true });
+
+    doc.addEventListener('pointerup', function(e) {
+      if (activePointerId == null) return;
+      if (activePointerId !== 'mouse' && e.pointerId !== activePointerId) return;
+      finishPointer(e.clientX, e.clientY, e.target);
+      activePointerId = null;
+    }, { passive: true });
+
+    doc.addEventListener('pointercancel', function() {
+      activePointerId = null;
+    }, { passive: true });
+
+    doc.addEventListener('touchstart', function(e) {
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      beginPointer(t.clientX, t.clientY, e.target, t.identifier);
+    }, { passive: true });
+
+    doc.addEventListener('touchend', function(e) {
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      finishPointer(t.clientX, t.clientY, e.target);
+      activePointerId = null;
     }, { passive: true });
 
     doc.__llCenterTap = true;
@@ -231,7 +366,7 @@ export const WEB_READER_INJECTED_JAVASCRIPT = `
     applyCSS(doc);
     attachSelectionDebug(doc);
     attachHighlightClick(doc);
-    attachCenterTap(doc);
+    attachPointerNav(doc);
   }
 
   function patchIframes() {

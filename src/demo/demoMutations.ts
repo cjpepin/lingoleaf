@@ -8,6 +8,7 @@ import type {
   ReadingSession,
   StudyWord,
   UserBook,
+  UserPromptState,
   VocabList,
 } from '@/supabase/types';
 import { ensureDemoHydrated } from './localRepository';
@@ -28,6 +29,17 @@ interface UserPromptStateRow {
   upgrade_prompt_last_reason?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+function toUserPromptState(row: UserPromptStateRow): UserPromptState {
+  return {
+    user_id: row.user_id,
+    last_upgrade_prompt_at: row.last_upgrade_prompt_at ?? null,
+    upgrade_prompt_dismiss_count: row.upgrade_prompt_dismiss_count ?? 0,
+    upgrade_prompt_last_reason: row.upgrade_prompt_last_reason ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
 }
 
 export async function demoSetStudyWordStarred(studyWordId: string, starred: boolean): Promise<void> {
@@ -213,24 +225,26 @@ export async function demoHasReadingHistory(userId: string): Promise<boolean> {
   return rows.some((row) => row.user_id === userId && row.status !== 'saved_for_later');
 }
 
-export async function demoFetchUserPromptState(userId: string): Promise<UserPromptStateRow | null> {
+export async function demoFetchUserPromptState(userId: string): Promise<UserPromptState | null> {
   await ensureDemoHydrated();
   const db = await getDb();
-  return getStoreRecord<UserPromptStateRow>(db, 'user_prompt_state', userId);
+  const row = await getStoreRecord<UserPromptStateRow>(db, 'user_prompt_state', userId);
+  return row ? toUserPromptState(row) : null;
 }
 
 export async function demoUpsertUserPromptState(
-  state: Pick<UserPromptStateRow, 'user_id'> &
+  state: Pick<UserPromptState, 'user_id'> &
     Partial<
       Pick<
-        UserPromptStateRow,
+        UserPromptState,
         'last_upgrade_prompt_at' | 'upgrade_prompt_dismiss_count' | 'upgrade_prompt_last_reason'
       >
     >,
-): Promise<UserPromptStateRow> {
+): Promise<UserPromptState> {
   await ensureDemoHydrated();
   const db = await getDb();
-  const existing = await demoFetchUserPromptState(state.user_id);
+  const existingRow = await getStoreRecord<UserPromptStateRow>(db, 'user_prompt_state', state.user_id);
+  const existing = existingRow ? toUserPromptState(existingRow) : null;
   const now = new Date().toISOString();
   const next: UserPromptStateRow = {
     user_id: state.user_id,
@@ -243,7 +257,7 @@ export async function demoUpsertUserPromptState(
     updated_at: now,
   };
   await putStoreRecord(db, 'user_prompt_state', state.user_id, next);
-  return next;
+  return toUserPromptState(next);
 }
 
 export async function demoGenerateStudyPackMetadata(request: {

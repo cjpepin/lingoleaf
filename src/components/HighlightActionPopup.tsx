@@ -7,7 +7,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Dimensions, ActivityIndicator, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -28,6 +28,8 @@ interface Props {
   highlightBounds?: { x: number; y: number; width: number; height: number };
   /** Reader area offset (same value passed to SelectionToolbar) */
   readerOffset?: { x: number; y: number };
+  /** When true (web), bounds are viewport coords and the popup uses fixed positioning. */
+  anchorToViewport?: boolean;
   /** Highlight text (for translation section) */
   selectedText?: string;
   /** Translation if available; when set, show it and "Save to list" */
@@ -62,6 +64,7 @@ export function HighlightActionPopup({
   currentColor,
   highlightBounds,
   readerOffset,
+  anchorToViewport = false,
   selectedText,
   translation,
   translating = false,
@@ -84,8 +87,8 @@ export function HighlightActionPopup({
       };
     }
 
-    const ox = readerOffset?.x ?? 0;
-    const oy = readerOffset?.y ?? 0;
+    const ox = anchorToViewport ? 0 : (readerOffset?.x ?? 0);
+    const oy = anchorToViewport ? 0 : (readerOffset?.y ?? 0);
     const { x, y, width, height } = highlightBounds;
     const centerX = ox + x + width / 2;
     const selTop = oy + y;
@@ -118,9 +121,11 @@ export function HighlightActionPopup({
     top = Math.max(H_PAD, Math.min(top, SCREEN_HEIGHT - totalPopupHeight - ARROW_SIZE - H_PAD));
 
     return { top, left, arrowPosition };
-  }, [highlightBounds, readerOffset, totalPopupHeight]);
+  }, [anchorToViewport, highlightBounds, readerOffset, totalPopupHeight]);
 
   if (!visible) return null;
+
+  const useViewportAnchor = anchorToViewport && Platform.OS === 'web';
 
   const contentStyle = [
     styles.content,
@@ -133,7 +138,13 @@ export function HighlightActionPopup({
     <>
       <Pressable style={styles.backdrop} onPress={onClose} />
 
-      <View style={[styles.container, { top: position.top, left: position.left }]}>
+      <View
+        style={[
+          styles.container,
+          useViewportAnchor ? styles.containerViewport : null,
+          { top: position.top, left: position.left },
+        ]}
+      >
         {position.arrowPosition === 'top' && <View style={styles.arrowTop} />}
         {hasTranslationSection && (
           <View style={styles.translationSection}>
@@ -201,6 +212,9 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     width: POPUP_WIDTH,
   },
+  containerViewport: {
+    position: 'fixed',
+  } as Record<string, unknown>,
   arrowTop: {
     width: 0,
     height: 0,

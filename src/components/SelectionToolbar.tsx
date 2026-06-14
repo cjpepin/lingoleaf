@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '@/theme';
 import { useTranslation } from '@/i18n/useTranslation';
@@ -22,9 +22,17 @@ interface Props {
   selectionBounds?: { x: number; y: number; width: number; height: number };
   /** Offset to add to selection coords (e.g. reader area's top-left in container) */
   readerOffset?: { x: number; y: number };
+  /** When true (web), bounds are viewport coords and the toolbar uses fixed positioning. */
+  anchorToViewport?: boolean;
 }
 
-export function SelectionToolbar({ onHighlight, onTranslate, selectionBounds, readerOffset }: Props) {
+export function SelectionToolbar({
+  onHighlight,
+  onTranslate,
+  selectionBounds,
+  readerOffset,
+  anchorToViewport = false,
+}: Props) {
   const t = useTranslation();
   const position = useMemo(() => {
     if (!selectionBounds) {
@@ -35,8 +43,8 @@ export function SelectionToolbar({ onHighlight, onTranslate, selectionBounds, re
       };
     }
 
-    const ox = readerOffset?.x ?? 0;
-    const oy = readerOffset?.y ?? 0;
+    const ox = anchorToViewport ? 0 : (readerOffset?.x ?? 0);
+    const oy = anchorToViewport ? 0 : (readerOffset?.y ?? 0);
     const { x, y, width, height } = selectionBounds;
     const selectionCenterX = ox + x + width / 2;
     const selectionBottom = oy + y + height;
@@ -74,7 +82,7 @@ export function SelectionToolbar({ onHighlight, onTranslate, selectionBounds, re
     top = Math.max(HORIZONTAL_PADDING, Math.min(top, SCREEN_HEIGHT - toolbarTotalHeight - HORIZONTAL_PADDING));
 
     return { top, left, arrowPosition };
-  }, [selectionBounds, readerOffset]);
+  }, [anchorToViewport, readerOffset, selectionBounds]);
 
   const contentStyle = [
     styles.content,
@@ -82,8 +90,16 @@ export function SelectionToolbar({ onHighlight, onTranslate, selectionBounds, re
     position.arrowPosition === 'bottom' && styles.contentNoBottomBorder,
   ];
 
+  const useViewportAnchor = anchorToViewport && Platform.OS === 'web';
+
   return (
-    <View style={[styles.container, { top: position.top, left: position.left }]}>
+    <View
+      style={[
+        styles.container,
+        useViewportAnchor ? styles.containerViewport : null,
+        { top: position.top, left: position.left },
+      ]}
+    >
       {position.arrowPosition === 'top' && <View style={styles.arrowTop} />}
       <View style={contentStyle}>
         <TouchableOpacity style={styles.button} onPress={onHighlight}>
@@ -107,6 +123,9 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     width: TOOLBAR_WIDTH,
   },
+  containerViewport: {
+    position: 'fixed',
+  } as Record<string, unknown>,
   arrowTop: {
     width: 0,
     height: 0,

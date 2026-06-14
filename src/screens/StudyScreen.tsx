@@ -209,7 +209,8 @@ export default function StudyScreen() {
         loadListsAndCounts({ force: true }),
       ]);
       setFocusPack(nextFocusPack);
-      if (mode === 'detail') await loadWordsForActiveList({ force: true });
+      const currentListId = activeListId;
+      if (currentListId) await loadWordsForActiveList({ force: true });
     } catch (e) {
       logger.error('Failed to load study data', e);
       Alert.alert(t('common.error'), t('study.loadFailed'));
@@ -217,7 +218,7 @@ export default function StudyScreen() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t stable unless app language changes
-  }, [loadListsAndCounts, loadWordsForActiveList, mode, user]);
+  }, [activeListId, loadListsAndCounts, loadWordsForActiveList, user]);
 
   useFocusEffect(
     useCallback(() => {

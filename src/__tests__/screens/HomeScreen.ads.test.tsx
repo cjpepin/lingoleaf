@@ -30,6 +30,17 @@ jest.mock('@/state/useAuthStore', () => ({
   useAuthStore: () => ({ user: { id: 'user-1' } }),
 }));
 
+jest.mock('@/state/useStudyStore', () => ({
+  useStudyStore: Object.assign(jest.fn(() => ({ counts: {} })), {
+    getState: () => ({
+      lists: [],
+      counts: {},
+      hydrateForUser: jest.fn(),
+      refreshListsAndCounts: jest.fn().mockResolvedValue(undefined),
+    }),
+  }),
+}));
+
 jest.mock('@/premium/PremiumProvider', () => ({
   usePremium: () => ({ isPremium: mockIsPremium }),
 }));

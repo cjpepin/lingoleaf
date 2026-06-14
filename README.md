@@ -181,6 +181,7 @@ Copy [`.env.example`](./.env.example) → `.env`. Never commit `.env`.
 | -------- | ------------ | ------- |
 | `EXPO_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_KEY` | Yes (anon) | Supabase anon key |
+| `EXPO_PUBLIC_SUPABASE_DB_SCHEMA` | No | Postgres schema (default `lingoleaf`) |
 | `EXPO_PUBLIC_GOOGLE_*_CLIENT_ID` | Yes | Google Sign-In |
 | `EXPO_PUBLIC_REVENUECAT_IOS_API_KEY` | Yes | RevenueCat public SDK key |
 | `SUPABASE_SERVICE_ROLE_KEY` | **No** | Scripts / local admin only |

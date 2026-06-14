@@ -14,6 +14,7 @@ import { track } from '@/analytics/client';
 import { syncDailyGoalReminder } from '@/notifications/dailyGoalReminder';
 import { useTranslation } from '@/i18n/useTranslation';
 import { defaultSubGoals, type GoalKey, normalizePrimaryGoal, normalizeSubGoals } from '@/utils/goalHierarchy';
+import { isShowcaseMode } from '@/demo/config';
 
 const ONBOARDING_KEY = '@lingoleaf:onboarding_completed';
 const TERMS_ACCEPTED_KEY = '@lingoleaf:terms_accepted_at';
@@ -35,6 +36,13 @@ export function OnboardingWrapper({ children }: Props) {
 
   const checkOnboarding = async () => {
     try {
+      if (isShowcaseMode()) {
+        await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
+        await AsyncStorage.setItem(TERMS_ACCEPTED_KEY, new Date().toISOString());
+        setShowOnboarding(false);
+        return;
+      }
+
       const completed = await AsyncStorage.getItem(ONBOARDING_KEY);
       if (!completed) {
         setShowOnboarding(true);

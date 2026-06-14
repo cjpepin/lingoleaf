@@ -1,9 +1,12 @@
 import {
   isDemoMode,
   isEmbedMode,
+  isShowcaseMode,
   isWebDemo,
   isWebPlatform,
   normalizeWebBasePath,
+  readDemoViewModeFromSearch,
+  SHOWCASE_BOOK_ID,
   WEB_BASE_PATH,
 } from '@/demo/config';
 
@@ -41,6 +44,18 @@ describe('demo config', () => {
     expect(typeof isWebDemo()).toBe('boolean');
     expect(typeof isEmbedMode()).toBe('boolean');
     expect(typeof isDemoMode()).toBe('boolean');
+    expect(typeof isShowcaseMode()).toBe('boolean');
     expect(WEB_BASE_PATH.length).toBeGreaterThan(0);
+  });
+
+  it('reads showcase mode from query string', () => {
+    expect(readDemoViewModeFromSearch('?mode=showcase')).toBe('showcase');
+    expect(readDemoViewModeFromSearch('mode=showcase')).toBe('showcase');
+    expect(readDemoViewModeFromSearch('?mode=explore')).toBe('explore');
+    expect(readDemoViewModeFromSearch('')).toBe('explore');
+  });
+
+  it('exposes showcase book id constant', () => {
+    expect(SHOWCASE_BOOK_ID).toBe('11111111-1111-4111-8111-111111111101');
   });
 });

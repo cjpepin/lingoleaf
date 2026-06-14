@@ -119,6 +119,7 @@ const createStudyStoreState: StateCreator<StudyStore> = (set, get) => ({
       userId,
       wordsByList: { ...s.wordsByList, [listId]: words },
       wordsLoadedAt: { ...s.wordsLoadedAt, [listId]: now() },
+      counts: { ...s.counts, [listId]: words.length },
     }));
   },
 

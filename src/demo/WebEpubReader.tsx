@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import {
   View,
   Text,
@@ -67,12 +68,38 @@ interface Selection {
   committed?: boolean;
 }
 
+type ViewportBounds = { x: number; y: number; width: number; height: number };
+
+function resolveViewportBoundsForCfi(
+  cfiRange: string,
+  hostEl: HTMLElement | null,
+  rendition: EpubRendition | null,
+): ViewportBounds | undefined {
+  if (!hostEl || !rendition) return undefined;
+  try {
+    const range = rendition.getRange(cfiRange);
+    if (!range) return undefined;
+    const rect = range.getBoundingClientRect();
+    const iframe = hostEl.querySelector('iframe');
+    const iframeRect = iframe?.getBoundingClientRect();
+    return {
+      x: rect.x + (iframeRect?.left ?? 0),
+      y: rect.y + (iframeRect?.top ?? 0),
+      width: rect.width,
+      height: rect.height,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 function annotationHex(color: string): string {
   return color === 'yellow' ? colors.annotationYellow : color === 'pink' ? colors.annotationPink : colors.annotationMint;
 }
 
 export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }: Props) {
   const t = useTranslation();
+  const rootRef = useRef<View | null>(null);
   const hostRef = useRef<View | null>(null);
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<EpubRendition | null>(null);
@@ -91,7 +118,6 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
   const [totalPages, setTotalPages] = useState(0);
   const [pageLoading, setPageLoading] = useState(true);
   const [navigationMode, setNavigationMode] = useState(false);
-  const [readerOffset, setReaderOffset] = useState({ x: 0, y: 0 });
   const [highlights, setHighlights] = useState<UserBookHighlight[]>([]);
   const [tocItems, setTocItems] = useState<Array<{ label: string; href: string }>>([]);
   const [currentChapter, setCurrentChapter] = useState<string | null>(null);
@@ -113,8 +139,13 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
     type: 'info',
   });
 
-  const atStart = currentPage <= 1;
-  const atEnd = totalPages > 0 && currentPage >= totalPages;
+  const highlightsRef = useRef(highlights);
+  highlightsRef.current = highlights;
+
+  const anchorPopupsToViewport = Platform.OS === 'web';
+  const popupReaderOffset = useMemo(() => ({ x: 0, y: 0 }), []);
+
+  const gesturesEnabled = !navigationMode && !selection && !showTranslateSheet && !loading && !error;
 
   const turn = useCallback((direction: 'prev' | 'next') => {
     const rendition = renditionRef.current;
@@ -165,8 +196,8 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
       if (message.type === 'llSwipe') {
         if (selection || showTranslateSheet || selectionJustMade.current) return;
         if (navigationMode) return;
-        if (message.direction === 'prev' && !atStart) turn('prev');
-        if (message.direction === 'next' && !atEnd) turn('next');
+        if (message.direction === 'prev') turn('prev');
+        if (message.direction === 'next') turn('next');
         return;
       }
 
@@ -181,6 +212,7 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
       }
 
       if (message.type === 'llSelectionCleared') {
+        if (selectionJustMade.current) return;
         setSelection(null);
         setShowTranslateSheet(false);
         setTranslation(null);
@@ -190,18 +222,7 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
       }
 
       if (message.type === 'llSelectionCommitted') {
-        if (!message.text || !message.rect) return;
-        setSelection({
-          text: message.text,
-          cfiRange: '',
-          position: message.rect,
-          context: message.context ?? null,
-          committed: true,
-        });
-        selectionJustMade.current = true;
-        setTimeout(() => {
-          selectionJustMade.current = false;
-        }, 300);
+        // Web reader uses epubjs "selected" for CFI + viewport bounds; injected commits race and misplace popups.
         return;
       }
 
@@ -213,22 +234,50 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
         lastHighlightTapAt.current = Date.now();
         const highlight = highlights.find((h) => h.id === message.highlightId || h.cfi_range === message.cfi);
         if (highlight) {
+          const hostEl = hostRef.current as unknown as HTMLElement | null;
+          const boundsFromCfi = message.cfi
+            ? resolveViewportBoundsForCfi(message.cfi, hostEl, renditionRef.current)
+            : undefined;
           setActiveHighlight({
             ...highlight,
-            bounds: message.rect,
+            bounds: boundsFromCfi ?? message.rect,
           });
         }
       }
     },
-    [atEnd, atStart, highlights, navigationMode, selection, showTranslateSheet, toggleNavigationMode, turn],
+    [highlights, navigationMode, selection, showTranslateSheet, toggleNavigationMode, turn],
   );
 
   useEffect(() => {
-    window.__llWebReaderOnMessage = handleBridgeMessage;
+    const onMessage = (message: WebReaderBridgeMessage) => {
+      handleBridgeMessage(message);
+    };
+    window.__llWebReaderOnMessage = onMessage;
+    const onCustomEvent = (event: Event) => {
+      const detail = (event as CustomEvent<WebReaderBridgeMessage>).detail;
+      if (detail) onMessage(detail);
+    };
+    window.addEventListener('ll-web-reader-message', onCustomEvent);
     return () => {
       delete window.__llWebReaderOnMessage;
+      window.removeEventListener('ll-web-reader-message', onCustomEvent);
     };
   }, [handleBridgeMessage]);
+
+  useEffect(() => {
+    if (!gesturesEnabled) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        turn('prev');
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        turn('next');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [gesturesEnabled, turn]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -277,14 +326,32 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
           flow: 'paginated',
           manager: 'default',
           spread: 'none',
+          allowScriptedContent: true,
         });
         renditionRef.current = rendition;
 
-        rendition.hooks.content.register((contents: { document: Document }) => {
-          const doc = contents.document;
+        const injectReaderGestures = (doc: Document): void => {
+          try {
+            const frame = doc.defaultView?.frameElement as HTMLIFrameElement | null;
+            if (frame) {
+              const sandbox = frame.getAttribute('sandbox') ?? '';
+              if (!sandbox.includes('allow-scripts')) {
+                frame.setAttribute('sandbox', `${sandbox} allow-scripts`.trim());
+              }
+            }
+          } catch (err) {
+            logger.warn('Failed to patch reader iframe sandbox', err);
+          }
+          const markedDoc = doc as Document & { __llInjected?: boolean };
+          if (markedDoc.__llInjected) return;
           const script = doc.createElement('script');
           script.textContent = WEB_READER_INJECTED_JAVASCRIPT;
           doc.head.appendChild(script);
+          markedDoc.__llInjected = true;
+        };
+
+        rendition.hooks.content.register((contents: { document: Document }) => {
+          injectReaderGestures(contents.document);
         });
 
         rendition.on('relocated', (location: {
@@ -305,29 +372,43 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
         });
 
         rendition.on('selected', (cfiRange: string) => {
-          void book?.getRange(cfiRange).then((range) => {
+          try {
+            const range = rendition.getRange(cfiRange);
             const text = range?.toString()?.trim() ?? '';
-            if (!text) return;
-            try {
-              const rect = range.getBoundingClientRect();
-              const iframe = node.querySelector('iframe');
-              const iframeRect = iframe?.getBoundingClientRect();
-              const ox = iframeRect?.left ?? 0;
-              const oy = iframeRect?.top ?? 0;
-              setSelection({
-                text,
-                cfiRange,
-                position: { x: rect.x + ox, y: rect.y + oy, width: rect.width, height: rect.height },
-                committed: true,
-              });
-              selectionJustMade.current = true;
-              setTimeout(() => {
-                selectionJustMade.current = false;
-              }, 300);
-            } catch (err) {
-              logger.warn('Failed to resolve selection bounds', err);
-            }
-          });
+            if (!text || !range) return;
+            const rect = range.getBoundingClientRect();
+            const iframe = node.querySelector('iframe');
+            const iframeRect = iframe?.getBoundingClientRect();
+            const ox = iframeRect?.left ?? 0;
+            const oy = iframeRect?.top ?? 0;
+            setSelection({
+              text,
+              cfiRange,
+              position: { x: rect.x + ox, y: rect.y + oy, width: rect.width, height: rect.height },
+              committed: true,
+            });
+            selectionJustMade.current = true;
+            setTimeout(() => {
+              selectionJustMade.current = false;
+            }, 300);
+          } catch (err) {
+            logger.warn('Failed to resolve selection bounds', err);
+          }
+        });
+
+        rendition.on('markClicked', (cfiRange: string, data: { id?: string }) => {
+          if (pendingCenterTapRef.current) {
+            clearTimeout(pendingCenterTapRef.current);
+            pendingCenterTapRef.current = null;
+          }
+          lastHighlightTapAt.current = Date.now();
+          const bounds = resolveViewportBoundsForCfi(cfiRange, node, rendition);
+          const highlight = highlightsRef.current.find(
+            (h) => h.id === data?.id || h.cfi_range === cfiRange,
+          );
+          if (highlight) {
+            setActiveHighlight({ ...highlight, bounds });
+          }
         });
 
         await rendition.display();
@@ -579,7 +660,7 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
   const accessibleLists = useMemo(() => vocabLists, [vocabLists]);
 
   return (
-    <View style={styles.root}>
+    <View ref={rootRef} style={styles.root}>
       <View style={styles.headerBar}>
         <Pressable onPress={onBack} hitSlop={8} style={styles.headerIconBtn}>
           <Feather name="chevron-left" size={24} color={colors.primary} />
@@ -596,27 +677,45 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
           { transform: [{ scale: readerScale }, { translateY: readerTranslateY }] },
         ]}
         pointerEvents={navigationMode ? 'none' : 'auto'}
-        onLayout={(e) => {
-          const { x, y } = e.nativeEvent.layout;
-          setReaderOffset({ x, y });
-        }}
       >
         <ReaderEdgeTapOverlay
           onTapLeft={() => {
-            if (selection || showTranslateSheet || selectionJustMade.current || navigationMode || atStart) return;
+            if (selection || showTranslateSheet || selectionJustMade.current || navigationMode) return;
             turn('prev');
           }}
           onTapRight={() => {
-            if (selection || showTranslateSheet || selectionJustMade.current || navigationMode || atEnd) return;
+            if (selection || showTranslateSheet || selectionJustMade.current || navigationMode) return;
             turn('next');
           }}
         >
-          <View style={styles.readerHost} ref={hostRef} />
+          <View style={styles.readerHostWrap}>
+            <View style={styles.readerHost} ref={hostRef} />
+          </View>
         </ReaderEdgeTapOverlay>
 
         {!navigationMode && (
           <ReaderOverlays currentPage={currentPage} totalPages={totalPages} pageLoading={pageLoading} />
         )}
+
+        {gesturesEnabled ? (
+          <View style={styles.gestureLayer} pointerEvents="box-none">
+            <Pressable
+              style={styles.gestureEdgeLeft}
+              onPress={() => {
+                if (selectionJustMade.current) return;
+                turn('prev');
+              }}
+            />
+            <View style={styles.gestureCenter} pointerEvents="none" />
+            <Pressable
+              style={styles.gestureEdgeRight}
+              onPress={() => {
+                if (selectionJustMade.current) return;
+                turn('next');
+              }}
+            />
+          </View>
+        ) : null}
       </Animated.View>
 
       {selection?.committed && !showTranslateSheet && (
@@ -624,7 +723,8 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
           onHighlight={() => void handleHighlight()}
           onTranslate={() => void handleTranslate()}
           selectionBounds={selection.position}
-          readerOffset={readerOffset}
+          readerOffset={popupReaderOffset}
+          anchorToViewport={anchorPopupsToViewport}
         />
       )}
 
@@ -687,7 +787,8 @@ export function WebEpubReader({ src, title, bookId, sourceLang = 'es', onBack }:
         visible={!!activeHighlight}
         currentColor={(activeHighlight?.color as HighlightColor) ?? 'mint'}
         highlightBounds={activeHighlight?.bounds}
-        readerOffset={readerOffset}
+        readerOffset={popupReaderOffset}
+        anchorToViewport={anchorPopupsToViewport}
         selectedText={activeHighlight?.selected_text}
         translation={activeHighlight?.translation}
         translating={highlightTranslating}
@@ -768,9 +869,30 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
-  readerHost: {
+  readerHostWrap: {
     flex: 1,
     minHeight: 0,
+    position: 'relative',
+  },
+  readerHost: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gestureLayer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    zIndex: 8,
+  },
+  gestureEdgeLeft: {
+    width: 56,
+    alignSelf: 'stretch',
+  },
+  gestureCenter: {
+    flex: 1,
+    minWidth: 0,
+  },
+  gestureEdgeRight: {
+    width: 56,
+    alignSelf: 'stretch',
   },
   navDimOverlay: {
     ...StyleSheet.absoluteFillObject,
